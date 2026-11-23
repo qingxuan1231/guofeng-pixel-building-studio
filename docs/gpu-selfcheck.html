@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8" /><title>GPU 自检</title>
+<style>body{font:13px/1.55 ui-monospace,Consolas,monospace;padding:18px;background:#fff;color:#111}pre{white-space:pre-wrap}</style>
+</head><body>
+<h3>GPU 渲染自检（全精度路径）</h3>
+<pre id="log">running…</pre>
+<script src="../js/gf-core.js"></script>
+<script src="../js/gf-roof.js"></script>
+<script src="../js/gf-parts.js"></script>
+<script src="../js/gf-build.js"></script>
+<script src="../js/gf-render.js"></script>
+<script src="../js/gf-presets.js"></script>
+<script>
+const L=[]; const log=(...a)=>L.push(a.join(' ')); const flush=()=>{document.getElementById('log').textContent=L.join('\n'); window.__gpucheck=L.join('\n');};
+flush();
+const gi = GF.gpuInfo ? GF.gpuInfo() : null;
+log('gpuAvailable:', GF.gpuAvailable ? GF.gpuAvailable() : 'missing');
+log('gpuInfo:', gi ? (gi.renderer + ' | maxTexture ' + gi.maxTexture) : 'null');
+log('');
+
+function meshOf(key, ppm){
+  const r = GF.getPreset(key);
+  return GF.build(r, {ppm: ppm});
+}
+function meanDiff(a,b){
+  let sum=0,n=0, clear=0;
+  for(let i=0;i<a.length;i+=4){
+    sum+=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]);
+    n+=3;
+    if(a[i+3]===0) clear++;
+  }
+  return {diff:sum/n, clearPx:clear, totalPx:a.length/4};
+}
+const steps=[];
+// 1) 小件 @320：GPU vs CPU 逐像素比
+steps.push(()=>{
+  const key='jiangnan', ppm=320;
+  const mesh=meshOf(key,ppm);
+  log('['+key+' @'+ppm+'] tris', mesh.triCount);
+  const g=GF.renderGPU(mesh,{ppm:ppm, gpu:true, style:'pixel'});
+  log('  renderGPU:', g? (g.w+'x'+g.h+' ms? ') : 'NULL');
+  const t0=performance.now(); const gg=GF.render(mesh,{ppm:ppm,gpu:true,style:'pixel'}); const gt=performance.now()-t0;
+  const t1=performance.now(); const cc=GF.render(mesh,{ppm:ppm,gpu:false,cpu:true,style:'pixel'}); const ct=performance.now()-t1;
+  log('  GF.render gpu:', gg.w+'x'+gg.h, 'f.gpu='+gg.gpu, gt.toFixed(0)+'ms');
+  log('  GF.render cpu:', cc.w+'x'+cc.h, ct.toFixed(0)+'ms');
+  if(gg.w===cc.w){ const d=meanDiff(gg.rgba,cc.rgba); log('  色差', d.diff.toFixed(2), '/255  全透明', d.clearPx+'/'+d.totalPx); }
+});
+// 2) 正殿 @320 全精度：只验 GPU 能不能吃下 90M 像素
+steps.push(()=>{
+  const key='qing', ppm=320;
+  const mesh=meshOf(key,ppm);
+  log('['+key+' @'+ppm+'] tris', mesh.triCount);
+  const t0=performance.now(); const gg=GF.render(mesh,{ppm:ppm,gpu:true,style:'pixel'}); const gt=performance.now()-t0;
+  log('  GF.render gpu:', gg.w+'x'+gg.h, 'f.gpu='+gg.gpu, gt.toFixed(0)+'ms', 'px', (gg.w*gg.h/1e6).toFixed(1)+'M');
+  log('  (若 f.gpu=false 即已回落 CPU)');
+});
+let i=0;
+function next(){ if(i>=steps.length){ log(''); log('done'); flush(); return; } const fn=steps[i++]; setTimeout(()=>{ try{ fn(); }catch(e){ log('ERR', e.message); } flush(); next(); }, 50); }
+next();
+</script>
+</body></html>
+

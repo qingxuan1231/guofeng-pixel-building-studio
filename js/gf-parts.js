@@ -288,21 +288,28 @@
 
   /* ------------------------------ 斗拱 ------------------------------ */
   // style: simple(一斗三升) / mid(五踩) / full(七踩) / none
-  function dougong(mb, x, y, z, s, tag, style) {
+  function dougong(mb, x, y, z, s, tag, style, o) {
     s = s || 1;
+    o = o || {};
+    // 斗：丹粉刷饰时斗面刷白，与朱红栱身分开；青绿彩画保持木色
+    const dm = (o.tone === 'dan') ? 'plaster' : 'wood';
+    // 材色：唐宋辽金丹粉刷饰（朱红栱），明清青绿彩画
+    const mc = (o.tone === 'dan') ? 'timber' : 'paintGreen';
+    // 铺作间距：柱头枋、拱眼壁必须连成一整条，不能每朵各画一块（唐宋补间稀疏时会露出大缝）
+    const gapW = o.gap || 0;
     const st = style || 'mid';
     // 栌斗：斗欹（下收）+ 斗平（外张），两个棱台叠起来才有“斗”的轮廓
-    mb.taper(x, z, 0.26 * s, 0.26 * s, 0.34 * s, 0.34 * s, y, y + 0.09 * s, 'wood', tag + '·斗欹');
-    mb.taper(x, z, 0.34 * s, 0.34 * s, 0.40 * s, 0.40 * s, y + 0.09 * s, y + 0.17 * s, 'wood', tag + '·斗平');
+    mb.taper(x, z, 0.26 * s, 0.26 * s, 0.34 * s, 0.34 * s, y, y + 0.09 * s, dm, tag + '·斗欹');
+    mb.taper(x, z, 0.34 * s, 0.34 * s, 0.40 * s, 0.40 * s, y + 0.09 * s, y + 0.17 * s, dm, tag + '·斗平');
     const yb = y + 0.17 * s;
     if (st === 'simple') {
       // 一斗三升：泥道拱（两端卷杀）+ 三个散斗（上大下小）
-      mb.boxC(x, z, 0.80 * s, 0.22 * s, yb, yb + 0.13 * s, 'paintGreen', tag + '·泥道拱');
+      mb.boxC(x, z, 0.80 * s, 0.22 * s, yb, yb + 0.13 * s, mc, tag + '·泥道拱');
       for (const sx of [-1, 1]) {
-        mb.taper(x + sx * 0.40 * s, z, 0.16 * s, 0.22 * s, 0.06 * s, 0.16 * s, yb, yb + 0.125 * s, 'paintGreen', tag + '·拱头');
+        mb.taper(x + sx * 0.40 * s, z, 0.16 * s, 0.22 * s, 0.06 * s, 0.16 * s, yb, yb + 0.125 * s, mc, tag + '·拱头');
       }
       for (const dx of [-0.42, 0, 0.42]) {
-        mb.taper(x + dx * s, z, 0.15 * s, 0.15 * s, 0.19 * s, 0.19 * s, yb + 0.13 * s, yb + 0.25 * s, 'paintGreen', tag + '·散斗');
+        mb.taper(x + dx * s, z, 0.15 * s, 0.15 * s, 0.19 * s, 0.19 * s, yb + 0.13 * s, yb + 0.25 * s, dm, tag + '·散斗');
       }
       return;
     }
@@ -315,36 +322,82 @@
       const reach = (0.5 + k * 0.3) * s;          // 本跳出跳长度（含半在柱内的部分）
       const armD = 0.19 * s;
       // 华栱：沿出跳方向（+z）的臂，向外出挑
-      mb.boxC(x, z + reach / 2 - 0.08 * s, 0.2 * s, reach, yy, yy + 0.13 * s, 'paintGreen', tag + '·华栱');
+      mb.boxC(x, z + reach / 2 - 0.08 * s, 0.2 * s, reach, yy, yy + 0.13 * s, mc, tag + '·华栱');
       // 栱头卷杀：臂端收成小斜面
-      mb.taper(x, z + reach - 0.08 * s, 0.2 * s, 0.1 * s, 0.16 * s, 0.06 * s, yy, yy + 0.13 * s, 'paintGreen', tag + '·栱头');
+      mb.taper(x, z + reach - 0.08 * s, 0.2 * s, 0.1 * s, 0.16 * s, 0.06 * s, yy, yy + 0.13 * s, mc, tag + '·栱头');
       // 臂端散斗
-      mb.taper(x, z + reach - 0.14 * s, 0.15 * s, 0.15 * s, 0.19 * s, 0.19 * s, yy + 0.13 * s, yy + 0.25 * s, 'paintGreen', tag + '·散斗');
+      mb.taper(x, z + reach - 0.14 * s, 0.15 * s, 0.15 * s, 0.19 * s, 0.19 * s, yy + 0.13 * s, yy + 0.25 * s, dm, tag + '·散斗');
       // 沿墙向的横栱（泥道栱／瓜子栱）：宽度随跳递增
-      mb.boxC(x, z + armD / 2, (0.72 + k * 0.22) * s, armD, yy + 0.02 * s, yy + 0.14 * s, 'paintGreen', tag + '·横栱');
+      mb.boxC(x, z + armD / 2, (0.72 + k * 0.22) * s, armD, yy + 0.02 * s, yy + 0.14 * s, mc, tag + '·横栱');
       for (const sx of [-1, 1]) {
-        mb.taper(x + sx * (0.36 + k * 0.11) * s, z + armD / 2, 0.15 * s, 0.15 * s, 0.06 * s, 0.12 * s, yy + 0.02 * s, yy + 0.14 * s, 'paintGreen', tag + '·栱头');
+        mb.taper(x + sx * (0.36 + k * 0.11) * s, z + armD / 2, 0.15 * s, 0.15 * s, 0.06 * s, 0.12 * s, yy + 0.02 * s, yy + 0.14 * s, mc, tag + '·栱头');
       }
       // 昂：斜置长木，前端压在檐下，是唐辽斗栱最显眼的一道斜线
       mb.taper(x, z + (0.16 + k * 0.24) * s, 0.2 * s, (0.42 + k * 0.3) * s, 0.14 * s, (0.3 + k * 0.26) * s, yy, yy + 0.12 * s, 'wood', tag + '·昂');
     }
     // 令栱（最外一跳上的长横栱）+ 耍头
     const yTop0 = yb + steps * 0.19 * s;
-    mb.boxC(x, z + 0.42 * s, (1.1 + (steps - 2) * 0.2) * s, 0.2 * s, yTop0, yTop0 + 0.13 * s, 'paintGreen', tag + '·令栱');
-    mb.taper(x, z + 0.5 * s, 0.38 * s, 0.24 * s, 0.26 * s, 0.14 * s, yTop0 + 0.13 * s, yTop0 + 0.25 * s, 'paintGreen', tag + '·耍头');
-    if (GF.detail(2)) {
+    mb.boxC(x, z + 0.42 * s, (1.1 + (steps - 2) * 0.2) * s, 0.2 * s, yTop0, yTop0 + 0.13 * s, mc, tag + '·令栱');
+    mb.taper(x, z + 0.5 * s, 0.38 * s, 0.24 * s, 0.26 * s, 0.14 * s, yTop0 + 0.13 * s, yTop0 + 0.25 * s, mc, tag + '·耍头');
+    if (GF.detail(2) && !o.gap) {
       // 拱眼壁 + 柱头枋：把铺作与檐口之间的空隙填实，檐下才有“层层叠出去”的深度，
       // 不然一排在像素上就是几个悬空的小柱子。
       const yTop = yTop0 + 0.25 * s;
-      mb.boxC(x, z + 0.06 * s, 1.15 * s, 0.5 * s, yTop + 0.02, yTop + 0.26 * s, 'paintBlue', tag + '·拱眼壁');
-      mb.boxC(x, z + 0.1 * s, 1.45 * s, 0.6 * s, yTop + 0.26 * s, yTop + 0.38 * s, 'paintGreen', tag + '·柱头枋');
+      const gw = gapW > 0 ? Math.max(1.15 * s, gapW * 0.98) : 1.15 * s;
+      const gd = gapW > 0 ? Math.max(1.45 * s, gapW * 0.98) : 1.45 * s;
+      mb.boxC(x, z + 0.06 * s, gw, 0.5 * s, yTop + 0.02, yTop + 0.26 * s, 'paintBlue', tag + '·拱眼壁');
+      mb.boxC(x, z + 0.1 * s, gd, 0.6 * s, yTop + 0.26 * s, yTop + 0.38 * s, mc, tag + '·柱头枋');
       if (GF.detail(3)) {
         // 枋上金线：细到 0.02 m，320 档才看得见
-        mb.boxC(x, z + 0.1 * s, 1.45 * s, 0.62 * s, yTop + 0.32 * s, yTop + 0.335 * s, 'gold', tag + '·枋金线');
+        mb.boxC(x, z + 0.1 * s, gd, 0.62 * s, yTop + 0.32 * s, yTop + 0.335 * s, 'gold', tag + '·枋金线');
         // 慢拱（第二道横拱，比华拱长一截）
-        mb.boxC(x, z + 0.19 * s, (1.0 + (steps - 2) * 0.16) * s, 0.19 * s, yb + 0.06 * s, yb + 0.18 * s, 'paintGreen', tag + '·慢拱');
+        mb.boxC(x, z + 0.19 * s, (1.0 + (steps - 2) * 0.16) * s, 0.19 * s, yb + 0.06 * s, yb + 0.18 * s, mc, tag + '·慢拱');
       }
     }
+  }
+
+  // 斗栱自栌斗底算起的总高（与 dougong() 的分层一一对应）：
+  // 檐口标高 = 斗栱底 + 本高 + 檐檩（0.22）+ 檐椽（0.12）+ 瓦口（0.06）。
+  // 以前屋面直接坐在柱头上，斗栱一整个被埋进檐口里，檐下就没有放椽子的净空。
+  function dougongHeight(style, s) {
+    s = s || 1;
+    const st = style || 'mid';
+    if (st === 'simple') return 0.42 * s;
+    const steps = st === 'full' ? 3 : 2;
+    let h = (0.17 + steps * 0.19 + 0.25) * s;   // 栌斗 + 逐跳华栱 + 令栱 + 耍头
+    if (GF.detail(2)) h += (0.26 + 0.38) * s;    // 拱眼壁 + 柱头枋（2 档以上才有）
+    return h;
+  }
+  GF.dougongHeight = dougongHeight;
+
+  /* ------------------------------ 朝代做法 ------------------------------ */
+  // 依梁思成《中国建筑史》第六章（宋辽金实物）与《图像中国建筑史》阑额普拍枋演变图：
+  //   唐辽：多无普拍枋，斗栱直接坐在阑额／柱头上（佛光寺大殿即此式）；
+  //   宋辽：普拍枋扁而宽，与阑额在断面上成 T 字形（薄伽教藏）；
+  //   金元：普拍枋渐加厚，与阑额所出无几（善化寺三圣殿、山门）；
+  //   明清：普拍枋反而狭于阑额（清式平板枋宽三斗口、额枋宽四斗口）。
+  // 断面一律按阑额厚度 lanT 取倍数，斗栱另给缩放 dgK（唐宋铺作大、明清铺作小）。
+  const ERA = {
+    han:  { pb: null,              lanH: 0.30, lanT: 0.13, dg: 'col',   dgK: 0.90 },
+    tang: { pb: null,              lanH: 0.36, lanT: 0.14, dg: 'two',   dgK: 1.10 },
+    song: { pb: { w: 1.60, h: 0.45 }, lanH: 0.34, lanT: 0.13, dg: 'two',   dgK: 0.92 },
+    jin:  { pb: { w: 1.10, h: 0.62 }, lanH: 0.32, lanT: 0.13, dg: 'two',   dgK: 0.85 },
+    yuan: { pb: { w: 0.95, h: 0.62 }, lanH: 0.30, lanT: 0.14, dg: 'two',   dgK: 0.80 },
+    ming: { pb: { w: 0.80, h: 0.60 }, lanH: 0.30, lanT: 0.15, dg: 'dense', dgK: 0.72 },
+    qing: { pb: { w: 0.75, h: 0.58 }, lanH: 0.28, lanT: 0.16, dg: 'dense', dgK: 0.68 }
+  };
+  GF.ERA = ERA;
+  GF.era = function (v) { return ERA[v] || ERA.qing; };
+
+  // 普拍枋：阑额与斗栱之间的横向垫枋，绕殿身一周（前后檐 + 两山）
+  function pingban(mb, o) {
+    const w = o.w, y0 = o.y0, y1 = o.y1;
+    const x0 = o.x0, x1 = o.x1, z0 = o.z0, z1 = o.z1;
+    const mat = o.mat || 'wood';
+    mb.box(x0 - 0.03, x1 + 0.03, y0, y1, z1 - w / 2, z1 + w / 2, mat, o.tag + '·前');
+    mb.box(x0 - 0.03, x1 + 0.03, y0, y1, z0 - w / 2, z0 + w / 2, mat, o.tag + '·后');
+    mb.box(x1 - w / 2, x1 + w / 2, y0, y1, z0 - 0.03, z1 + 0.03, mat, o.tag + '·右');
+    mb.box(x0 - w / 2, x0 + w / 2, y0, y1, z0 - 0.03, z1 + 0.03, mat, o.tag + '·左');
   }
 
   /* --------------------------- 额枋（带彩画） --------------------------- */
@@ -756,21 +809,163 @@
   function trunk(mb, x, z, y, r0, mat, tag) {
     mb.lathe(x, z, [[0, 0], [r0, 0.02], [r0 * 0.86, y * 0.55], [r0 * 0.6, y]], 6, mat, tag);
   }
-  // 树冠：多层不规则多边形棱柱，逐层内收、随机相位与半径，轮廓带起伏而非方箱
-  function blobCrown(mb, x, y0, z, rw, rh, r, mat, tag, layers) {
-    const L = layers || 4;
-    for (let i = 0; i < L; i++) {
-      const frac = i / L;
-      const k = r.int(5, 8);
-      const a0 = r.range(0, 6.283);
-      const rad = rw * (1 - frac * 0.6);
-      const pts = [];
-      for (let j = 0; j < k; j++) {
-        const a = a0 + (j / k) * 6.283;
-        const rr = rad * (0.78 + r.next() * 0.42);
-        pts.push([x + Math.cos(a) * rr, z + Math.sin(a) * rr]);
+  // 窄长叶片：根部收窄、中腰最宽、叶尖收成一点，两段折出下垂；正反两面各画一次。
+  // 竹、柳共用——叶子要有叶子的形状，不能拿一根方木条代替。
+  function leafBlade(mb, base, ang, len, hw, droop, mat, tag) {
+    const dx = Math.cos(ang), dz = Math.sin(ang);
+    const px = -dz, pz = dx;
+    const w0 = hw * 0.3;
+    const A = [base[0] - px * w0, base[1] + 0.02, base[2] - pz * w0];
+    const B = [base[0] + px * w0, base[1] + 0.02, base[2] + pz * w0];
+    const midX = base[0] + dx * len * 0.5, midZ = base[2] + dz * len * 0.5;
+    const midY = base[1] + 0.02 - droop * 0.3;
+    const C = [midX - px * hw, midY, midZ - pz * hw];
+    const D = [midX + px * hw, midY, midZ + pz * hw];
+    const tip = [base[0] + dx * len, base[1] + 0.02 - droop, base[2] + dz * len];
+    mb.quad(A, B, D, C, mat, tag);
+    mb.quad(C, D, B, A, mat, tag);
+    mb.tri(C, D, tip, mat, tag);
+    mb.tri(tip, D, C, mat, tag);
+  }
+
+  // 一根枝分两级：本级出枝，末级交给叶/花单元铺满。分杈数、分杈角、长度收率都带随机，
+  // 这样每棵树的骨架都不重复，但整体轮廓是“由枝端叶簇堆出来的体积”，不是一团色块。
+  function forkTwig(mb, p, ang, len, rise, depth, rad, r, leaf, tag, s, midLeaf) {
+    const end = [p[0] + Math.cos(ang) * len, p[1] + rise, p[2] + Math.sin(ang) * len];
+    GF.beamRound(mb, p, end, rad, depth > 1 ? 5 : 4, 'wood', tag);
+    // 侧芽：真树的叶子沿枝而生，不是只在枝梢。中段补一簇，冠才连成一片。
+    if (midLeaf && depth > 2) {
+      leaf([p[0] + (end[0] - p[0]) * 0.62, p[1] + (end[1] - p[1]) * 0.62, p[2] + (end[2] - p[2]) * 0.62], ang, len * 0.7);
+    }
+    if (depth <= 1) { leaf(end, ang, len); return; }
+    const n = 2 + r.int(0, 1);
+    const base = ang + r.range(-0.28, 0.28);
+    for (let i = 0; i < n; i++) {
+      const na = base + (i - (n - 1) / 2) * (0.5 + r.next() * 0.34);
+      forkTwig(mb, end, na, len * (0.6 + r.next() * 0.22), rise * 0.62 + 0.02 * s,
+        depth - 1, rad * 0.62, r, leaf, tag, s, midLeaf);
+    }
+  }
+
+  // 松针簇：一个枝端散出十几根三维短针，方位角铺满一周、仰角随机，
+  // 针是细长锥（根部宽一点、针尖收成一点），所以从任何角度看都是蓬开的针球。
+  function pineTuft(mb, p, s, r, tag) {
+    // 针球密度跟精度档走：低档减半，320 档才给满
+    const n = GF.detail(2) ? 9 + r.int(0, 3) : GF.detail(1) ? 7 : 5;
+    for (let b = 0; b < n; b++) {
+      const az = r.range(0, 6.283);
+      const el = r.range(-0.55, 1.0);
+      const L = (0.26 + r.next() * 0.13) * s;
+      const ce = Math.cos(el), se = Math.sin(el);
+      const w = 0.012 * s;
+      const perX = -Math.sin(az), perZ = Math.cos(az);
+      const mid = [p[0] + Math.cos(az) * L * 0.55 * ce, p[1] + se * L * 0.62, p[2] + Math.sin(az) * L * 0.55 * ce];
+      const end = [p[0] + Math.cos(az) * L * 1.05 * ce, p[1] + se * L * 1.15, p[2] + Math.sin(az) * L * 1.05 * ce];
+      const A = [p[0] - perX * w, p[1], p[2] - perZ * w];
+      const B = [p[0] + perX * w, p[1], p[2] + perZ * w];
+      const C = [mid[0] + perX * w * 0.5, mid[1], mid[2] + perZ * w * 0.5];
+      const D = [mid[0] - perX * w * 0.5, mid[1], mid[2] - perZ * w * 0.5];
+      mb.tri(A, B, C, 'pine', tag);
+      mb.tri(A, C, D, 'pine', tag);
+      mb.tri(D, C, end, 'pine', tag);
+      mb.tri(C, B, end, 'pine', tag);
+    }
+  }
+
+  // 叶簇：绕一点散出数片窄长叶，叶尖朝外、叶身略垂；竹、枫、银杏、杂树共用。
+  function leafCluster(mb, p, s, r, n, len, hw, droop, mat, tag) {
+    const cnt = GF.detail(2) ? n + r.int(0, 2) : GF.detail(1) ? n : Math.max(2, n - 2);
+    for (let i = 0; i < cnt; i++) {
+      const a = (i / cnt) * 6.283 + r.range(-0.3, 0.3);
+      const base = [p[0] + Math.cos(a) * 0.03 * s, p[1] + r.range(-0.02, 0.03) * s, p[2] + Math.sin(a) * 0.03 * s];
+      leafBlade(mb, base, a, len * (0.78 + r.next() * 0.4), hw, droop, mat, tag);
+    }
+  }
+
+  // 五瓣花：每瓣一个四边小面，正反两面都画；梅、海棠等花树用。
+  function blossom5(mb, c, s, r, mat, tag) {
+    for (let p = 0; p < 5; p++) {
+      const pa = (p / 5) * 6.283 + r.range(-0.08, 0.08);
+      const pr = 0.07 * s;
+      const A = [c[0], c[1], c[2]];
+      const B = [c[0] + Math.cos(pa) * pr, c[1] + 0.014 * s, c[2] + Math.sin(pa) * pr];
+      const C = [c[0] + Math.cos(pa + 0.6) * pr * 1.3, c[1] + 0.02 * s, c[2] + Math.sin(pa + 0.6) * pr * 1.3];
+      const D = [c[0] + Math.cos(pa + 1.2) * pr, c[1] + 0.014 * s, c[2] + Math.sin(pa + 1.2) * pr];
+      mb.quad(A, B, C, D, mat, tag);
+      mb.quad(D, C, B, A, mat, tag);
+    }
+  }
+
+  // 阔叶树（枫 / 银杏 / 杂树共用）：先立一根从根到梢的通高主干，主枝沿干分三层斜上出，
+  // 每根主枝在中段与枝端再分副枝，叶簇挂在副枝、主枝中段与冠心里层。干始终是同一根往上收，
+  // 不会从中段忽然变成一把杈；冠靠里外两层叶簇堆成实体，仍有缝。
+  function broadleaf(mb, x, z, s, r, H, mat, tag, o) {
+    o = o || {};
+    const leanA = r.range(0, 6.283), lean = r.range(0.05, 0.12) * s;
+    const topY = H * (o.top || 0.74);
+    const r0 = (o.r0 || 0.16) * s;
+    const pt = (t) => [x + Math.cos(leanA) * lean * t * t, topY * t, z + Math.sin(leanA) * lean * t * t];
+    const segs = 5;
+    for (let i = 0; i < segs; i++) {
+      const a = pt(i / segs), b = pt((i + 1) / segs);
+      GF.beamRound(mb, a, b, r0 * (1 - (i / segs) * 0.7), 6, 'wood', tag + '·干');
+    }
+    const leafN = o.leafN || 6, leafLen = (o.leafLen || 0.22) * s, leafHW = (o.leafHW || 0.08) * s;
+    const cluster = (p) => leafCluster(mb, p, s, r, leafN, leafLen, leafHW, 0.1 * s, mat, tag + '·叶');
+    const tiers = o.tiers || [0.44, 0.62, 0.78];
+    const cnts = o.cnts || [5, 4, 3];
+    const lfs = o.lfs || [0.42, 0.32, 0.22];
+    for (let ti = 0; ti < tiers.length; ti++) {
+      const base = pt(tiers[ti]);
+      const L = H * lfs[ti];
+      const n = cnts[ti] + r.int(0, 1);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * 6.283 + ti * 0.75 + r.range(-0.25, 0.25);
+        // 主枝斜上得陡些，冠才有厚度，不会摊成一把伞
+        const rise = L * (0.9 + r.next() * 0.4);
+        const tip = [base[0] + Math.cos(a) * L, base[1] + rise, base[2] + Math.sin(a) * L];
+        GF.beamRound(mb, base, tip, (0.052 - ti * 0.008) * s, 5, 'wood', tag + '·主枝');
+        const mid = [base[0] + (tip[0] - base[0]) * 0.6, base[1] + (tip[1] - base[1]) * 0.62, base[2] + (tip[2] - base[2]) * 0.6];
+        for (let k = 0; k < 2; k++) {
+          const side = k ? 1 : -1;
+          const aa = a + side * (0.45 + r.next() * 0.4);
+          const sl = L * (0.36 + r.next() * 0.16);
+          const st = [mid[0] + Math.cos(aa) * sl, mid[1] + sl * (0.5 + r.next() * 0.35), mid[2] + Math.sin(aa) * sl];
+          GF.beamRound(mb, mid, st, 0.026 * s, 4, 'wood', tag + '·副枝');
+          cluster(st);
+          cluster([(mid[0] + st[0]) * 0.5, (mid[1] + st[1]) * 0.5, (mid[2] + st[2]) * 0.5]);
+        }
+        // 主枝沿程挂三簇，枝端一簇，冠里有里外两层叶
+        cluster([base[0] + (tip[0] - base[0]) * 0.55, base[1] + (tip[1] - base[1]) * 0.58, base[2] + (tip[2] - base[2]) * 0.55]);
+        cluster(mid);
+        cluster(tip);
       }
-      mb.prism(pts, y0 + rh * frac, y0 + rh * (frac + 0.9 / L), mat, tag);
+    }
+    // 冠壳：按高度分四环铺叶簇，半径按腰鼓形收回——下环最阔、上环收成锥，
+    // 保证冠是一片连续的树冠，中心不留空洞，枝干只在冠里透出几道
+    const shell = o.shell || [[0.46, 0.7, 6], [0.6, 1.0, 7], [0.74, 0.92, 6], [0.86, 0.68, 5], [0.95, 0.34, 4]];
+    for (let si = 0; si < shell.length; si++) {
+      const hf = shell[si][0], rf = shell[si][1], n = shell[si][2];
+      const c0 = pt(hf);
+      const R = H * 0.4 * rf;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * 6.283 + si * 0.6 + r.range(-0.18, 0.18);
+        const rj = R * (0.84 + r.next() * 0.3);
+        cluster([c0[0] + Math.cos(a) * rj, c0[1] + r.range(-0.05, 0.07) * s, c0[2] + Math.sin(a) * rj]);
+      }
+    }
+    // 冠心立柱：沿干再补三簇，填掉两侧枝之间那道空当
+    for (const hf of [0.62, 0.76, 0.88]) {
+      const c0 = pt(hf);
+      cluster([c0[0] + r.range(-0.06, 0.06) * s, c0[1], c0[2] + r.range(-0.06, 0.06) * s]);
+    }
+    // 干梢与冠心：顶上两簇，冠心再补一圈，上层的冠才连成一片
+    cluster(pt(1));
+    const cp = pt(0.86);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * 6.283 + r.range(0, 0.9);
+      const rr = H * 0.1;
+      cluster([cp[0] + Math.cos(a) * rr, cp[1] + r.range(-0.03, 0.12) * s, cp[2] + Math.sin(a) * rr]);
     }
   }
 
@@ -778,114 +973,293 @@
     s = s || 1;
     const r = rng || new GF.RNG(1);
     if (kind === 'pine') {
-      trunk(mb, x, z, 1.5 * s, 0.13 * s, 'wood', '松·干');
-      for (let i = 0; i < 3; i++) {
-        const y0 = 0.9 * s + i * 0.5 * s;
-        blobCrown(mb, x + r.range(-0.08, 0.08) * s, y0, z + r.range(-0.08, 0.08) * s,
-          (0.85 - i * 0.21) * s, 0.46 * s, r, 'pine', '松·冠', 3);
+      // 松：主干四段渐细略欹侧 → 五轮轮生枝（下多上少，每轮四到五枝）→ 每枝再分两级 →
+      // 枝端团成三维针球。整棵树的轮廓靠几十个针球堆出来，所以冠是蓬的，不会秃。
+      const H = 2.55 * s;
+      const leanA = r.range(0, 6.283), leanK = r.range(0.05, 0.14);
+      let px = x, pz = z, py = 0, rad = 0.16 * s;
+      for (let i = 0; i < 4; i++) {
+        const t1 = (i + 1) / 4;
+        const nx = x + Math.cos(leanA) * leanK * s * Math.sin(t1 * 2.4);
+        const nz = z + Math.sin(leanA) * leanK * s * Math.sin(t1 * 2.4);
+        const ny = H * t1;
+        GF.beamRound(mb, [px, py, pz], [nx, ny, nz], rad, 6, 'wood', '松·干');
+        px = nx; pz = nz; py = ny; rad *= 0.82;
+      }
+      const tiers = 6;
+      for (let i = 0; i < tiers; i++) {
+        const ty = H * (0.28 + i * 0.12);
+        const len0 = (0.6 - i * 0.07) * s;
+        const a0 = r.range(0, 6.283) + i * 0.9;
+        const cnt = i < 2 ? 4 : 3;
+        const sx = x + (px - x) * (ty / H), sz = z + (pz - z) * (ty / H);
+        for (let j = 0; j < cnt; j++) {
+          const a = a0 + (j / cnt) * 6.283 + r.range(-0.2, 0.2);
+          forkTwig(mb, [sx, ty, sz], a, len0, 0.26 * s, 3, 0.05 * s, r,
+            (p) => pineTuft(mb, p, s, r, '松·针'), '松·枝', s, true);
+        }
+      }
+      // 顶芽：几根短枝向上，端上再团针
+      for (let j = 0; j < 3; j++) {
+        const aa = (j / 3) * 6.283 + r.range(0, 0.8);
+        forkTwig(mb, [px, py - 0.12 * s, pz], aa, 0.2 * s, 0.18 * s, 2, 0.028 * s, r,
+          (p) => pineTuft(mb, p, s, r, '松·针'), '松·顶枝', s, true);
       }
     } else if (kind === 'plum') {
-      trunk(mb, x, z, 1.15 * s, 0.1 * s, 'wood', '梅·干');
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * Math.PI * 2 + r.range(0, 0.6);
-        const end = [x + Math.cos(a) * 0.9 * s, 1.05 * s + r.range(0.1, 0.5) * s, z + Math.sin(a) * 0.9 * s];
-        GF.beamRound(mb, [x, 1.0 * s, z], end, 0.045 * s, 5, 'wood', '梅·枝');
-        blobCrown(mb, end[0], end[1] - 0.1 * s, end[2], 0.2 * s, 0.22 * s, r, 'plum', '梅·花', 2);
+      // 梅：老干作弯势 → 四五主枝 → 每主枝再分两级小枝 → 小枝与枝身都着五瓣花与花蕾。
+      // 花是沿枝散开的，冠的轮廓由“枝影 + 花点”构成，不是粉球，也不是光杆。
+      const H = 1.15 * s;
+      const leanA = r.range(0, 6.283);
+      const midP = [x + Math.cos(leanA) * 0.12 * s, H * 0.42, z + Math.sin(leanA) * 0.12 * s];
+      const topP = [x + Math.cos(leanA) * 0.2 * s, H * 0.52, z + Math.sin(leanA) * 0.2 * s];
+      GF.beamRound(mb, [x, 0, z], midP, 0.11 * s, 6, 'wood', '梅·干');
+      GF.beamRound(mb, midP, topP, 0.085 * s, 6, 'wood', '梅·干');
+      const nb = 4 + r.int(0, 2);
+      const bloomAt = (p, ang, len) => {
+        for (let f = 0; f < 4; f++) {
+          const fa = ang + r.range(-1.1, 1.1);
+          const off = r.range(0.02, 0.14) * s;
+          blossom5(mb, [p[0] + Math.cos(fa) * off, p[1] + r.range(-0.06, 0.1) * s, p[2] + Math.sin(fa) * off], s, r, 'plum', '梅·瓣');
+        }
+        for (let q = 0; q < 2; q++) {
+          const bw = 0.026 * s;
+          mb.tri([p[0], p[1], p[2]], [p[0] + bw, p[1] + bw, p[2]], [p[0], p[1] + bw * 1.6, p[2] + bw * 0.7], 'plum', '梅·蕾');
+          mb.tri([p[0], p[1], p[2]], [p[0], p[1] + bw * 1.6, p[2] + bw * 0.7], [p[0] + bw, p[1] + bw, p[2]], 'plum', '梅·蕾');
+        }
+      };
+      for (let i = 0; i < nb; i++) {
+        const a = (i / nb) * 6.283 + r.range(-0.35, 0.35);
+        forkTwig(mb, topP, a, (0.5 + r.next() * 0.26) * s, H * (0.6 + r.next() * 0.3) - topP[1],
+          3, 0.048 * s, r, bloomAt, '梅·枝', s, true);
       }
-      blobCrown(mb, x, 1.3 * s, z, 0.34 * s, 0.4 * s, r, 'plum', '梅·花', 3);
     } else if (kind === 'bamboo') {
-      const n = 4;
+      // 竹：多竿丛生，一竿七节逐节收细、节处凸环；下两节不出枝，其上每节左右互生一枝，
+      // 枝再分两小枝，小枝端着五到七片窄长叶；越往上出枝越密，丛才蓬得住。
+      const n = GF.detail(2) ? 7 : GF.detail(1) ? 6 : 4;
       for (let i = 0; i < n; i++) {
-        const ox = (i - n / 2) * 0.22 * s + r.range(-0.1, 0.1);
-        const hh = (2.4 + r.range(0, 1.0)) * s;
-        const px = x + ox, pz = z + r.range(-0.2, 0.2);
-        mb.cyl(px, pz, 0.055 * s, 0, hh, 6, 'bamboo', '竹·竿');
-        for (let k = 1; k <= 4; k++) {
-          const yy = (hh * k) / 5;
-          mb.cyl(px, pz, 0.075 * s, yy - 0.025 * s, yy + 0.025 * s, 6, 'bamboo', '竹·节');
+        const ox = (i - n / 2) * 0.21 * s + r.range(-0.08, 0.08);
+        const pz = z + r.range(-0.26, 0.26);
+        const hh = (2.2 + r.range(0, 1.5)) * s;
+        const bx = r.range(-0.4, 0.4) * s;
+        const nodes = 7;
+        for (let q = 0; q < nodes; q++) {
+          const t0 = q / nodes, t1 = (q + 1) / nodes;
+          const cx0 = x + ox + bx * t0 * t0, cx1 = x + ox + bx * t1 * t1;
+          const y0 = hh * t0, y1 = hh * t1;
+          const rad1 = (0.062 - 0.007 * t1) * s;
+          GF.beamRound(mb, [cx0, y0, pz], [cx1, y1, pz], rad1, 6, 'bamboo', '竹·竿');
+          mb.cyl(cx1, pz, rad1 * 1.16, y1 - 0.016 * s, y1 + 0.016 * s, 6, 'bamboo', '竹·节');
+          if (q < 1) continue;
+          const nbq = t1 > 0.5 ? 2 : 1;
+          for (let m = 0; m < nbq; m++) {
+            const side = (q + m) % 2 ? 1 : -1;
+            const a = (side > 0 ? 0 : Math.PI) + r.range(-0.6, 0.6);
+            const len = (0.36 + r.next() * 0.16) * s;
+            const tip = [cx1 + Math.cos(a) * len, y1 + (0.08 + r.next() * 0.14) * s, pz + Math.sin(a) * len];
+            GF.beamRound(mb, [cx1, y1, pz], tip, 0.02 * s, 4, 'bamboo', '竹·枝');
+            for (const off of [-0.55, 0.1, 0.65]) {
+              const aa = a + off;
+              const subTip = [tip[0] + Math.cos(aa) * 0.26 * s, tip[1] + (off > 0 ? 0.06 : -0.03) * s, tip[2] + Math.sin(aa) * 0.26 * s];
+              GF.beamRound(mb, tip, subTip, 0.012 * s, 4, 'bamboo', '竹·小枝');
+              leafCluster(mb, subTip, s, r, 5, 0.34 * s, 0.06 * s, 0.22 * s, 'leaf', '竹·叶');
+            }
+          }
         }
-        for (let k = 0; k < 4; k++) {
-          const a = r.range(0, 6.283);
-          const yy = hh * (0.45 + k * 0.15);
-          const p0 = [px, yy, pz];
-          const p1 = [px + Math.cos(a) * 0.55 * s, yy - 0.3 * s, pz + Math.sin(a) * 0.55 * s];
-          GF.beamBetween(mb, p0, p1, 0.1 * s, 0.02 * s, 'bamboo', '竹·叶');
-        }
+        // 竹梢：竿顶一小簇叶
+        leafCluster(mb, [x + ox + bx, hh - 0.02 * s, pz], s, r, 4, 0.24 * s, 0.05 * s, 0.1 * s, 'leaf', '竹·叶');
       }
     } else if (kind === 'willow') {
-      trunk(mb, x, z, 1.7 * s, 0.13 * s, 'wood', '柳·干');
-      blobCrown(mb, x, 1.5 * s, z, 0.74 * s, 0.55 * s, r, 'willow', '柳·冠', 3);
-      for (let i = 0; i < 10; i++) {
-        const a = (i / 10) * Math.PI * 2;
-        const px = x + Math.cos(a) * 0.62 * s, pz = z + Math.sin(a) * 0.62 * s;
-        GF.beamRound(mb, [px, 1.95 * s, pz], [px + Math.cos(a) * 0.18 * s, 1.0 * s, pz + Math.sin(a) * 0.18 * s], 0.045 * s, 5, 'willow', '柳·条');
+      // 柳：主干短粗 → 五到七根粗枝斜上 → 枝端各垂七到九条柳条（两段自然下垂）→
+      // 条上互生八到十片小叶。冠是一帘垂条，条上有叶，不是蘑菇。
+      const H = 2.0 * s;
+      trunk(mb, x, z, H * 0.6, 0.15 * s, 'wood', '柳·干');
+      const branches = 6 + r.int(0, 2);
+      for (let i = 0; i < branches; i++) {
+        const a = (i / branches) * 6.283 + r.range(-0.3, 0.3);
+        const L = (0.5 + r.next() * 0.22) * s;
+        const tip = [x + Math.cos(a) * L, H * (0.9 + r.next() * 0.14), z + Math.sin(a) * L];
+        GF.beamRound(mb, [x, H * 0.58, z], tip, 0.06 * s, 5, 'wood', '柳·枝');
+        const strands = 7 + r.int(0, 3);
+        for (let k = 0; k < strands; k++) {
+          const aa = a + r.range(-1.1, 1.1);
+          const rr = 0.08 + r.next() * 0.16;
+          const start = [tip[0] + Math.cos(aa) * rr * s, tip[1] - r.range(0, 0.1) * s, tip[2] + Math.sin(aa) * rr * s];
+          const outLen = (0.14 + r.next() * 0.16) * s;
+          const dropLen = (1.0 + r.next() * 0.75) * s;
+          const p1 = [start[0] + Math.cos(aa) * outLen, start[1] - 0.05 * s, start[2] + Math.sin(aa) * outLen];
+          const p2 = [p1[0] + Math.cos(aa) * 0.04 * s, p1[1] - dropLen, p1[2] + Math.sin(aa) * 0.04 * s];
+          GF.beamRound(mb, start, p1, 0.013 * s, 4, 'willow', '柳·条');
+          GF.beamRound(mb, p1, p2, 0.011 * s, 4, 'willow', '柳·条');
+          const leaves = 9;
+          for (let m = 0; m < leaves; m++) {
+            const t = (m + 1) / (leaves + 1);
+            const at = [p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t, p1[2] + (p2[2] - p1[2]) * t];
+            const la = aa + (m % 2 ? 1.05 : -1.05);
+            leafBlade(mb, at, la, (0.09 + r.next() * 0.04) * s, 0.028 * s, 0.06 * s, 'willow', '柳·叶');
+          }
+        }
       }
     } else if (kind === 'gingko') {
-      trunk(mb, x, z, 1.6 * s, 0.12 * s, 'wood', '银杏·干');
-      blobCrown(mb, x, 1.45 * s, z, 0.78 * s, 0.9 * s, r, 'gold', '银杏·冠', 4);
+      // 银杏：通高主干 + 三层主枝，扇形叶簇（gold），冠上尖下阔
+      broadleaf(mb, x, z, s, r, 2.0 * s, 'gold', '银杏', {
+        tiers: [0.34, 0.5, 0.64], cnts: [5, 4, 3], lfs: [0.54, 0.42, 0.3],
+        leafN: 5, leafLen: 0.215, leafHW: 0.085, r0: 0.155
+      });
     } else if (kind === 'banana') {
-      // 芭蕉：假茎 + 向外垂下的扇叶（叶片必须斜垂，不能是平顶桌面）
+      // 芭蕉：假茎 + 向外垂下的长扇叶（叶根窄、中段最宽、叶尖下垂收窄），另有一片心叶。
       mb.cyl(x, z, 0.2 * s, 0, 2.15 * s, 8, 'bamboo', '芭蕉·茎');
-      const nL = 7;
+      const nL = 8;
       for (let i = 0; i < nL; i++) {
-        const a = (i / nL) * Math.PI * 2 + 0.35;
+        const a = (i / nL) * Math.PI * 2 + 0.35 + r.range(-0.12, 0.12);
         const ca = Math.cos(a), sa = Math.sin(a);
         const pa = -sa, pb = ca;
-        // 叶片改成 3 段折线：根部窄 → 中段宽 → 叶尖下垂收窄，不再是“绿色螺旋桨”
-        const segs = [[0.16, 2.16, 0.10], [0.58, 2.00, 0.22], [1.0, 1.74, 0.26], [1.3, 1.4, 0.11]]
+        const segs = [[0.16, 2.16, 0.1], [0.55, 2.02, 0.22], [0.98, 1.74, 0.26], [1.3, 1.36, 0.1]]
           .map((v) => [v[0] * s, v[1] * s, v[2] * s]);
         for (let k = 0; k < segs.length - 1; k++) {
-          const r0 = segs[k][0], y0 = segs[k][1], w0 = segs[k][2];
-          const r1 = segs[k + 1][0], y1 = segs[k + 1][1], w1 = segs[k + 1][2];
-          const A = [x + ca * r0 + pa * w0, y0, z + sa * r0 + pb * w0];
-          const B = [x + ca * r0 - pa * w0, y0, z + sa * r0 - pb * w0];
-          const C = [x + ca * r1 - pa * w1, y1, z + sa * r1 - pb * w1];
-          const D = [x + ca * r1 + pa * w1, y1, z + sa * r1 + pb * w1];
+          const r0 = segs[k][0], yy0 = segs[k][1], w0 = segs[k][2];
+          const r1 = segs[k + 1][0], yy1 = segs[k + 1][1], w1 = segs[k + 1][2];
+          const A = [x + ca * r0 + pa * w0, yy0, z + sa * r0 + pb * w0];
+          const B = [x + ca * r0 - pa * w0, yy0, z + sa * r0 - pb * w0];
+          const C = [x + ca * r1 - pa * w1, yy1, z + sa * r1 - pb * w1];
+          const D = [x + ca * r1 + pa * w1, yy1, z + sa * r1 + pb * w1];
           mb.quad(A, B, C, D, 'leaf', '芭蕉·叶');
           mb.quad(D, C, B, A, 'leaf', '芭蕉·叶');
         }
       }
-      mb.cyl(x, z, 0.24 * s, 2.1 * s, 2.2 * s, 6, 'leaf', '芭蕉·心');
+      mb.cyl(x, z, 0.24 * s, 2.1 * s, 2.22 * s, 6, 'leaf', '芭蕉·心');
     } else if (kind === 'maple') {
-      // 红枫：树干 + 三层云片冠，冠不再是红砖块
-      trunk(mb, x, z, 1.55 * s, 0.11 * s, 'wood', '枫·干');
-      blobCrown(mb, x, 1.35 * s, z, 0.7 * s, 0.8 * s, r, 'zhu', '枫·冠', 4);
-      blobCrown(mb, x + 0.32 * s, 1.55 * s, z - 0.26 * s, 0.32 * s, 0.32 * s, r, 'terracotta', '枫·叶', 2);
+      // 红枫：主干略短、冠更低更铺，三层主枝 + 副枝红叶片簇
+      broadleaf(mb, x, z, s, r, 1.85 * s, 'zhu', '枫', {
+        top: 0.7, tiers: [0.34, 0.5, 0.64], cnts: [5, 4, 3], lfs: [0.56, 0.44, 0.3],
+        leafN: 6, leafLen: 0.2, leafHW: 0.075, r0: 0.145
+      });
     } else {
-      trunk(mb, x, z, 1.35 * s, 0.12 * s, 'wood', '树·干');
-      blobCrown(mb, x, 1.25 * s, z, 0.8 * s, 0.95 * s, r, 'leaf', '树·冠', 4);
+      // 杂树：通高主干 + 三层主枝，叶簇双色不分，冠圆而透
+      broadleaf(mb, x, z, s, r, 1.8 * s, 'leaf', '树', {
+        top: 0.72, tiers: [0.36, 0.52, 0.66], cnts: [5, 4, 3], lfs: [0.55, 0.43, 0.3],
+        leafN: 6, leafLen: 0.225, leafHW: 0.085, r0: 0.155
+      });
     }
   }
 
   /* ------------------------------ 假山 ------------------------------ */
-  function rock(mb, x, z, s, rng, tag) {
-    s = s || 1;
-    const r = rng || new GF.RNG(7);
-    const n = r.int(3, 5);
-    for (let i = 0; i < n; i++) {
-      const w = (0.45 + r.next() * 0.8) * s;
-      const h = (0.3 + r.next() * 1.1) * s;
-      const px = x + r.range(-0.55, 0.55) * s, pz = z + r.range(-0.45, 0.45) * s;
-      const k = r.int(5, 7);
-      const a0 = r.range(0, Math.PI * 2);
-      // 一块石头拆成 3 层不规则多边形棱柱：逐层内收，轮廓带随机半径与随机相位，不再是方箱
-      const layers = 3;
-      const radii = [];
-      for (let j = 0; j < k; j++) radii.push(0.82 + r.next() * 0.36);
-      for (let L = 0; L < layers; L++) {
-        const frac = L / layers;
-        const shrink = 1 - frac * 0.5;
-        const twist = frac * 0.35;
-        const pts = [];
-        for (let j = 0; j < k; j++) {
-          const a = a0 + twist + (j / k) * Math.PI * 2;
-          const rad = w * 0.5 * shrink * radii[j];
-          pts.push([px + Math.cos(a) * rad, pz + Math.sin(a) * rad * 0.85]);
-        }
-        const ya = (h * L) / layers, yb = (h * (L + 1)) / layers;
-        mb.prism(pts, ya, yb, 'stone', tag || '假山');
+  // 石分两类：
+  //   taihu   太湖石——瘦（下收上丰）、皱（三重正弦溶蚀面）、漏（腿间柱缝是真空气）、透（那孔高拱前后左右都通）
+  //   qianshi 千层石——层理，层厚分明、层面波痕、整体缓倾，层间夹泥层
+  function rockPillar(mb, cx, cz, w, y0, h, layers, r, tag, depth) {
+    const k = 6 + r.int(0, 2);
+    const a0 = r.range(0, 6.283);
+    const dz = (depth || w * 0.82) * 0.5;
+    for (let L = 0; L < layers; L++) {
+      const f0 = L / layers, f1 = (L + 1) / layers;
+      const shrink = 1 - f0 * 0.42;
+      const twist = f0 * (0.28 + r.range(0, 0.18));
+      const pts = [];
+      for (let j = 0; j < k; j++) {
+        const a = a0 + twist + (j / k) * 6.283;
+        // 皱：隔一个点外凸、隔一个点内凹，且逐层换相位
+        const wrinkle = (j % 2 === 0 ? 1.16 : 0.86) * (L % 2 ? 0.96 : 1.04);
+        const rad = w * 0.5 * shrink * wrinkle * (0.94 + r.next() * 0.14);
+        pts.push([cx + Math.cos(a) * rad, cz + Math.sin(a) * dz * wrinkle * 0.9]);
+      }
+      mb.prism(pts, y0 + h * f0, y0 + h * f1, 'stone', tag);
+    }
+  }
+
+  function taihuRock(mb, x, z, s, r, tag) {
+    // 太湖石：一对粗腿到腰，上方石冠层层跨过两腿、逐层收成馒头状，中间留一孔高拱，
+    // 前后左右都望得穿；冠顶压三块错位横石再起一短峰，腿脚边散三块小石，侧面补一块斜石。
+    const a0 = r.range(0, 6.283), ph = r.range(0, 6.283), k = 9, H = 1.0 * s;
+    // 腿：五层，几乎不收分；两腿相距 0.44s，腿间即拱洞
+    for (const sx of [-1, 1]) {
+      const lx = x + sx * 0.23 * s;
+      rockPillar(mb, lx, z, 0.27 * s, 0, 0.52 * H, 5, r, tag + '·腿', 0.4 * s);
+    }
+    // 腿后垫矮石，洞不全空
+    mb.taper(x - 0.04 * s, z + 0.32 * s, 0.2 * s, 0.14 * s, 0.16 * s, 0.11 * s, 0, 0.28 * H, 'stone', tag + '·垫石');
+    // 石冠：四层，底起 0.48H 压住腿顶，逐层收得快，收成馒头而不是石桌
+    const crown = [[0.43, 0.48, 0.68], [0.37, 0.68, 0.84], [0.28, 0.84, 0.95]];
+    const dz = 0.8;
+    for (let L = 0; L < crown.length; L++) {
+      const pts = [];
+      for (let j = 0; j < k; j++) {
+        const a = a0 + (j / k) * 6.283 + L * 0.22;
+        const w = 1 + 0.15 * Math.sin(3 * a + ph + L * 0.8) + 0.07 * Math.sin(5 * a - ph * 0.7);
+        const rr = crown[L][0] * s * w * (0.95 + r.next() * 0.1);
+        pts.push([x + Math.cos(a) * rr, z + Math.sin(a) * rr * dz]);
+      }
+      mb.prism(pts, crown[L][1] * H, crown[L][2] * H, 'stone', tag + '·冠');
+    }
+    // 冠顶三块错位横石：都落在冠顶半径内，不悬空
+    for (let i = 0; i < 3; i++) {
+      const a = a0 + 0.8 + i * 2.2;
+      const rr = 0.1 * s * (1 + r.next() * 0.4);
+      const px = x + Math.cos(a) * rr, pz = z + Math.sin(a) * rr * 0.8;
+      const w = (0.17 + r.next() * 0.06) * s, d = (0.14 + r.next() * 0.05) * s;
+      const yb = 0.95 * H + i * 0.03 * H;
+      mb.prism([
+        [px - w * 0.5, pz - d * 0.5], [px + w * 0.5, pz - d * 0.54],
+        [px + w * 0.46, pz + d * 0.5], [px - w * 0.46, pz + d * 0.44]
+      ], yb, yb + 0.075 * H, i === 1 ? 'stoneB' : 'stone', tag + '·顶石');
+    }
+    mb.taper(x + 0.05 * s, z - 0.03 * s, 0.17 * s, 0.15 * s, 0.08 * s, 0.07 * s, 1.02 * H, 1.18 * H, 'stone', tag + '·峰');
+    // 腿脚边两块碎石，只靠在腿外侧，不挡拱洞
+    for (let i = 0; i < 2; i++) {
+      const sx = i ? 1 : -1;
+      const px = x + sx * (0.34 + r.next() * 0.06) * s, pz = z + (i ? 0.06 : -0.08) * s;
+      const w = (0.14 + r.next() * 0.06) * s;
+      mb.taper(px, pz, w, w * 0.8, w * 0.55, w * 0.45, 0, (0.14 + r.next() * 0.1) * H, 'stone', tag + '·碎石');
+    }
+    // 侧面斜石
+    mb.taper(x + 0.38 * s, z + 0.04 * s, 0.22 * s, 0.19 * s, 0.12 * s, 0.1 * s, 0, 0.58 * H, 'stone', tag + '·侧石');
+  }
+  function qianshiRock(mb, x, z, s, r, tag) {
+    // 千层石：沉积岩层理。层厚分明、厚薄不均，层面带波痕、整块顺一个方向缓倾，
+    // 出挑幅度很小（1.02/0.98），层间夹一道薄泥层换色；整块宽而矮，顶上平压一层，不往上抽成塔。
+    const layers = 6 + r.int(0, 3);
+    const a0 = r.range(0, 6.283), k = 7 + r.int(0, 2);
+    const slopeA = r.range(0, 6.283);
+    const slope = 0.1 + r.next() * 0.12;
+    const wavePh = r.range(0, 6.283);
+    const H0 = 0.52 * s;                             // 整块高约 0.52s，宽约 1.0s
+    let y = 0;
+    for (let L = 0; L < layers; L++) {
+      const f = L / layers;
+      const h = H0 * (0.6 / layers + r.next() * 0.9 / layers);
+      const taper = 1 - 0.16 * f;
+      const out = L % 2 === 0 ? 1.02 : 0.98;
+      const cx = x + Math.cos(slopeA) * slope * f * s * 0.5;
+      const cz = z + Math.sin(slopeA) * slope * f * s * 0.5;
+      const pts = [];
+      for (let j = 0; j < k; j++) {
+        const a = a0 + (j / k) * 6.283 + L * 0.14;
+        const wave = 1 + 0.06 * Math.sin(3 * a + wavePh + L * 0.5);
+        const rad = 0.5 * s * taper * out * wave * (0.92 + r.next() * 0.16);
+        pts.push([cx + Math.cos(a) * rad, cz + Math.sin(a) * rad * 0.78]);
+      }
+      mb.prism(pts, y, y + h, 'stone', tag + '·层');
+      y += h;
+      if (L % 4 === 3) {                            // 薄泥层，颜色略深
+        const thin = pts.map((p) => [cx + (p[0] - cx) * 0.96, cz + (p[1] - cz) * 0.96]);
+        mb.prism(thin, y, y + 0.014 * s, 'stoneB', tag + '·夹层');
+        y += 0.014 * s;
       }
     }
+    // 顶上压一层略小的平石，层口封住，顶面平（千层石顶多被切平）
+    const top = [];
+    for (let j = 0; j < k; j++) {
+      const a = a0 + (j / k) * 6.283 + 0.3;
+      const rad = 0.4 * s * (0.9 + r.next() * 0.18);
+      top.push([x + Math.cos(a) * rad, z + Math.sin(a) * rad * 0.78]);
+    }
+    mb.prism(top, y, y + 0.07 * s, 'stone', tag + '·顶层');
+  }
+  function rock(mb, x, z, s, rng, tag, kind) {
+    s = s || 1;
+    const r = rng || new GF.RNG(7);
+    const kd = kind || (s >= 0.75 ? 'taihu' : 'qianshi');
+    if (kd === 'taihu') taihuRock(mb, x, z, s, r, tag || '假山');
+    else qianshiRock(mb, x, z, s, r, tag || '叠石');
   }
 
   /* ------------------------------ 水池 ------------------------------ */
@@ -1222,11 +1596,12 @@
   }
 
   GF.parts = {
-    mapper, localBox, wallWithHoles, windowAt, doorAt, plaque, dougong, lintel,
+    mapper, localBox, wallWithHoles, windowAt, doorAt, plaque, dougong, dougongHeight, pingban, lintel,
     queti, platform, railing, horseHeadWall, courtWall, yingbi, lion, censer,
     lantern, banner, tree, rock, pond, furniture, latticeBars, partition,
     couplet, menZan, baogu, ceiling, caisson, stoneLantern, well, stele,
     bellDrum, penjing, quBridge, tieMaZhuang
   };
 })(typeof window !== 'undefined' ? window : globalThis);
+
 

@@ -223,3 +223,73 @@ canvas#view.dragging { cursor: grabbing; }
   .sidebar { width: 290px; flex-basis: 290px; }
   .topbar-actions .btn { padding: 0 10px; }
 }
+
+/* ---------------- 组件选取条（键位提示栏上方） ---------------- */
+.comp-bar {
+  position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px;
+  max-width: calc(100% - 26px); padding: 5px 10px;
+  overflow-x: auto; overflow-y: hidden;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: rgba(251,247,236,.93);
+  box-shadow: 0 2px 8px rgba(60,45,20,.10); z-index: 5;
+}
+.comp-bar.dragging { border-color: var(--accent-2); }
+.comp-bar::-webkit-scrollbar { height: 6px; }
+.comp-group { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.comp-glabel { font-size: 10.5px; color: #8b7f6a; margin-right: 2px; }
+.comp-chip {
+  height: 22px; padding: 0 8px; font-size: 11px; line-height: 20px;
+  border: 1px solid var(--line); border-radius: 6px; background: #fffdf7;
+  color: var(--ink-2); cursor: grab; white-space: nowrap;
+}
+.comp-chip:hover { border-color: var(--accent-2); color: var(--ink); background: #fff8e6; }
+.comp-chip:active { cursor: grabbing; }
+.comp-panel {
+  position: absolute; left: 50%; bottom: 72px; transform: translateX(-50%);
+  width: 320px; display: none; padding: 8px 10px 10px;
+  border: 1px solid var(--accent-2); border-radius: 10px;
+  background: rgba(255,253,247,.96);
+  box-shadow: 0 6px 18px rgba(60,45,20,.16); z-index: 6;
+}
+.comp-panel.open { display: block; }
+.comp-panel .cp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.comp-panel .cp-head b { font-size: 12.5px; color: var(--ink); }
+.comp-panel .cp-tip { flex: 1; font-size: 10px; color: #8b7f6a; }
+.comp-panel .cp-btn {
+  height: 20px; padding: 0 8px; font-size: 10.5px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 5px; background: #fffdf7; color: var(--ink-2);
+}
+.comp-panel .cp-btn.danger { color: #a3452f; border-color: #d9b6a6; }
+.comp-panel .cp-row { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-2); margin-top: 4px; }
+.comp-panel .cp-row input[type=range] { flex: 1; }
+.comp-panel .cp-row b { width: 44px; text-align: right; font-size: 11px; color: var(--ink); }
+.comp-panel .cp-list { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 6px; max-height: 58px; overflow: auto; }
+.comp-panel .cp-item { height: 19px; padding: 0 7px; font-size: 10.5px; border: 1px solid var(--line); border-radius: 5px; background: #fffdf7; color: var(--ink-2); cursor: pointer; }
+.comp-panel .cp-item.on { border-color: #c9962e; background: #fff4d8; color: #7a4f12; font-weight: 600; }
+.comp-panel .cp-empty { font-size: 10.5px; color: #8b7f6a; }
+.comp-panel .cp-row input[type=range]:disabled { opacity: .45; }
+.comp-panel .cp-item.preset { background:#f3f0e7; color:#6a6152; border-style:dashed; }
+.comp-panel .cp-item.preset.on { background:#fff4d8; border-style:solid; }
+/* 建筑本体选择栏与编辑器（第二套，与组件条并置） */
+.bld-bar { bottom: 30px; }
+.bld-bar .comp-chip { border-color: #cfc3ab; }
+.bld-bar .comp-chip.on { border-color: #c9962e; background: #fff2d2; color: #7a4f12; font-weight: 600; }
+.bld-panel { bottom: 72px; width: 340px; }
+.bld-panel .cp-head b { color: #7a4f12; }
+.cp-head { cursor: move; user-select: none; }
+.cp-head .cp-grip { font-size: 10px; color: #a3927a; margin-left: auto; margin-right: 4px; }
+.cp-row.cp-switch { justify-content: space-between; }
+.cp-row .cp-cycle { height: 22px; padding: 0 9px; font-size: 11px; border: 1px solid #c9962e; border-radius: 6px; background: #fff6de; color: #7a4f12; cursor: pointer; }
+.cp-row .cp-cycle:hover { background: #ffedc2; }
+
+.comp-mode { border-color:#8b7f6a; background:#f7f2e6; color:#5d5344; font-weight:600; }
+.comp-mode:hover { background:#efe4c8; }
+.bld-panel .cp-tip2 { font-size:10.5px; color:#8b7f6a; line-height:1.5; margin-top:4px; }
+.bld-panel { max-height: calc(100vh - 210px); overflow-y: auto; }
+.cp-sub { font-size: 10.5px; font-weight: 700; color: #a3927a; letter-spacing: .08em; margin: 7px 0 2px; border-top: 1px dashed #e2d7c1; padding-top: 5px; }
+.comp-panel select { max-width: 128px; font-size: 11px; border: 1px solid var(--line); border-radius: 5px; background: #fffdf7; color: var(--ink); height: 22px; }
+.bld-panel { left: auto; right: 22px; transform: none; }
+.bld-panel { bottom: 64px; max-height: calc(100vh - 150px); }
+.bld-panel .cp-row { flex-wrap: wrap; }
+.bld-panel .cp-row select { max-width: 118px; }

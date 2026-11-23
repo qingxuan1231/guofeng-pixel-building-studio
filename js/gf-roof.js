@@ -260,6 +260,78 @@
     }
   }
 
+  /* ------------------------ 檐下木作：檐椽 / 飞椽 / 椽头 ------------------------ */
+  // 320 档以前，檐口到柱头之间是空的：瓦面直接搭在斗栱上，从 30° 视角能看到瓦背，
+  // 檐下像被削平了一样。这里沿檐口真排两排椽子，把这段填成木作：
+  //   檐椽（圆断面）从檐檩侧斜下到檐口，椽头露在檐下一排；
+  //   飞椽（方断面）压在檐椽外段、比檐椽多出 0.2 m，头上再压瓦口板。
+  // outer/inner 是同一根椽在檐口与檐内的两个取样点（由各屋面自己的参数面取），
+  // 这样举折、起翘、斜脊怎么变，椽子都贴着真瓦面走，不再另算一套角度。
+  function rafterBand(mb, outer, inner, o, tag) {
+    const det = GF.detailLevel();
+    if (det < 2 || outer.length < 2) return;
+    const fine = det >= 3;
+    const gap = fine ? 0.30 : 0.34;        // 椽当（两椽中距）
+    const rad = fine ? 0.055 : 0.072;      // 檐椽半径
+    const sec = fine ? 0.075 : 0.095;      // 飞椽断面
+    const dyA = fine ? 0.30 : 0.32;        // 檐椽中心距瓦面
+    const dyB = fine ? 0.19 : 0.21;        // 飞椽中心距瓦面
+    const headA = fine ? 0.30 : 0.26;      // 檐椽头比飞椽头缩进多少
+    const tailA = fine ? 1.75 : 1.5;       // 檐椽长度
+    const outB = fine ? 0.20 : 0.16;       // 飞椽出头
+    const lenB = fine ? 0.85 : 0.7;        // 飞椽长度
+    const matA = o.rafterMat || 'wood';
+    const matB = o.rafterHeadMat || 'timber';   // 飞椽头刷朱：官式檐下一排红椽头，别用深木色（320 档会糊成一排黑牙）
+
+    // 沿檐口累计弧长，按椽当均分（拐角处也不挤成一堆）
+    const cum = [0];
+    let total = 0;
+    for (let i = 1; i < outer.length; i++) {
+      total += Math.hypot(outer[i][0] - outer[i - 1][0], outer[i][2] - outer[i - 1][2]);
+      cum.push(total);
+    }
+    if (total < 0.6) return;
+    const n = Math.max(2, Math.round(total / gap));
+    const pick = (dist) => {   // 由弧长反查两个取样点
+      let i = 1;
+      while (i < cum.length - 1 && cum[i] < dist) i++;
+      const seg = cum[i] - cum[i - 1] || 1;
+      const t = Math.max(0, Math.min(1, (dist - cum[i - 1]) / seg));
+      const a = outer[i - 1], b = outer[i];
+      const a2 = inner[i - 1], b2 = inner[i];
+      return {
+        p: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t],
+        q: [a2[0] + (b2[0] - a2[0]) * t, a2[1] + (b2[1] - a2[1]) * t, a2[2] + (b2[2] - a2[2]) * t]
+      };
+    };
+    for (let k = 0; k < n; k++) {
+      const { p, q } = pick((k + 0.5) * (total / n));
+      let dx = q[0] - p[0], dy = q[1] - p[1], dz = q[2] - p[2];
+      const dl = Math.hypot(dx, dy, dz);
+      if (dl < 1e-3) continue;
+      dx /= dl; dy /= dl; dz /= dl;
+      const at = (d, drop) => [p[0] + dx * d, p[1] + dy * d - drop, p[2] + dz * d];
+      // 檐椽：圆杆 + 端头（beamRound 自带端面，圆椽头就出来了）
+      GF.beamRound(mb, at(headA, dyA), at(tailA, dyA), rad, fine ? 5 : 4, matA, tag + '·檐椽');
+      // 飞椽：方料，压在檐椽外段，出头在瓦口下面；端面单独用暗木色，椽头才分得清
+      GF.beamBetween(mb, at(-outB, dyB), at(-outB + 0.06, dyB), sec, sec, matB, tag + '·飞椽头');
+      GF.beamBetween(mb, at(-outB + 0.06, dyB), at(lenB, dyB), sec, sec, matA, tag + '·飞椽');
+    }
+  }
+
+  // 参数面版：把 uv 采样成两条折线交给 rafterBand
+  function rafterBandUV(mb, fn, o, tag) {
+    if (GF.detailLevel() < 2) return;
+    const N = GF.detailLevel() >= 3 ? 72 : 40;
+    const outer = [], inner = [];
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;
+      outer.push(fn(u, 0));
+      inner.push(fn(u, 0.10));
+    }
+    rafterBand(mb, outer, inner, o, tag);
+  }
+
   /* ---------------------------- 悬鱼 · 惹草 ---------------------------- */
   // 山面博风板下垂的鱼形木饰，两侧各一片卷草纹小木（惹草）
   function addXuanYu(mb, x, zc, yTop, tag) {
@@ -308,6 +380,12 @@
     patch(mb, Math.max(6, bands(ze * 2)), nv, slopeX(1), o.tile, o.tileB, o.tag + '·右坡');
     patch(mb, Math.max(6, bands(ze * 2)), nv, slopeX(-1), o.tile, o.tileB, o.tag + '·左坡');
 
+    // 檐下木作：四面各排一溜椽子，先把瓦面与斗栱之间垫实
+    rafterBandUV(mb, slopeZ(1), o, o.tag + '·前檐椽');
+    rafterBandUV(mb, slopeZ(-1), o, o.tag + '·后檐椽');
+    rafterBandUV(mb, slopeX(1), o, o.tag + '·右檐椽');
+    rafterBandUV(mb, slopeX(-1), o, o.tag + '·左檐椽');
+
     // 檐口瓦当
     const eave = (u) => {
       const vals = [];
@@ -349,6 +427,9 @@
     };
     patch(mb, nu, nv, slope(1), o.tile, o.tileB, o.tag + '·前坡');
     patch(mb, nu, nv, slope(-1), o.tile, o.tileB, o.tag + '·后坡');
+    // 檐下木作（悬山两侧是山花，只有前后两坡排椽）
+    rafterBandUV(mb, slope(1), o, o.tag + '·前檐椽');
+    rafterBandUV(mb, slope(-1), o, o.tag + '·后檐椽');
 
     // 山面（三角山花）：悬山为木板，硬山为墙体
     const gableMat = o.gableMat || 'plaster';
@@ -404,6 +485,9 @@
     };
     patch(mb, bands(xe * 2), 6, slope(1), o.tile, o.tileB, o.tag + '·前坡');
     patch(mb, bands(xe * 2), 6, slope(-1), o.tile, o.tileB, o.tag + '·后坡');
+    // 檐下木作：卷棚前后两坡各排一溜椽
+    rafterBandUV(mb, slope(1), o, o.tag + '·前檐椽');
+    rafterBandUV(mb, slope(-1), o, o.tag + '·后檐椽');
 
     // 圆弧脊背
     const arcSeg = 6;
@@ -533,6 +617,11 @@
     patch(mb, bands(xe * 2), 4, lowZ(-1), o.tile, o.tileB, o.tag + '·下檐后');
     patch(mb, bands(ze * 2), 4, lowX(1), o.tile, o.tileB, o.tag + '·下檐右');
     patch(mb, bands(ze * 2), 4, lowX(-1), o.tile, o.tileB, o.tag + '·下檐左');
+    // 下檐檐下木作：四坡各排椽（上檐坐在收山线以内，檐下看不见，不排）
+    rafterBandUV(mb, lowZ(1), o, o.tag + '·下檐前椽');
+    rafterBandUV(mb, lowZ(-1), o, o.tag + '·下檐后椽');
+    rafterBandUV(mb, lowX(1), o, o.tag + '·下檐右椽');
+    rafterBandUV(mb, lowX(-1), o, o.tag + '·下檐左椽');
 
     // 上檐：前后两坡（自内矩形到正脊）
     const xr = xi * 0.92;
@@ -637,6 +726,8 @@
     }
     // 檐口瓦当（沿起翘后的檐口折线走）
     addEaveTiles(mb, rows[0].p, o);
+    // 檐下木作：攒尖是一圈连续檐口，椽子沿整圈排，方向取指向顶点的径向
+    if (o.rafters !== false) rafterBand(mb, rows[0].p, ringPts(0.18, 0), o, o.tag + '·檐椽');
 
     // 垂脊（每条棱）：沿举折曲线折线连到宝顶，不再是角点到顶点的直线（凹曲屋面上会悬空）
     for (let i = 0; i < sides; i++) {
@@ -727,6 +818,9 @@
     }
     // 檐口瓦当：整圈（原来只取前 9 个点，细分加密后等于只在正面铺了一小段）
     addEaveTiles(mb, rows[0].p, o);
+    // 檐下木作：腰檐一圈四边坡，椽子沿整圈排（重檐下檐、塔檐下都靠这一圈填实）
+    // 腰檐默认不排椽：腰檐下沿就是柱头，没有净空，排了也埋在檐里（要排得先把逐层斗栱抬高，见 README）
+    if (o.rafters === true) rafterBand(mb, rows[0].p, ring(0.22), o, o.tag + '·檐椽');
     // 四条垂脊：沿举折曲线从外角走到内角，中段才贴住瓦面
     if (GF.detail(2)) {
       for (const sx of [-1, 1]) {
@@ -800,6 +894,8 @@
       }
     }
     addEaveTiles(mb, rows[0].p, o);
+    // 檐下木作：塔檐一圈八面，椽子沿整圈排，头一排露在八角檐下
+    if (o.rafters === true) rafterBand(mb, rows[0].p, ringAt(0.28, 0), o, o.tag + '·檐椽');
     // 檐角起翘：贴着檐口外沿压一小段翘尖（原来是横在外面的方块，读成“须”）
     if (GF.detail(2) && o.cornerTip !== false) {
       for (let k = 0; k < sides; k++) {

@@ -60,15 +60,19 @@
         <button class="mini" data-view="court" title="放大到院落环境">院落</button>
         <button class="mini" id="rotL" title="逆时针 45°">⟲ 45°</button>
         <button class="mini" id="rotR" title="顺时针 45°">⟳ 45°</button>
-        <button class="mini" id="btnBuild" title="自下而上逐层落成演示">落成演示</button>
         <button class="mini" id="btnAxis" title="转到中轴正立面（旋向 0°，保持当前缩放）">中轴</button>
-        <button class="mini" id="btnMove" title="开启后可直接拖动树、假山、石灯、幡旗、水池">拖动陈设</button>
+        <button class="mini" id="btnBuild" title="自下而上逐层落成演示">落成演示</button>
         <button class="mini" id="btnFull">全屏</button>
+        <button class="mini" id="btnGrid" title="地面栅格：1 m 一格，5 格加重">网格</button>
         <button class="mini" id="btnCut">剖切：室内外</button>
       </div>
 
       <div class="canvas-wrap" id="canvasWrap">
         <canvas id="view"></canvas>
+        <div class="comp-bar" id="compBar" title="按住组件拖进画面即可落位；数量不再由配方写死"></div>
+        <div class="comp-bar bld-bar" id="bldBar" title="建筑本体：点台基 / 每层 / 屋面，逐件调整；面板可拖动"></div>
+        <div class="comp-panel" id="compPanel"></div>
+        <div class="comp-panel bld-panel" id="bldPanel"></div>
         <div class="canvas-hint" id="hint">左键拖动旋转 · 右键 / Shift 拖动平移 · 滚轮以光标为锚点缩放 · 双击复位</div>
       </div>
 
@@ -98,3 +102,4 @@
   <script src="js/app.js"></script>
 </body>
 </html>
+

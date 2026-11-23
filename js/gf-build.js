@@ -142,6 +142,12 @@
     const cut = o.cut || {};
     const wallT = o.wallT || 0.22;
     let lastTopY = base;
+    // 檐口净空：有斗栱时，屋面必须抬到“斗栱顶 + 檐檩 + 檐椽”之上，
+    // 否则斗栱整个埋进檐口，檐下没有放椽子的地方（就是“斗栱直接接瓦口”那一眼）。
+    const ER = GF.era(o.era);
+    const dgS = o.dougong ? (o.dgScale || 0.9) * ER.dgK : 0;
+    const dgH = o.dougong ? P.dougongHeight(o.dgStyle || 'mid', dgS) : 0;
+    const dgLift = o.dougong ? dgH + 0.34 : 0;
 
     for (let f = 0; f < floors; f++) {
       const fhF = (Array.isArray(o.floorHList) && o.floorHList[f] != null) ? o.floorHList[f] : fh;
@@ -223,32 +229,96 @@
         if (!cut.right) mb.box(x1 - 0.26, x1 + 0.04, b0, b1, z0, z1, 'stone', f === 0 ? '墙脚石·右' : '腰线·右');
       }
 
-      // 额枋 + 彩画
+      // 朝代做法：阑额断面、普拍枋有无与断面、斗栱密度与大小都按朝代定
+      const pbH = ER.pb ? ER.lanT * ER.pb.h : 0;
+      const pbW = ER.pb ? ER.lanT * ER.pb.w : 0;
+      const lanH = ER.lanH, lanT = ER.lanT;
+
+      // 额枋 + 彩画（明清高厚比约 2:1，唐宋更高瘦）
+      // 唐宋辽金为丹粉刷饰／素枋，不加青绿彩画；元人好作月梁，阑额端部收分。
+      const plainLintel = (o.era === 'han' || o.era === 'tang' || o.era === 'song' || o.era === 'jin' || o.era === 'yuan');
       for (const side of ['front', 'back']) {
         const at = side === 'front' ? z1 - 0.05 : z0 + 0.05;
-        P.lintel(mb, {
-          dir: side, at, uc: 0, w: W, y: yt - 0.42, h: 0.3, th: 0.26,
-          seg: o.cheap ? 2 : Math.max(4, bays * 2), tag: '额枋·' + side
-        });
+        const ly = yt - 0.1 - pbH - lanH;
+        if (plainLintel) {
+          const zc = side === 'front' ? z1 - 0.05 : z0 + 0.05;
+          mb.box(x0 - 0.06, x1 + 0.06, ly, ly + lanH, zc - lanT / 2, zc + lanT / 2, 'timber', '额枋·' + side);
+          if (o.era === 'yuan') {
+            // 月梁：两端下缘收进，中段略鼓（梁思成记阳和楼“阑额刻作假月梁形”）
+            for (const ex of [x0 + 0.5, x1 - 0.5]) {
+              mb.taper(ex, zc, lanT * 0.9, lanT * 1.05, lanT * 0.9, lanT * 0.4, ly + lanH * 0.3, ly + lanH, 'timber', '额枋·' + side + '·月梁头');
+            }
+          }
+        } else {
+          P.lintel(mb, {
+            dir: side, at, uc: 0, w: W, y: ly, h: lanH, th: lanT,
+            seg: o.cheap ? 2 : Math.max(4, bays * 2), tag: '额枋·' + side
+          });
+        }
       }
-      // 斗拱
+      // 普拍枋：唐辽无，宋辽扁宽成 T 字，金元渐厚，明清狭于阑额
+      if (ER.pb && o.dougong) {
+        P.pingban(mb, { x0, x1, z0, z1, y0: yt - 0.1 - pbH, y1: yt - 0.1, w: pbW, tag: '普拍枋' });
+      }
+      // 斗拱：唐宋每间柱头 + 一朵补间（两朵），明清铺作小而密
       if (o.dougong) {
-        const n = Math.max(6, Math.round(W / 0.62));
+        const n = ER.dg === 'dense' ? Math.max(6, Math.round(W / 0.62)) : Math.max(2, bays * (ER.dg === 'col' ? 1 : 2));
+        const gap = W / n;
+        const tone = (o.era === 'han' || o.era === 'tang' || o.era === 'song' || o.era === 'jin') ? 'dan' : 'green';
         for (let i = 0; i <= n; i++) {
           const cx = x0 + (W * i) / n;
           for (const cz of [z0 + 0.12, z1 - 0.12]) {
-            P.dougong(mb, cx, yt - 0.1, cz, o.dgScale || 0.9, '斗拱', o.dgStyle || 'mid');
+            P.dougong(mb, cx, yt - 0.1, cz, dgS, '斗拱', o.dgStyle || 'mid', { gap, tone });
           }
         }
-      }
-      // 栱眼壁（斗拱之间的垫板）
-      if (o.dougong && o.dgEye) {
+        // 檐檩：压在斗栱柱头枋上的一根通长圆木，是“斗栱—椽子”之间的过渡层。
+        // 没有它，屋面抬起来以后檐下会是一条悬空的缝。
+        const dgH = P.dougongHeight(o.dgStyle || 'mid', dgS);
+        const yT = yt - 0.1 + dgH + 0.1;
         for (const side of ['front', 'back']) {
-          const at = side === 'front' ? z1 - 0.1 : z0 + 0.1;
-          P.lintel(mb, {
-            dir: side, at, uc: 0, w: W, y: yt + 0.42, h: 0.22, th: 0.18,
-            seg: Math.max(3, bays), tag: '栱眼壁'
-          });
+          if (cut[side]) continue;
+          const at = side === 'front' ? z1 - 0.14 : z0 + 0.14;
+          GF.beamRound(mb, [x0, yT, at], [x1, yT, at], 0.11, 6, 'paintGreen', '檐檩·' + side);
+        }
+      }
+      // 栱眼壁：阑额以上、檐檩以下、斗栱背后的三层——下段深色垫板、中段素壁、上段柱头枋。
+      // 唐辽素壁（灰白），明清青绿；柱头枋是通长的，不能每朵斗栱各画一块。
+      if (o.dougong) {
+        const era = o.era || 'qing';
+        const y0g = yt - 0.1 - pbH, y1g = yt - 0.1 + dgH;
+        const stk = 0.38 * dgS;
+        const gmat = (era === 'han' || era === 'tang' || era === 'song') ? 'plaster' : 'paintGreen';
+        const b1 = y1g - 0.12 * dgS, b2 = y1g - stk;
+        if (!cut.front) {
+          mb.box(x0 - 0.02, x1 + 0.02, y0g, b2, z1 - 0.15, z1 - 0.05, 'woodDark', '栱眼壁·前垫板');
+          mb.box(x0 - 0.02, x1 + 0.02, b2, b1, z1 - 0.15, z1 - 0.05, gmat, '栱眼壁·前');
+          mb.box(x0 - 0.02, x1 + 0.02, b1, y1g, z1 - 0.18, z1 - 0.02, 'paintGreen', '柱头枋·前');
+        }
+        if (!cut.back) {
+          mb.box(x0 - 0.02, x1 + 0.02, y0g, b2, z0 + 0.05, z0 + 0.15, 'woodDark', '栱眼壁·后垫板');
+          mb.box(x0 - 0.02, x1 + 0.02, b2, b1, z0 + 0.05, z0 + 0.15, gmat, '栱眼壁·后');
+          mb.box(x0 - 0.02, x1 + 0.02, b1, y1g, z0 + 0.02, z0 + 0.18, 'paintGreen', '柱头枋·后');
+        }
+        // 栱眼壁雕饰（开关 dgEye）：在素壁外再加一层分间透雕板 + 竖棂，与整片素壁区分得出来
+        if (o.dgEye) {
+          for (let i = 0; i < bays; i++) {
+            const bx0 = x0 + bayW * i + 0.1, bx1 = x0 + bayW * (i + 1) - 0.1;
+            const rib = Math.max(0.05, bayW * 0.06);
+            if (!cut.front) {
+              mb.box(bx0, bx1, b2 + 0.02, b1 - 0.02, z1 - 0.2, z1 - 0.17, 'woodDark', '栱眼壁·透雕板前');
+              for (let k = 1; k <= 3; k++) {
+                const rx = bx0 + (bx1 - bx0) * k / 4;
+                mb.box(rx - rib / 2, rx + rib / 2, b2 + 0.02, b1 - 0.02, z1 - 0.23, z1 - 0.2, 'paintGreen', '栱眼壁·竖棂前');
+              }
+            }
+            if (!cut.back) {
+              mb.box(bx0, bx1, b2 + 0.02, b1 - 0.02, z0 + 0.17, z0 + 0.2, 'woodDark', '栱眼壁·透雕板后');
+              for (let k = 1; k <= 3; k++) {
+                const rx = bx0 + (bx1 - bx0) * k / 4;
+                mb.box(rx - rib / 2, rx + rib / 2, b2 + 0.02, b1 - 0.02, z0 + 0.2, z0 + 0.23, 'paintGreen', '栱眼壁·竖棂后');
+              }
+            }
+          }
         }
       }
       // 雀替（每间两端）
@@ -265,19 +335,20 @@
       // 室内地板（首层；城制等大群组可用 noFloor 关闭以控三角面）
       if (f === 0 && !o.noFloor) interiorFloor(mb, W - 0.4, D - 0.4, yb + 0.02, '地板');
 
-      // 腰檐（非顶层）
+      // 腰檐（非顶层）：只做一层短披檐——檐口压柱头、内侧收到上层墙外 6cm，
+      // 坡高必须小于上层楼板厚，否则瓦会顺着墙往上爬，看着像“瓦从屋里盖下来”
       if (f < floors - 1 && !cut.roof) {
         GF.roofs.skirt(mb, {
           cx: 0, cz: 0,
           x0: x0 - o.eave, x1: x1 + o.eave, z0: z0 - o.eave, z1: z1 + o.eave,
-          xi: W / 2 + 0.1, zi: D / 2 + 0.1,
-          yb: yt, ytop: yt + Math.min(1.6, fhF * 0.42),
+          xi: W / 2 + 0.06, zi: D / 2 + 0.06,
+          yb: yt + dgLift, ytop: yt + dgLift + Math.min(0.56, fhF * 0.16),
           tile: o.tile, tileB: o.tileB, upturn: o.upturn * 0.6, tag: '腰檐' + (f + 1)
         });
       }
       lastTopY = yt;
     }
-    return { topY: lastTopY, x0, x1, z0, z1, bayW };
+    return { topY: lastTopY, roofY: lastTopY + dgLift, x0, x1, z0, z1, bayW };
   }
 
   /* ------------------------------ 殿堂副阶 ------------------------------ */
@@ -464,7 +535,7 @@
       winW: r.winW, winH: r.winH, winPattern: r.winPattern,
       doorW: r.doorW, doorH: r.doorH, doorStyle: r.doorStyle, doorLeaves: r.doorLeaves,
       eave: r.eave, tile: r.tile, tileB: r.tileB, upturn: r.upturn,
-      dougong: r.dougong, dgScale: r.dgScale, dgStyle: r.dgStyle, dgEye: r.dgEye, queti: r.queti
+      dougong: r.dougong, era: r.era, dgScale: r.dgScale, dgStyle: r.dgStyle, dgEye: r.dgEye, queti: r.queti
     });
     interior(mb, r, { W, D, bayW });
 
@@ -505,7 +576,7 @@
         GF.roofs.build(mb, {
           cx: 0, cz: 0, x0: -W / 2 - eo * 0.78, x1: W / 2 + eo * 0.78,
           z0: -D / 2 - eo * 0.78, z1: D / 2 + eo * 0.78,
-          yb: top.topY + 0.2, rise: rise * 0.85,
+          yb: top.roofY + 0.2, rise: rise * 0.85,
           type: r.roofType === 'cross' ? 'cross'
             : r.roofType === 'lu' ? 'lu'
             : (r.roofType === 'gable' || r.roofType === 'gableHip') ? 'gableHip' : 'hip',
@@ -518,7 +589,7 @@
         GF.roofs.build(mb, {
           cx: 0, cz: 0,
           x0: -W / 2 - eo, x1: W / 2 + eo, z0: -D / 2 - eo, z1: D / 2 + eo,
-          yb: top.topY, rise, type: r.roofType,
+          yb: top.roofY, rise, type: r.roofType,
           tile: r.tile, tileB: r.tileB, upturn: r.upturn,
           ridgeStyle: r.ridgeStyle, beasts: r.beasts, finial: r.finial,
           trim: r.trimMat, xuanYu: r.xuanYu, windDuo: r.windDuo,
@@ -572,7 +643,7 @@
       winW: r.winW, winH: r.winH, winPattern: r.winPattern,
       doorW: r.doorW, doorH: r.doorH, doorStyle: r.doorStyle, doorLeaves: r.doorLeaves,
       eave: r.eave, tile: r.tile, tileB: r.tileB, upturn: r.upturn,
-      dougong: r.dougong, dgScale: r.dgScale, dgStyle: r.dgStyle, dgEye: r.dgEye, queti: r.queti,
+      dougong: r.dougong, era: r.era, dgScale: r.dgScale, dgStyle: r.dgStyle, dgEye: r.dgEye, queti: r.queti,
       sideWindows: true
     });
     interior(mb, r, { W, D });
@@ -1005,8 +1076,27 @@
         mb.box(x0, x1, hTop, wallH, -D / 2 - 1.2, D / 2 + 1.2, 'brick', '城台');
       }
     }
-    // 门洞内的暗面（隧道）
-    mb.box(-gateW / 2 - 0.1, gateW / 2 + 0.1, 0, gateH * 0.95, -D / 2 - 1.0, D / 2 + 1.0, 'dark', '门洞');
+    // 门洞内衬：只给洞壁与券顶，洞底通地、前后贯通，绝不拿一个实心暗盒把洞填死
+    {
+      const zf0 = -D / 2 - 1.18, zf1 = D / 2 + 1.18;
+      const wallT = 0.09;
+      for (const s of [-1, 1]) {
+        // 两侧洞壁：贴着列柱挖出来的洞口，竖直到底
+        mb.box(s * gateW / 2 - wallT, s * gateW / 2 + wallT, 0, gateH * 0.98, zf0, zf1, 'brickB', '门洞·侧壁');
+      }
+      // 券顶内弧：沿起拱线以上半圆分段铺一圈弧面（内衬，不是实心）
+      const R2 = gateW / 2 + 0.04, cy2 = gateH * 0.4;
+      const segs = 10;
+      for (let k = 0; k < segs; k++) {
+        const a0 = Math.PI * (0.04 + 0.92 * k / segs), a1 = Math.PI * (0.04 + 0.92 * (k + 1) / segs);
+        const p0 = [Math.cos(a0) * R2, cy2 + Math.sin(a0) * R2 * 0.82];
+        const p1 = [Math.cos(a1) * R2, cy2 + Math.sin(a1) * R2 * 0.82];
+        mb.quad([p0[0], p0[1], zf0], [p1[0], p1[1], zf0], [p1[0], p1[1], zf1], [p0[0], p0[1], zf1], 'brickB', '门洞·券顶');
+        mb.quad([p0[0], p0[1], zf1], [p1[0], p1[1], zf1], [p1[0], p1[1], zf0], [p0[0], p0[1], zf0], 'brickB', '门洞·券顶');
+      }
+      // 洞底石板：只铺 0.06 厚一层，路面还是通的
+      mb.box(-gateW / 2, gateW / 2, 0, 0.06, zf0, zf1, 'slab', '门洞·石道');
+    }
     // 券脸石：沿门洞拱圈排一圈石券，两面对称
     const archR = gateW / 2 + 0.12;
     const archCy = gateH * 0.4;
@@ -1024,7 +1114,8 @@
     if (closed) {
       // 城门板：两扇实木门 + 门框 + 门钉（钉距按门扇实际尺寸排，转视角不再糊成栅格）
       for (const sz of [-1, 1]) {
-        const z = sz * (D / 2 + 1.11);
+        // 门扇退进洞内 0.35m：外看是一段有深度的门洞，不是一个贴在墙面上的门皮
+        const z = sz * (D / 2 + 0.85);
         const zt = z + sz * 0.1;
         // 门框：抱框 + 上槛
         mb.box(-gateW / 2 - 0.06, -gateW / 2 + 0.06, 0.1, gateH * 0.8, z, zt, 'woodDark', '门框');
@@ -1081,14 +1172,14 @@
       winW: r.winW, winH: r.winH, winPattern: r.winPattern,
       doorW: r.doorW, doorH: r.doorH, doorStyle: r.doorStyle,
       eave: r.eave, tile: r.tile, tileB: r.tileB, upturn: r.upturn,
-      dougong: true, dgScale: 0.85, queti: true
+      dougong: true, era: r.era, dgScale: 0.85, queti: true
     });
     if (!r.cut.roof) {
       GF.roofs.build(mb, {
         cx: 0, cz: 0,
         x0: -W2 / 2 - r.eave, x1: W2 / 2 + r.eave,
         z0: -D2 / 2 - r.eave, z1: D2 / 2 + r.eave,
-        yb: top.topY, rise: r.slope * (D2 / 2 + r.eave) * 1.1, type: 'gableHip',
+        yb: top.roofY, rise: r.slope * (D2 / 2 + r.eave) * 1.1, type: 'gableHip',
         tile: r.tile, tileB: r.tileB, upturn: r.upturn,
         ridgeStyle: 'ornate', beasts: 2, finial: false, tag: '城楼顶'
       });
@@ -1124,10 +1215,54 @@
   }
 
   /* --------------------------- 单栋房屋（可平移/旋转） --------------------------- */
+  /* ------------- 多建筑院落：单体登记与逐栋改写 ------------- */
+  // 每栋单体登记一条：id / 中文名 / 中心 / 平面尺寸 / 朝向 / 台基高 / 总高。
+  // 应用侧按 id 写 r.units[id] 覆盖，构建时把覆盖并回这一栋的配方与体量。
+  function unitOverride(r, id) {
+    const u = r.units && id != null ? r.units[id] : null;
+    return u && typeof u === 'object' ? u : null;
+  }
+  const UNIT_GEOM = ['W', 'D', 'bays', 'floors', 'roofType', 'eave', 'floorH', 'veranda', 'partition', 'plaque', 'cheap'];
+  const UNIT_RECIPE = ['baseH', 'floorH', 'slope', 'upturn', 'wallMat', 'colMat', 'winPattern', 'winW', 'winH',
+    'doorStyle', 'doorW', 'doorH', 'plaque', 'tileColor', 'tile', 'tileB', 'railing', 'pedestal', 'steps'];
+  function unitGeom(base, ov) {
+    const out = Object.assign({}, base);
+    if (!ov) return out;
+    UNIT_GEOM.forEach((k) => { if (ov[k] != null) out[k] = ov[k]; });
+    // 这一栋要求做格心 / 门式时，就不能再走 cheap 低模（低模的门窗是素板，格心与门扇都不建）
+    if (ov.winPattern != null || ov.doorStyle != null) out.cheap = false;
+    return out;
+  }
+  function unitRecipe(r, ov) {
+    if (!ov) return r;
+    const ru = Object.assign({}, r);
+    UNIT_RECIPE.forEach((k) => { if (ov[k] != null) ru[k] = ov[k]; });
+    const tileMap = {
+      grey: ['tile', 'tileB'], celadon: ['glazeG', 'glazeGD'], yellow: ['glazeY', 'glazeYD'],
+      blue: ['glazeB', 'glazeBD'], clay: ['terracotta', 'terracotta'], thatch: ['thatch', 'thatchB']
+    };
+    if (ov.tileColor && tileMap[ov.tileColor]) { ru.tile = tileMap[ov.tileColor][0]; ru.tileB = tileMap[ov.tileColor][1]; }
+    return ru;
+  }
+  // 逐栋拖动：units[id].dx / dz 记这栋相对布局位置的位移，构建时只挪这一栋
+  function unitShift(r, id) {
+    const u = r.units && id != null ? r.units[id] : null;
+    return { dx: u && u.dx != null ? +u.dx : 0, dz: u && u.dz != null ? +u.dz : 0 };
+  }
+  // 登记一栋（画布点选、线框与编辑器都靠这条；同时进 moves 供按点位拾取）
+  function regUnit(mb, id, label, x, z, W, D, rot, topY, baseH, fixed) {
+    if (!mb.units) mb.units = [];
+    mb.units.push({
+      id: String(id), label: label || String(id), x: +(x || 0).toFixed(2), z: +(z || 0).toFixed(2),
+      W: +W.toFixed(2), D: +D.toFixed(2), rot: Math.round(rot || 0),
+      topY: +(topY || 0).toFixed(2), baseH: +(baseH || 0).toFixed(2), fixed: !!fixed
+    });
+    mb.moves.push({ key: 'u:' + id, label: label || String(id), x: x || 0, z: z || 0, r: Math.max(W, D) / 2 });
+  }
+
   function houseUnit(r, o) {
     const m = new GF.Mesh();
-    const W = o.W, D = o.D;
-    const b = base(m, r, { W, D });
+    const W = o.W, D = o.D;    const b = base(m, r, { W, D });
     const top = body(m, {
       W, D, baseY: b.h + 0.04, floors: o.floors || 1, floorH: r.floorH, floorHList: o.floorHList,
       bays: o.bays || 3, wallMat: r.wallMat, colMat: r.colMat, cut: o.cut || {},
@@ -1165,7 +1300,7 @@
         cx: 0, cz: 0,
         x0: -W / 2 - eo, x1: W / 2 + eo,
         z0: -D / 2 - eo, z1: D / 2 + eo,
-        yb: top.topY, rise: r.slope * (D / 2 + eo),
+        yb: top.roofY, rise: r.slope * (D / 2 + eo),
         type: o.roofType || 'gable',
         tile: r.tile, tileB: r.tileB, upturn: r.upturn * 0.8,
         plain: o.plain || o.cheap,
@@ -1184,7 +1319,10 @@
 
   /* ------------------------------ 宅院（院落） ------------------------------ */
   function buildCourtyard(mb, r) {
-    const CW = r.courtW || 20, CD = r.courtD || 18;
+    const jin = Math.max(1, Math.min(5, Math.round(r.jin || 1)));
+    // 进数真的改院落尺度：每一进至少 9m 深，院墙 / 游廊 / 正房按总深重排
+    const CD = Math.max(r.courtD || 18, jin * 9);
+    const CW = r.courtW || 20;
     const wallH = 3.0;
     const style = r.courtStyle || 'siheyuan';
     // 院墙（前檐正中开门；园林用月洞门，墙上开漏窗）
@@ -1196,7 +1334,7 @@
         : null,
       windowPattern: r.winPattern
     });
-    const ctx = { CW, CD, wallH };
+    const ctx = { CW, CD, wallH, jin };
     if (style === 'garden') return courtyardGarden(mb, r, ctx);
     if (style === 'temple') return courtyardTemple(mb, r, ctx);
     // ---- 阶段④ 布局类新路径（不动既有 temple / siheyuan / garden 三条）----
@@ -1215,29 +1353,43 @@
   }
   // 轴上单体：rr 可覆盖 baseH / dougong 等；记录轴线核查数据
   function axisUnit(mb, r, o) {
-    const rr = Object.assign({}, r, { railing: false }, o.r || {});
-    if (r.axisRaise === false && o.statBaseH == null) rr.baseH = r.baseH;
-    const u = houseUnit(rr, o.unit);
-    u.mesh.translate(o.x || 0, o.y || 0, o.z);
+    const ov = unitOverride(r, o.tag);
+    const ru = unitRecipe(r, ov);
+    const rr = Object.assign({}, ru, { railing: false }, o.r || {});
+    if (ov) UNIT_RECIPE.forEach((k) => { if (ov[k] != null) rr[k] = ov[k]; });
+    if (r.axisRaise === false && o.statBaseH == null) rr.baseH = ru.baseH;
+    const unit = unitGeom(o.unit, ov);
+    const u = houseUnit(rr, unit);
+    const sh = unitShift(r, o.tag);
+    const ux = (o.x || 0) + sh.dx, uz = (o.z || 0) + sh.dz;
+    u.mesh.translate(ux, o.y || 0, uz);
     mb.merge(u.mesh);
+    regUnit(mb, o.tag, o.tag, ux, uz, unit.W, unit.D, 0, u.topY + (o.y || 0), rr.baseH);
     const bh = o.statBaseH != null ? o.statBaseH : rr.baseH;
     layStats(mb).axis.push({
-      tag: o.tag, x: o.x || 0, z: o.z, W: o.unit.W, D: o.unit.D,
+      tag: o.tag, x: ux, z: uz, W: unit.W, D: unit.D,
       baseH: +bh.toFixed(3), topY: +(u.topY + (o.y || 0)).toFixed(3)
     });
     return u;
   }
   // 跨院 / 配殿单体：默认朝院内（左 x<0 朝 +x，右 x>0 朝 -x）
   function flankUnit(mb, r, o) {
-    const rr = Object.assign({}, r, { railing: false }, o.r || {});
-    const u = houseUnit(rr, o.unit);
+    const ov = unitOverride(r, o.tag);
+    const ru = unitRecipe(r, ov);
+    const rr = Object.assign({}, ru, { railing: false }, o.r || {});
+    if (ov) UNIT_RECIPE.forEach((k) => { if (ov[k] != null) rr[k] = ov[k]; });
+    const unit = unitGeom(o.unit, ov);
+    const u = houseUnit(rr, unit);
     const rot = o.rot != null ? o.rot : (o.x < 0 ? 90 : -90);
+    const sh = unitShift(r, o.tag);
+    const ux = o.x + sh.dx, uz = o.z + sh.dz;
     u.mesh.rotateY(rot);
-    u.mesh.translate(o.x, 0, o.z);
+    u.mesh.translate(ux, 0, uz);
     mb.merge(u.mesh);
+    regUnit(mb, o.tag, o.tag, ux, uz, unit.W, unit.D, rot, u.topY, rr.baseH);
     layStats(mb).flanks.push({
-      tag: o.tag, x: o.x, z: o.z, W: o.unit.W, D: o.unit.D,
-      baseH: o.r && o.r.baseH != null ? o.r.baseH : r.baseH, rot
+      tag: o.tag, x: ux, z: uz, W: unit.W, D: unit.D,
+      baseH: o.r && o.r.baseH != null ? o.r.baseH : rr.baseH, rot
     });
     return u;
   }
@@ -1306,42 +1458,81 @@
     }
     mb.box(-2.05, 2.05, 2.95, 3.1, gz - 0.12, gz + 0.12, 'wood', '门楣');
     P.plaque(mb, { dir: 'front', at: gz + 0.16, uc: 0, vc: 2.66, w: 1.15, h: 0.38, chars: 2 });
+    const gov = unitOverride(r, 'gate');
+    const gRu = unitRecipe(r, gov);
     if (!r.cut.roof) {
       GF.roofs.build(mb, {
         cx: 0, cz: gz, x0: -2.75, x1: 2.75, z0: gz - 1.0, z1: gz + 1.0,
-        yb: 3.2, rise: 0.8, type: 'gable', tile: r.tile, tileB: r.tileB,
-        upturn: 0.3, ridgeStyle: 'plain', beasts: 0, gableMat: r.wallMat, tag: '垂花门顶'
+        yb: 3.2, rise: 0.8, type: 'gable', tile: gRu.tile, tileB: gRu.tileB,
+        upturn: gRu.upturn == null ? 0.3 : Math.min(0.7, gRu.upturn), ridgeStyle: 'plain', beasts: 0, gableMat: gRu.wallMat, tag: '垂花门顶'
       });
     }
+    regUnit(mb, 'gate', '院门 · 垂花门', 0, gz, 5.5, 2.0, 0, 3.95, gRu.baseH == null ? 0.3 : gRu.baseH, true);
 
-    // 正房（带前廊）
-    const W1 = Math.min(CW * 0.38, 7.0), D1 = 4.8;
-    const zMain = -CD / 2 + 1.5 + D1 / 2;
-    const main = houseUnit(r, {
-      W: W1, D: D1, bays: 3,
-      cut: r.cut, veranda: true, eave: 0.9,
-      partition: 0.9,
-      interior: r.interior.length ? r.interior : [
-        { kind: 'bed', x: -1.2, z: -1.9 },
-        { kind: 'table', x: 1.0, z: -1.4 },
-        { kind: 'screen', x: 0.2, z: -2.4 },
-        { kind: 'shelf', x: -2.8, z: -1.0 },
-        { kind: 'lamp', x: 2.7, z: 0.1 },
-        { kind: 'altar', x: 0, z: 0.2 },
-        { kind: 'table', x: 0, z: 2.2 },
-        { kind: 'stool', x: 0.95, z: 2.2 },
-        { kind: 'stool', x: -0.95, z: 2.2 }
-      ],
-      plaque: r.plaque
-    });
-    main.mesh.translate(0, 0, zMain);
-    mb.merge(main.mesh);
+    // 进数：院深按进数分段，每进一座正房；进与进之间砌内隔墙、中留内门。
+    // 首进另有厢房 + 抄手游廊 + 庭内陈设，后几进只留正房与隔墙，深宅的层次靠这个出来。
+    const jin = Math.max(1, Math.min(5, Math.round(ctx.jin || r.jin || 1)));
+    const jd = CD / jin;
+    const W1 = Math.min(CW * 0.38, 7.0), D1 = Math.min(4.8, jd * 0.44);
+    const zFront = CD / 2 - jd / 2;
+    const interiorMain = r.interior.length ? r.interior : [
+      { kind: 'bed', x: -1.2, z: -1.9 },
+      { kind: 'table', x: 1.0, z: -1.4 },
+      { kind: 'screen', x: 0.2, z: -2.4 },
+      { kind: 'shelf', x: -2.8, z: -1.0 },
+      { kind: 'lamp', x: 2.7, z: 0.1 },
+      { kind: 'altar', x: 0, z: 0.2 },
+      { kind: 'table', x: 0, z: 2.2 },
+      { kind: 'stool', x: 0.95, z: 2.2 },
+      { kind: 'stool', x: -0.95, z: 2.2 }
+    ];
+    for (let j = 0; j < jin; j++) {
+      const zBack = CD / 2 - (j + 1) * jd;                 // 该进北界
+      const zMain = zBack + D1 / 2 + (j === jin - 1 ? 1.2 : 0.7);
+      // 逐栋改写：第几进正房各自一份 r.units[id]，尺寸 / 层高 / 屋顶 / 瓦色都能单独调
+      const id = 'main' + (j + 1);
+      const ov = unitOverride(r, id);
+      const ru = unitRecipe(r, ov);
+      const um = unitGeom({
+        W: W1, D: D1, bays: 3,
+        cut: r.cut, veranda: true, eave: 0.9,
+        partition: 0.9,
+        interior: interiorMain,
+        plaque: j === jin - 1 ? r.plaque : false
+      }, ov);
+      const main = houseUnit(ru, um);
+      const sh = unitShift(r, id);
+      main.mesh.translate(sh.dx, 0, zMain + sh.dz);
+      mb.merge(main.mesh);
+      regUnit(mb, id, '第 ' + (j + 1) + ' 进正房', sh.dx, zMain + sh.dz, um.W, um.D, 0, main.topY, ru.baseH);
+      // 内隔墙（末进不砌）：两侧各一段，中留 1.6m 内门，门上压门楣与小门罩
+      if (j < jin - 1) {
+        const zW = zBack;
+        mb.box(-CW / 2 + 0.55, -0.8, 0, 2.7, zW - 0.13, zW + 0.13, 'brickB', '内隔墙');
+        mb.box(0.8, CW / 2 - 0.55, 0, 2.7, zW - 0.13, zW + 0.13, 'brickB', '内隔墙');
+        mb.box(-0.8, 0.8, 2.3, 2.7, zW - 0.13, zW + 0.13, 'brickB', '内门·门楣');
+        for (const sx of [-1, 1]) {
+          mb.boxC(sx * 0.9, zW, 0.2, 0.34, 0, 2.4, 'woodDark', '内门·框');
+          mb.boxC(sx * 0.32, zW, 0.62, 0.07, 0, 2.1, 'zhu', '内门·扇');
+        }
+        if (!r.cut.roof) {
+          GF.roofs.build(mb, {
+            cx: 0, cz: zW, x0: -1.5, x1: 1.5, z0: zW - 0.62, z1: zW + 0.62,
+            yb: 2.7, rise: 0.45, type: 'hip', tile: r.tile, tileB: r.tileB,
+            upturn: 0.18, ridgeStyle: 'plain', beasts: 0, tag: '内门·门罩'
+          });
+        }
+      }
+    }
 
-    // 东西厢房
-    const W2 = 6.0, D2 = 3.2;
-    const zWing = 2.4;
+    // 东西厢房（只首进有，后几进是正房之间的窄院）
+    const W2 = Math.min(6.0, Math.max(3.6, jd * 0.62)), D2 = 3.2;
+    const zWing = zFront;
     for (const sx of [-1, 1]) {
-      const wing = houseUnit(r, {
+      const id = sx > 0 ? 'wingE' : 'wingW';
+      const ov = unitOverride(r, id);
+      const ru = unitRecipe(r, ov);
+      const um = unitGeom({
         W: W2, D: D2, bays: 3, roofType: 'gable', eave: 0.7,
         interior: [
           { kind: 'table', x: 0, z: 0.2 },
@@ -1349,19 +1540,24 @@
           { kind: 'bed', x: 2.0, z: -0.8 },
           { kind: 'stool', x: 1.0, z: 0.2 }
         ]
-      });
-      wing.mesh.rotateY(sx > 0 ? -90 : 90);
-      wing.mesh.translate(sx * (CW / 2 - 2.9), 0, zWing);
+      }, ov);
+      const wing = houseUnit(ru, um);
+      const rot = sx > 0 ? -90 : 90;
+      wing.mesh.rotateY(rot);
+      const wx = sx * (CW / 2 - 2.9);
+      const sh = unitShift(r, id);
+      wing.mesh.translate(wx + sh.dx, 0, zWing + sh.dz);
       mb.merge(wing.mesh);
+      regUnit(mb, id, sx > 0 ? '东厢房' : '西厢房', wx + sh.dx, zWing + sh.dz, um.W, um.D, rot, wing.topY, ru.baseH);
     }
 
-    // 抄手游廊（沿东西院墙，从门内直到正房前）
+    // 抄手游廊（首进两侧，从门内直抵首进正房前）
     if (!r.cut.roof) {
+      const L = Math.max(3.2, jd - 3.0);
       for (const sx of [-1, 1]) {
-        const L = CD * 0.55;
         const cor = corridorMesh(r, L, 1.1, 0.02, {});
         cor.rotateY(90);
-        cor.translate(sx * (CW / 2 - (1.1 / 2 + 0.55)), 0, CD / 2 - 1.3 - L / 2);
+        cor.translate(sx * (CW / 2 - (1.1 / 2 + 0.55)), 0, CD / 2 - 1.1 - L / 2);
         mb.merge(cor);
       }
     }
@@ -1369,20 +1565,145 @@
     // 院内竹木
     const inTrees = r.env.trees || [];
     for (let i = 0; i < Math.min(2, inTrees.length); i++) {
-      P.tree(mb, (i ? 1 : -1) * 2.2, 5.8 - i * 0.6, inTrees[i], new GF.RNG(r.seed + i * 13), 0.85, '院内树');
+      P.tree(mb, (i ? 1 : -1) * 2.2, zFront + 1.0 - i * 0.6, inTrees[i], new GF.RNG(r.seed + i * 13), 0.85, '院内树');
     }
 
-    // 庭院陈设
-    P.furniture(mb, 'table', 0, 3.4, 1, 0, '石桌');
-    P.furniture(mb, 'stool', 0.9, 3.4, 1, 0, '石凳');
-    P.furniture(mb, 'stool', -0.9, 3.4, 1, 0, '石凳');
-    P.rock(mb, -3.4, 5.4, 0.9, new GF.RNG(r.seed + 5), '假山');
-    if (r.env.pond && r.env.showGround !== false && r.env.groundType !== 'lake') P.pond(mb, r.env.pond.x || 3.6, r.env.pond.z || 5.4, r.env.pond.w || 2.2, r.env.pond.d || 1.5);
+    // 庭院陈设（首进院心）
+    P.furniture(mb, 'table', 0, zFront - 1.0, 1, 0, '石桌');
+    P.furniture(mb, 'stool', 0.9, zFront - 1.0, 1, 0, '石凳');
+    P.furniture(mb, 'stool', -0.9, zFront - 1.0, 1, 0, '石凳');
+    P.rock(mb, -CW / 2 + 2.8, zFront + 0.6, 0.9, new GF.RNG(r.seed + 5), '假山');
+    if (r.env.pond && r.env.showGround !== false && r.env.groundType !== 'lake') {
+      P.pond(mb, r.env.pond.x || CW / 2 - 3.4, r.env.pond.z || zFront + 0.6, r.env.pond.w || 2.2, r.env.pond.d || 1.5);
+    }
     // 花池
     for (const sx of [-1, 1]) {
-      mb.boxC(sx * 3.0, 1.0, 1.4, 1.0, 0, 0.35, 'stone', '花池');
-      mb.boxC(sx * 3.0, 1.0, 1.2, 0.8, 0.35, 0.6, 'leaf', '花草');
+      mb.boxC(sx * 3.0, zFront - 2.2, 1.4, 1.0, 0, 0.35, 'stone', '花池');
+      mb.boxC(sx * 3.0, zFront - 2.2, 1.2, 0.8, 0.35, 0.6, 'leaf', '花草');
     }
+  }
+
+  /* 圆屋顶/圆腰檐：自写环形坡面（逐段逐环 quad），段边经描边就是瓦垄，
+     不依赖方环的 skirt，也不会出现大扇错位 */
+  function roundRing(mb, o) {
+    const sides = o.sides || 48, rings = o.rings || 12;
+    const rOut = o.rOut, rIn = o.rIn, yb = o.yb, yTop = o.ytop;
+    const P = (r, y, a) => [Math.cos(a) * r, y, Math.sin(a) * r];
+    const rr = (s) => rOut + (rIn - rOut) * Math.pow(s, 0.85);
+    const yy = (s) => yb + (yTop - yb) * Math.pow(s, 1.2);
+    for (let j = 0; j < rings; j++) {
+      const s0 = j / rings, s1 = (j + 1) / rings;
+      for (let i = 0; i < sides; i++) {
+        const a0 = (i / sides) * Math.PI * 2, a1 = ((i + 1) / sides) * Math.PI * 2;
+        const A = P(rr(s0), yy(s0), a0), B = P(rr(s0), yy(s0), a1);
+        const C = P(rr(s1), yy(s1), a1), D = P(rr(s1), yy(s1), a0);
+        // 隔一垄换瓦色：段边就是瓦垄沟，远看有竖垄，不是一整张伞面
+        mb.quad(A, B, C, D, (i & 1) ? (o.tileB || o.tile) : o.tile, o.tag);
+      }
+    }
+    // 檐口：一圈深色收边，压住最外一环的接缝
+    for (let i = 0; i < sides; i++) {
+      const a0 = (i / sides) * Math.PI * 2, a1 = ((i + 1) / sides) * Math.PI * 2;
+      const A = P(rOut + 0.03, yb, a0), B = P(rOut + 0.03, yb, a1);
+      const C = P(rOut + 0.03, yb - 0.13, a1), D = P(rOut + 0.03, yb - 0.13, a0);
+      mb.quad(A, B, C, D, o.tileB, o.tag + '·檐口');
+    }
+  }
+
+  /* 圆形平面（圆殿 / 圆楼）：圆台基 → 环柱 + 圆墙 → 圆攒尖（可叠层，层间用环坡腰檐） */
+  function buildRound(mb, r) {
+    const floors = Math.max(1, Math.min(3, r.floors || 1));
+    const seg = 44;
+    const R0 = r.roundR || Math.max(3.4, (r.bays || 3) * (r.bayW || 3.0) * 0.46);
+    const colH = r.floorH || 4.0;
+    const wallMat = r.wallMat || 'plaster';
+    const colMat = r.colMat || 'timber';
+    const nR = R0 + 1.35;
+    // 台基：两层圆台 + 前置踏跺
+    mb.cyl(0, 0, nR + 0.36, 0, 0.26, seg, 'stoneB', '圆台·下');
+    mb.cyl(0, 0, nR, 0.26, 0.5, seg, 'stone', '圆台·上');
+    mb.cyl(0, 0, nR - 0.14, 0.5, 0.54, 24, 'slab', '圆台·台面');
+    for (let k = 0; k < 4; k++) {
+      const w = 1.3 - k * 0.28;
+      mb.box(-w, w, 0, 0.54 - k * 0.13, nR - 0.36 + k * 0.44, nR + 0.06 + k * 0.44, 'stone', '踏跺');
+    }
+    let y = 0.54;
+    const gateA = 0.4;               // 前门半角（弧度）
+    for (let f = 0; f < floors; f++) {
+      const isTop = f === floors - 1;
+      const R = R0 * Math.pow(0.9, f);
+      const colTop = y + colH;
+      // 圆墙：整圈实砌（顶面被屋面压住），省掉逐段 quad 拼接的接缝与缺扇
+      mb.cyl(0, 0, R - 0.06, y, colTop, seg, wallMat, '圆墙');
+      mb.cyl(0, 0, R - 0.02, colTop - 0.16, colTop, seg, 'stoneB', '圆墙·压顶');
+      const nCol = Math.max(8, Math.round(R * 1.6));
+      // 环柱：立在墙外一圈，柱头连额枋
+      for (let i = 0; i < nCol; i++) {
+        const a = (i / nCol) * Math.PI * 2;
+        mb.cyl(Math.cos(a) * R, Math.sin(a) * R, 0.15, y, colTop, 8, colMat, '檐柱');
+        mb.boxC(Math.cos(a) * R, Math.sin(a) * R, 0.24, 0.24, y, y + 0.12, 'stone', '柱础');
+        const a2 = ((i + 1) / nCol) * Math.PI * 2;
+        GF.beamBetween(mb, [Math.cos(a) * R, colTop - 0.22, Math.sin(a) * R],
+          [Math.cos(a2) * R, colTop - 0.22, Math.sin(a2) * R], 0.11, 0.16, 'woodDark', '额枋');
+      }
+      if (f === 0) {
+        // 前门：沿圆弧排的门扇（弧面片）+ 两侧门框柱 + 门楣，贴墙皮之外，不会切进圆墙
+        const gA = gateA * 0.92, dA2 = 0.09;
+        for (let k = -4; k <= 4; k++) {
+          const a0 = Math.PI / 2 + (k - 0.5) * dA2, a1 = Math.PI / 2 + (k + 0.5) * dA2;
+          if (Math.abs((k) * dA2) > gA) continue;
+          const rr = R + 0.02;
+          const q0 = [Math.cos(a0) * rr, y, Math.sin(a0) * rr];
+          const q1 = [Math.cos(a1) * rr, y, Math.sin(a1) * rr];
+          const q2 = [Math.cos(a1) * rr, colTop - 0.72, Math.sin(a1) * rr];
+          const q3 = [Math.cos(a0) * rr, colTop - 0.72, Math.sin(a0) * rr];
+          mb.quad(q0, q1, q2, q3, 'zhu', '圆殿·门扇');
+          mb.quad(q3, q2, q1, q0, 'zhu', '圆殿·门扇');
+        }
+        for (let k = -4; k <= 4; k++) {
+          const a0 = Math.PI / 2 + (k - 0.5) * dA2, a1 = Math.PI / 2 + (k + 0.5) * dA2;
+          if (Math.abs(k * dA2) > gA) continue;
+          const rr = R + 0.06;
+          // 门楣：门顶一圈横带
+          mb.quad([Math.cos(a0) * rr, colTop - 0.72, Math.sin(a0) * rr], [Math.cos(a1) * rr, colTop - 0.72, Math.sin(a1) * rr],
+            [Math.cos(a1) * rr, colTop - 0.5, Math.sin(a1) * rr], [Math.cos(a0) * rr, colTop - 0.5, Math.sin(a0) * rr], 'woodDark', '圆殿·门楣');
+          mb.quad([Math.cos(a0) * rr, colTop - 0.5, Math.sin(a0) * rr], [Math.cos(a1) * rr, colTop - 0.5, Math.sin(a1) * rr],
+            [Math.cos(a1) * rr, colTop - 0.72, Math.sin(a1) * rr], [Math.cos(a0) * rr, colTop - 0.72, Math.sin(a0) * rr], 'woodDark', '圆殿·门楣');
+          // 门槛：贴地一道
+          const rq = R + 0.16;
+          mb.quad([Math.cos(a0) * rq, y, Math.sin(a0) * rq], [Math.cos(a1) * rq, y, Math.sin(a1) * rq],
+            [Math.cos(a1) * rq, y + 0.13, Math.sin(a1) * rq], [Math.cos(a0) * rq, y + 0.13, Math.sin(a0) * rq], 'stone', '圆殿·门槛');
+          mb.quad([Math.cos(a0) * rq, y + 0.13, Math.sin(a0) * rq], [Math.cos(a1) * rq, y + 0.13, Math.sin(a1) * rq],
+            [Math.cos(a1) * rq, y, Math.sin(a1) * rq], [Math.cos(a0) * rq, y, Math.sin(a0) * rq], 'stone', '圆殿·门槛');
+        }
+      }
+      if (isTop) {
+        if (!r.cut.roof) {
+          const yTop = colTop + R * 0.88 + 0.3;
+          roundRing(mb, {
+            rOut: R + (r.eave || 0.9) * 0.72, rIn: Math.max(0.4, R * 0.12),
+            yb: colTop, ytop: yTop, sides: 48, rings: 14,
+            tile: r.tile, tileB: r.tileB, tag: '圆顶'
+          });
+          // 宝顶
+          mb.cyl(0, 0, 0.22, yTop, yTop + 0.3, 10, 'stoneB', '宝顶·座');
+          mb.cyl(0, 0, 0.14, yTop + 0.3, yTop + 0.62, 10, 'gold', '宝顶·珠');
+        }
+      } else {
+        // 层间：环坡腰檐（外圈挑出、内圈收到上层圆墙外） + 平座圆盘
+        const Rnext = R0 * Math.pow(0.9, f + 1);
+        if (!r.cut.roof) {
+          roundRing(mb, {
+            rOut: R + (r.eave || 0.9), rIn: Rnext + 0.04,
+            yb: colTop - 0.62, ytop: colTop - 0.06, sides: 48, rings: 5,
+            tile: r.tile, tileB: r.tileB, tag: '圆腰檐' + (f + 1)
+          });
+        }
+        mb.cyl(0, 0, R + (r.eave || 0.9), colTop - 0.02, colTop + 0.04, seg, 'wood', '圆平座');
+        y = colTop + 0.04;
+      }
+    }
+    if (r.plaque) P.plaque(mb, { dir: 'front', at: R0 + 0.7, uc: 0, vc: colH * 0.72, w: 1.5, h: 0.5, chars: 3 });
   }
 
   /* 小亭（园林湖心亭 / 钟鼓楼） */
@@ -1840,10 +2161,15 @@
 
     // 第一进：倒座（朝院内 -z）
     const dz = zF - 2.6;
-    const dzUnit = houseUnit(Object.assign({}, r, { baseH: 0.25, dougong: false }), { W: 8.0, D: 3.2, bays: 3, roofType: 'gable', eave: 0.7, cheap: true });
+    const dzOv = unitOverride(r, '倒座');
+    const dzRu = unitRecipe(r, dzOv);
+    const dzGeom = unitGeom({ W: 8.0, D: 3.2, bays: 3, roofType: 'gable', eave: 0.7, cheap: true }, dzOv);
+    const dzUnit = houseUnit(Object.assign({}, dzRu, { baseH: dzOv && dzOv.baseH != null ? dzOv.baseH : 0.25, dougong: false }), dzGeom);
     dzUnit.mesh.rotateY(180);
-    dzUnit.mesh.translate(0, 0, dz);
+    const dzSh = unitShift(r, '倒座');
+    dzUnit.mesh.translate(dzSh.dx, 0, dz + dzSh.dz);
     mb.merge(dzUnit.mesh);
+    regUnit(mb, '倒座', '倒座房', dzSh.dx, dz + dzSh.dz, dzGeom.W, dzGeom.D, 180, dzUnit.topY, 0.25);
     layStats(mb).axis.push({ tag: '倒座', x: 0, z: dz, W: 8.0, D: 3.2, baseH: 0.25, topY: dzUnit.topY });
 
     // 垂花门（一进 / 二进）
@@ -1888,10 +2214,15 @@
 
     // 后罩房
     const zb = zB + 2.2;
-    const zbUnit = houseUnit(Object.assign({}, r, { baseH: 0.4, dougong: false }), { W: 8.4, D: 3.0, bays: 3, roofType: 'gable', eave: 0.7, cheap: true });
+    const zbOv = unitOverride(r, '后罩房');
+    const zbRu = unitRecipe(r, zbOv);
+    const zbGeom = unitGeom({ W: 8.4, D: 3.0, bays: 3, roofType: 'gable', eave: 0.7, cheap: true }, zbOv);
+    const zbUnit = houseUnit(Object.assign({}, zbRu, { baseH: zbOv && zbOv.baseH != null ? zbOv.baseH : 0.4, dougong: false }), zbGeom);
     zbUnit.mesh.rotateY(180);
-    zbUnit.mesh.translate(0, 0, zb);
+    const zbSh = unitShift(r, '后罩房');
+    zbUnit.mesh.translate(zbSh.dx, 0, zb + zbSh.dz);
     mb.merge(zbUnit.mesh);
+    regUnit(mb, '后罩房', '后罩房', zbSh.dx, zb + zbSh.dz, zbGeom.W, zbGeom.D, 180, zbUnit.topY, 0.4);
     layStats(mb).axis.push({ tag: '后罩房', x: 0, z: zb, W: 8.4, D: 3.0, baseH: 0.4, topY: zbUnit.topY });
 
     // 抄手游廊：沿东西院墙串联各进
@@ -2117,7 +2448,7 @@
         winW: r.winW, winH: r.winH, winPattern: r.winPattern,
         doorW: r.doorW, doorH: r.doorH, doorStyle: r.doorStyle, doorLeaves: r.doorLeaves,
         eave: r.eave, tile: r.tile, tileB: r.tileB, upturn: r.upturn,
-        dougong: r.dougong, dgScale: r.dgScale, dgStyle: r.dgStyle, dgEye: r.dgEye,
+        dougong: r.dougong, era: r.era, dgScale: r.dgScale, dgStyle: r.dgStyle, dgEye: r.dgEye,
         queti: r.queti, sideWindows: false
       });
       if (isTop) {
@@ -2131,8 +2462,7 @@
             cx: 0, cz: 0,
             x0: -W / 2 - r.eave, x1: W / 2 + r.eave,
             z0: -D / 2 - r.eave, z1: D / 2 + r.eave,
-            yb: top.topY, rise: r.slope * (D / 2 + r.eave) * 0.92,
-            type: r.roofType === 'gable' ? 'gableHip' : r.roofType,
+            yb: top.roofY, rise: r.slope * (D / 2 + r.eave) * 0.92,
             tile: r.tile, tileB: r.tileB, upturn: r.upturn,
             ridgeStyle: r.ridgeStyle, beasts: r.beasts, finial: !!r.finial,
             xuanYu: r.xuanYu, windDuo: r.windDuo, trim: r.trimColor ? r.trimMat : null,
@@ -2141,28 +2471,32 @@
         }
         break;
       }
-      // 平座挑台
+      // 平座挑台：平台外沿按出檐定，栏杆立在台边（瓦檐永远在台边之外，不越过台面）
       const py = top.topY + 0.04;
-      const ex = 0.62;
+      const ex = Math.max(0.66, (r.eave || 0.9) * 0.78);
       mb.box(-W / 2 - ex, W / 2 + ex, py - 0.3, py, -D / 2 - ex, D / 2 + ex, 'wood', '平座');
       for (const sx of [-1, 1]) {
         for (const sz of [-1, 1]) {
-          mb.boxC(sx * (W / 2 + ex - 0.25), sz * (D / 2 + ex - 0.25), 0.16, 0.16, py - 0.66, py - 0.3, 'wood', '平座·撑木');
+          mb.boxC(sx * (W / 2 + ex - 0.22), sz * (D / 2 + ex - 0.22), 0.14, 0.14, py - 0.26, py - 0.02, 'woodDark', '平座·角撑');
         }
       }
       P.railing(mb, { a: [-W / 2 - ex, D / 2 + ex], b: [W / 2 + ex, D / 2 + ex], y: py, style: 'wood', tag: '平座栏杆' });
       P.railing(mb, { a: [-W / 2 - ex, -D / 2 - ex], b: [-W / 2 - ex, D / 2 + ex], y: py, style: 'wood', tag: '平座栏杆' });
       P.railing(mb, { a: [W / 2 + ex, -D / 2 - ex], b: [W / 2 + ex, D / 2 + ex], y: py, style: 'wood', tag: '平座栏杆' });
-      // 腰檐（围一圈披檐，把上下层衔接起来）
+      // 腰檐：台边之外的一圈短披檐。内圈落在平台外沿，顶面压到平台板底以下，
+      // 从平台上看永远看不到瓦，只有站在台边栏杆外才见一圈檐。
       if (!r.cut.roof) {
+        const exE = W / 2 + ex;
+        const ezE = D / 2 + ex;
         GF.roofs.skirt(mb, {
-          cx: 0, cz: 0, x0: -W / 2 - ex, x1: W / 2 + ex, z0: -D / 2 - ex, z1: D / 2 + ex,
-          xi: (W * 0.88) / 2 + 0.12, zi: (D * 0.88) / 2 + 0.12,
-          yb: py + 0.02, ytop: py + 0.06 + fh * 0.46,
+          cx: 0, cz: 0,
+          x0: -exE - 0.8, x1: exE + 0.8, z0: -ezE - 0.8, z1: ezE + 0.8,
+          xi: exE + 0.02, zi: ezE + 0.02,
+          yb: py - 0.94, ytop: py - 0.34,
           tile: r.tile, tileB: r.tileB, upturn: r.upturn * 0.8, tag: '腰檐' + (f + 1)
         });
       }
-      y = py + 0.34;
+      y = py + 0.06;
       W *= 0.92; D *= 0.92;
     }
     if (r.plaque) {
@@ -2320,7 +2654,7 @@
         winW: r.winW, winH: r.winH, winPattern: r.winPattern,
         doorW: r.doorW, doorH: r.doorH, doorStyle: r.doorStyle, doorLeaves: r.doorLeaves,
         eave: evF, tile: r.tile, tileB: r.tileB, upturn: r.upturn,
-        dougong: dgLvF > 0 ? false : r.dougong, dgScale: r.dgScale, dgStyle: r.dgStyle, dgEye: r.dgEye,
+        dougong: dgLvF > 0 ? false : r.dougong, era: r.era, dgScale: r.dgScale, dgStyle: r.dgStyle, dgEye: r.dgEye,
         queti: r.queti, sideWindows: false
       });
       const colTop = top.topY;
@@ -2374,6 +2708,11 @@
       const eaveH = 0.5 + (r.slope || 0.5) * 0.3;
       const kNext = shrinkAt(f + 1);
       const Wn = W0 * kNext, Dn = D0 * kNext;
+      // 平座挑出与腰檐位置先定下来：腰檐要落在平台外沿之外、顶面压到平台板底以下，
+      // 否则瓦会从平台内侧往上层墙身铺，看着像“瓦从栏杆里往屋里长”
+      const ex = Math.max(0.66, evF * 0.78);
+      const pzY = colTop + eaveH + 0.02;
+      const exE = Wf / 2 + ex, ezE = Df / 2 + ex;
       if (!r.cut.roof) {
         const dgLv = dgAt(f);
         if (dgLv > 0) {
@@ -2381,25 +2720,26 @@
           const dgS = (r.dgScale || 0.9) * (0.85 + 0.05 * dgLv);
           const nX = Math.max(2, Math.round(Wf / 1.8));
           const nZ = Math.max(2, Math.round(Df / 1.8));
+          const tone = (r.era === 'han' || r.era === 'tang' || r.era === 'song' || r.era === 'jin') ? 'dan' : 'green';
           for (let i = 0; i <= nX; i++) {
             const cx = -Wf / 2 + (Wf * i) / nX;
             for (const cz of [Df / 2 + 0.1, -Df / 2 - 0.1]) {
-              P.dougong(mb, cx, colTop - 0.12, cz, dgS, '斗拱·腰檐', r.dgStyle || 'mid');
+              P.dougong(mb, cx, colTop - 0.12, cz, dgS, '斗拱·腰檐', r.dgStyle || 'mid', { gap: Wf / nX, tone });
             }
           }
           for (let i = 0; i <= nZ; i++) {
             const cz = -Df / 2 + (Df * i) / nZ;
             for (const cx of [Wf / 2 + 0.1, -Wf / 2 - 0.1]) {
-              P.dougong(mb, cx, colTop - 0.12, cz, dgS, '斗拱·腰檐', r.dgStyle || 'mid');
+              P.dougong(mb, cx, colTop - 0.12, cz, dgS, '斗拱·腰檐', r.dgStyle || 'mid', { gap: Df / nZ, tone });
             }
           }
         }
         GF.roofs.skirt(mb, {
           cx: 0, cz: 0,
-          x0: -Wf / 2 - evF, x1: Wf / 2 + evF,
-          z0: -Df / 2 - evF, z1: Df / 2 + evF,
-          xi: Wn / 2 - 0.06, zi: Dn / 2 - 0.06,
-          yb: colTop, ytop: colTop + eaveH,
+          x0: -exE - 0.8, x1: exE + 0.8,
+          z0: -ezE - 0.8, z1: ezE + 0.8,
+          xi: exE + 0.02, zi: ezE + 0.02,
+          yb: pzY - 0.92, ytop: pzY - 0.32,
           tile: r.tile, tileB: r.tileB, upturn: r.upturn * 0.8,
           trim: r.trimColor ? r.trimMat : null, tag: '腰檐' + (f + 1)
         });
@@ -2407,18 +2747,16 @@
       }
 
       // 平座：面板顶面 pzY 即上层屋身起始标高（nextBase = pzY，间隙 0，不留缝）
-      const pzY = colTop + eaveH + 0.02;
-      const ex = 0.62;
-      mb.box(-Wf / 2 - ex, Wf / 2 + ex, pzY - 0.28, pzY, -Df / 2 - ex, Df / 2 + ex, 'wood', '平座');
+      mb.box(-exE, exE, pzY - 0.28, pzY, -ezE, ezE, 'wood', '平座');
       for (const sx of [-1, 1]) {
         for (const sz of [-1, 1]) {
-          mb.boxC(sx * (Wf / 2 + ex - 0.25), sz * (Df / 2 + ex - 0.25), 0.16, 0.16, pzY - 0.62, pzY - 0.28, 'woodDark', '平座·撑斗');
+          mb.boxC(sx * (exE - 0.22), sz * (ezE - 0.22), 0.14, 0.14, pzY - 0.26, pzY - 0.02, 'woodDark', '平座·角撑');
         }
       }
       const pzStyle = r.pingzuoStyle === 'marble' ? 'marble' : 'wood';
-      P.railing(mb, { a: [-Wf / 2 - ex, Df / 2 + ex], b: [Wf / 2 + ex, Df / 2 + ex], y: pzY, style: pzStyle, tag: '平座栏杆' });
-      P.railing(mb, { a: [-Wf / 2 - ex, -Df / 2 - ex], b: [-Wf / 2 - ex, Df / 2 + ex], y: pzY, style: pzStyle, tag: '平座栏杆' });
-      P.railing(mb, { a: [Wf / 2 + ex, -Df / 2 - ex], b: [Wf / 2 + ex, Df / 2 + ex], y: pzY, style: pzStyle, tag: '平座栏杆' });
+      P.railing(mb, { a: [-exE, ezE], b: [exE, ezE], y: pzY, style: pzStyle, tag: '平座栏杆' });
+      P.railing(mb, { a: [-exE, -ezE], b: [-exE, ezE], y: pzY, style: pzStyle, tag: '平座栏杆' });
+      P.railing(mb, { a: [exE, -ezE], b: [exE, ezE], y: pzY, style: pzStyle, tag: '平座栏杆' });
       rec.pingzuo = pzY;
       y = pzY;
       rec.nextBase = y;
@@ -2721,56 +3059,95 @@
     const at = (key, x, z) => (mv[key] ? { x: mv[key].x, z: mv[key].z } : { x, z });
     mb.moves = [];
     const reg = (key, label, p, rad) => mb.moves.push({ key, label, x: p.x, z: p.z, r: rad || 0.8 });
-    // 树
-    const kinds = env.trees || [];
-    kinds.forEach((k, i) => {
-      const ang = (i / kinds.length) * Math.PI * 2 + 0.6;
-      const dist = 6.5 + (i % 2) * 1.5;
-      const p = at('tree' + i, Math.cos(ang) * dist, Math.sin(ang) * dist);
-      P.tree(mb, p.x, p.z, k, rng, 0.9 + (i % 3) * 0.15, '树');
-      reg('tree' + i, '树 ' + (i + 1), p, 1.1);
-    });
-    // 假山
-    for (let i = 0; i < (env.rocks || 0); i++) {
-      const ang = 2.4 + i * 0.9;
-      const p = at('rock' + i, Math.cos(ang) * 5.2, Math.sin(ang) * 5.2);
-      P.rock(mb, p.x, p.z, 1.0, rng, '假山');
-      reg('rock' + i, '假山 ' + (i + 1), p, 1.2);
+    const ITEM_LABEL = {
+      pine: '松', plum: '梅', bamboo: '竹', willow: '柳', maple: '枫', gingko: '银杏',
+      misc: '杂树', banana: '芭蕉', taihu: '太湖石', qianshi: '千层石',
+      stonelamp: '石灯', well: '井', stele: '碑', bell: '钟', drum: '鼓',
+      penjing: '盆景', tiema: '拴马桩', table: '石桌', stool: '石凳', banner: '幡'
+    };
+    // 建一件（原点局部坐标）
+    const buildItem = (sub, it, s) => {
+      const rr = new GF.RNG((r.seed || 1) + 977 + (it.k || '').length * 31);
+      switch (it.k) {
+        case 'pine': case 'plum': case 'bamboo': case 'willow': case 'maple':
+        case 'gingko': case 'misc': case 'banana':
+          P.tree(sub, 0, 0, it.k, rr, s, '组件树');
+          break;
+        case 'taihu': case 'qianshi':
+          P.rock(sub, 0, 0, s, rr, '组件石', it.k);
+          break;
+        case 'stonelamp': P.stoneLantern(sub, 0, 0, 0.9 * s, '石灯'); break;
+        case 'well': P.well(sub, 0, 0, 0.9 * s, '井'); break;
+        case 'stele': P.stele(sub, 0, 0, 0.9 * s, '碑'); break;
+        case 'bell': P.bellDrum(sub, 0, 0, 0.85 * s, 'bell', '钟'); break;
+        case 'drum': P.bellDrum(sub, 0, 0, 0.85 * s, 'drum', '鼓'); break;
+        case 'penjing': P.penjing(sub, 0, 0, 0.9 * s, '盆景'); break;
+        case 'tiema': P.tieMaZhuang(sub, 0, 0, 0.9 * s, '拴马桩'); break;
+        case 'table': P.furniture(sub, 'table', 0, 0, s, 0, '石桌'); break;
+        case 'stool': P.furniture(sub, 'stool', 0, 0, s, 0, '石凳'); break;
+        case 'banner': P.banner(sub, 0, 0, 0, 4.2 * s, 1.15 * s, '幡', 'cloth'); break;
+        default: break;
+      }
+    };
+    const renderEntry = (it, key, i, n) => {
+      const p = { x: it.x || 0, z: it.z || 0 };
+      const s = it.s == null ? 1 : it.s;
+      const sub = new GF.Mesh();
+      buildItem(sub, it, s);
+      sub.rotateY(it.rot || 0);
+      sub.translate(p.x, it.y || 0, p.z);
+      mb.merge(sub);
+      reg(key, (ITEM_LABEL[it.k] || it.k) + ' ' + (i + 1), p, 1.0);
+    };
+
+    // 预设自带的环境陈设（树 / 假山 / 幡 / 道具）一次性展开成可编辑条目：
+    // 展开后与组件条落进来的自由件走同一套渲染和拾取，配方里的选择才能在「组件编辑」里逐件调。
+    if (!Array.isArray(env.auto)) {
+      const auto = [];
+      const trees = env.trees || [];
+      trees.forEach((k, i) => {
+        const ang = (i / (trees.length || 1)) * Math.PI * 2 + 0.6;
+        const dist = 6.5 + (i % 2) * 1.5;
+        const p = at('tree' + i, Math.cos(ang) * dist, Math.sin(ang) * dist);
+        auto.push({ k, x: +p.x.toFixed(2), z: +p.z.toFixed(2), y: 0, rot: Math.round(rng.range(-14, 14)), s: +(0.9 + (i % 3) * 0.15).toFixed(2) });
+      });
+      for (let i = 0; i < (env.rocks || 0); i++) {
+        const ang = 2.4 + i * 0.9;
+        const p = at('rock' + i, Math.cos(ang) * 5.2, Math.sin(ang) * 5.2);
+        auto.push({ k: 'taihu', x: +p.x.toFixed(2), z: +p.z.toFixed(2), y: 0, rot: Math.round(rng.range(-16, 16)), s: 1 });
+      }
+      for (let i = 0; i < (env.banners || 0); i++) {
+        const sgn = i % 2 ? 1 : -1, bi = Math.floor(i / 2);
+        const p = at('banner' + i, sgn * (3.4 + bi * 3.2), 0);
+        auto.push({ k: 'banner', x: +p.x.toFixed(2), z: +p.z.toFixed(2), y: 0, rot: 0, s: 1 });
+      }
+      (env.props || []).forEach((pp, i) => {
+        if (pp === 'qubridge') return;   // 曲桥不走单件，仍按整组做
+        const ang = 2.1 + i * 0.68, d = 4.2 + (i % 3) * 1.2;
+        const q = at('prop' + i, Math.cos(ang) * d, Math.sin(ang) * d);
+        auto.push({ k: pp, x: +q.x.toFixed(2), z: +q.z.toFixed(2), y: 0, rot: Math.round(rng.range(-20, 20)), s: 1 });
+      });
+      env.auto = auto;
     }
-    // 水池
+    (env.auto || []).forEach((it, i) => renderEntry(it, 'auto' + i, i));
+    // 水池与曲桥：整组构造，不参与单件编辑
     if (env.pond && env.showGround !== false && env.groundType !== 'lake') {
       const p = at('pond', env.pond.x || 5.5, env.pond.z || 4.5);
       P.pond(mb, p.x, p.z, env.pond.w || 3.4, env.pond.d || 2.4, '水池');
       reg('pond', '水池', p, Math.max(env.pond.w || 3.4, env.pond.d || 2.4) * 0.6);
     }
-    // 幡旗：对称立在甬道两侧，避免正中挡门
-    if (env.banners) {
-      const nb = env.banners;
-      for (let i = 0; i < nb; i++) {
-        const s = i % 2 ? 1 : -1;
-        const k = Math.floor(i / 2);
-        const p = at('banner' + i, s * (3.4 + k * 3.2), 0);
-        P.banner(mb, p.x, p.z, 4.2, 3.0, 0.7, '幡', 'cloth');
-        reg('banner' + i, '幡 ' + (i + 1), p, 0.9);
-      }
+    if ((env.props || []).indexOf('qubridge') >= 0) {
+      P.quBridge(mb, [[3.0, 3.8], [4.8, 1.6], [3.4, -0.8]], 1.0, '曲桥');
     }
-    // 陈设道具（每项一件，沿院外散置）
-    const props = env.props || [];
-    props.forEach((p, i) => {
-      const ang = 2.1 + i * 0.68;
-      const d = 4.2 + (i % 3) * 1.2;
-      const q = at('prop' + i, Math.cos(ang) * d, Math.sin(ang) * d);
-      switch (p) {
-        case 'stonelamp': P.stoneLantern(mb, q.x, q.z, 0.9, '石灯'); reg('prop' + i, '石灯', q); break;
-        case 'well': P.well(mb, q.x, q.z, 0.9, '井'); reg('prop' + i, '井', q); break;
-        case 'stele': P.stele(mb, q.x, q.z, 0.9, '碑'); reg('prop' + i, '碑', q); break;
-        case 'bell': P.bellDrum(mb, q.x, q.z, 0.85, 'bell', '钟'); reg('prop' + i, '钟', q); break;
-        case 'drum': P.bellDrum(mb, q.x, q.z, 0.85, 'drum', '鼓'); reg('prop' + i, '鼓', q); break;
-        case 'penjing': P.penjing(mb, q.x, q.z, 0.9, '盆景'); reg('prop' + i, '盆景', q); break;
-        case 'tiema': P.tieMaZhuang(mb, q.x, q.z, 0.9, '拴马桩'); reg('prop' + i, '拴马桩', q); break;
-        case 'qubridge': P.quBridge(mb, [[3.0, 3.8], [4.8, 1.6], [3.4, -0.8]], 1.0, '曲桥'); break;
-        default: break;
-      }
+    // 组件条落进来的自由件：类型、落点、高度、旋转、大小全存在 env.items 里，数量不限。
+    (env.items || []).forEach((it, i) => {
+      const p = at('item' + i, it.x || 0, it.z || 0);
+      const sub = new GF.Mesh();
+      buildItem(sub, it, it.s == null ? 1 : it.s);
+      sub.rotateY(it.rot || 0);
+      sub.translate(p.x, it.y || 0, p.z);
+      mb.merge(sub);
+      reg('item' + i, (ITEM_LABEL[it.k] || it.k) + ' #' + (i + 1), p, 1.0);
     });
   }
 
@@ -3240,24 +3617,66 @@
     GF.roofs.setDefaults({
       trim: r.trimMat || null, xuanYu: !!r.xuanYu, windDuo: !!r.windDuo, gableMat: r.wallMat
     });
-    environment(mb, r);
+    // 院落进数会把院深拉长：地面尺寸跟着放大，否则院外一圈会露空
+    if (r.type === 'courtyard') {
+      const jinN = Math.max(1, Math.min(5, Math.round(r.jin || 1)));
+      const needD = Math.max(r.courtD || 18, jinN * 9) + 4;
+      const needW = (r.courtW || 20) + 4;
+      r.env.groundSize = Math.max(r.env.groundSize || 8, needD, needW);
+    }
+    // 环境与建筑分两张网格：拖动整栋建筑时只挪建筑本体，地面 / 树 / 水池原地不动
+    const em = new GF.Mesh();
+    environment(em, r);
+    // 预设件首次展开的结果回写到调用方那份配方上，面板与保存的配方才拿得到同一份清单
+    if (recipe && recipe.env) recipe.env.auto = r.env.auto;
+    const bm = new GF.Mesh();
+    bm.moves = [];
+    bm.units = [];
     switch (r.type) {
-      case 'cave': buildCave(mb, r); break;
-      case 'house': buildHouse(mb, r); break;
-      case 'pavilion': buildPavilion(mb, r); break;
-      case 'pagoda': buildPagoda(mb, r); break;
-      case 'archway': buildArchway(mb, r); break;
-      case 'gate': buildGate(mb, r); break;
-      case 'courtyard': buildCourtyard(mb, r); break;
-      case 'bridge': buildBridge(mb, r); break;
-      case 'xie': buildXie(mb, r); break;
-      case 'fang': buildFang(mb, r); break;
-      case 'ge': buildGe(mb, r); break;
-      case 'que': buildQue(mb, r); break;
-      case 'corridor': buildCorridor(mb, r); break;
-      case 'tai': buildTai(mb, r); break;
-      case 'city': buildCity(mb, r); break;
-      default: buildHall(mb, r);
+      case 'cave': buildCave(bm, r); break;
+      case 'house': buildHouse(bm, r); break;
+      case 'pavilion': buildPavilion(bm, r); break;
+      case 'round': buildRound(bm, r); break;
+      case 'pagoda': buildPagoda(bm, r); break;
+      case 'archway': buildArchway(bm, r); break;
+      case 'gate': buildGate(bm, r); break;
+      case 'courtyard': buildCourtyard(bm, r); break;
+      case 'bridge': buildBridge(bm, r); break;
+      case 'xie': buildXie(bm, r); break;
+      case 'fang': buildFang(bm, r); break;
+      case 'ge': buildGe(bm, r); break;
+      case 'que': buildQue(bm, r); break;
+      case 'corridor': buildCorridor(bm, r); break;
+      case 'tai': buildTai(bm, r); break;
+      case 'city': buildCity(bm, r); break;
+      default: buildHall(bm, r);
+    }
+    // 整栋拖动：moveX / moveZ 只平移建筑本体，登记的锚点跟着走
+    const ox = +r.moveX || 0, oz = +r.moveZ || 0;
+    if (ox || oz) {
+      bm.translate(ox, 0, oz);
+      (bm.units || []).forEach((u) => { u.x = +(u.x + ox).toFixed(2); u.z = +(u.z + oz).toFixed(2); });
+      (bm.moves || []).forEach((m) => { m.x += ox; m.z += oz; });
+    }
+    mb.merge(em);
+    mb.merge(bm);
+    mb.moves = (em.moves || []).concat(bm.moves || []);
+    mb.units = bm.units || [];
+    if (bm.cityStats) mb.cityStats = bm.cityStats;
+    // 单栋建筑给一个「整栋」抓取点：建筑模式下按住它就能拖着整栋走
+    if (!mb.units.length && bm.wx.length) {
+      let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9, y1 = 0;
+      for (let i = 0; i < bm.wx.length; i++) {
+        const x = bm.wx[i], z = bm.wz[i];
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (z < z0) z0 = z; if (z > z1) z1 = z;
+      }
+      for (let i = 1; i < bm.pos.length; i += 3) if (bm.pos[i] > y1) y1 = bm.pos[i];
+      mb.bldBox = { x0, x1, z0, z1, y1 };
+      mb.moves.unshift({
+        key: 'bld', label: '建筑本体', x: +((x0 + x1) / 2).toFixed(2), z: +((z0 + z1) / 2).toFixed(2),
+        r: Math.max(x1 - x0, z1 - z0) / 2
+      });
     }
     GF.roofs.setDefaults({});
     return mb;
@@ -3265,3 +3684,5 @@
 
   GF.builders = { ground, body, base, interior, environment };
 })(typeof window !== 'undefined' ? window : globalThis);
+
+

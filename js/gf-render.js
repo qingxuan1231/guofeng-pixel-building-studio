@@ -528,6 +528,7 @@
           depth[p] = z;
           matId[p] = mi + 1;
           if (isGround) groundMask[p] = 1;
+          else groundMask[p] = 0;   // 后画的墙/屋顶盖在地面上时，这一格不再算“地面”
           let c0 = cr, c1 = cg, c2 = cb;
           // 材质肌理：砌筑面走砖缝（横缝 + 错缝竖缝），木面走竖向木纹，地面已在下方单独处理
           if (patOn) {
@@ -634,10 +635,21 @@
     mark('post');
     if (o.timing) console.log('[render ' + (preview ? 'preview' : 'full') + '] ' + marks.join(' | ') + ' | occluded ' + skipOccl + '/' + mesh.triCount + ' | total ' + (Date.now() - tMark) + 'ms');
 
+    // 页面要画地面栅格时，回一份“被物件挡住的像素”遮罩：
+    // 有深度、又不是地面铺装本身的像素，就是墙、屋顶、树这些立在地面上的物件。
+    // 栅格只在遮罩之外落笔，等于把格线铺在地面上、被房子自然遮住。
+    let occl = null;
+    if (o.gridMask) {
+      occl = new Uint8Array(W * H);
+      for (let i = 0, n = W * H; i < n; i++) {
+        occl[i] = (depth[i] > -1e8 && !groundMask[i]) ? 1 : 0;
+      }
+    }
     return {
       w: W, h: H, rgba,
       // 世界上一点 → 帧内像素：给“拖动陈设”做拾取/反算用（正交投影，地面 y=0）
-      map: { right: cam.right, up: cam.up, ox, oy, ppm }
+      map: { right: cam.right, up: cam.up, ox, oy, ppm },
+      occl
     };
   };
 
@@ -684,7 +696,7 @@
     'uniform vec3 u_light; uniform vec3 u_view;',
     'uniform vec3 u_ramps[' + (GM * 3) + '];',
     'uniform float u_pat[' + GM + '];',
-    'uniform float u_grain, u_zmin, u_zmax, u_shadow, u_dbg;',
+    'uniform float u_grain, u_zmin, u_zmax, u_shadow, u_dbg, u_clipY;',
     'uniform vec3 u_shMeta;',
     'uniform vec2 u_shSize;',
     'uniform sampler2D u_shTex;',
@@ -692,6 +704,7 @@
     'layout(location=1) out vec4 oInfo;',
     'float hashf(float v) { return fract(sin(v * 12.9898) * 43758.5453); }',
     'void main() {',
+    '  if (v_wpos.y > u_clipY) discard;   // 落成演示：按世界高度裁掉还没长出来的部分',
     '  if (u_dbg > 1.5) {',
     '    oCol = vec4(min(1.0, length(v_wpos) * 0.05), min(1.0, length(v_nrm)), 0.0, 1.0);',
     '    oInfo = vec4(0.0, 0.0, 0.0, 0.0);',
@@ -781,7 +794,7 @@
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) || 'link');
       const u = {};
       ['u_right', 'u_up', 'u_view', 'u_ppm', 'u_ox', 'u_oy', 'u_W', 'u_H', 'u_zmin', 'u_zmax', 'u_dbg',
-        'u_light', 'u_ramps', 'u_pat', 'u_grain', 'u_shadow', 'u_shMeta', 'u_shSize', 'u_shTex']
+        'u_light', 'u_ramps', 'u_pat', 'u_grain', 'u_shadow', 'u_shMeta', 'u_shSize', 'u_shTex', 'u_clipY']
         .forEach((k) => (u[k] = gl.getUniformLocation(prog, k)));
       const g = {
         cv, gl, prog, u,
@@ -885,6 +898,25 @@
 
   GF.gpuAvailable = function () { return !!gpuInit(); };
 
+  // 显卡信息：模式按钮的提示、导出日志都靠它，能直接看出跑的是哪块 GPU
+  GF.gpuInfo = function () {
+    const g = gpuInit();
+    if (!g) return null;
+    const gl = g.gl;
+    let renderer = String(gl.getParameter(gl.RENDERER));
+    try {
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      if (ext) renderer = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL));
+    } catch (e) {}
+    return {
+      renderer,
+      vendor: String(gl.getParameter(gl.VENDOR)),
+      maxTexture: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+      maxViewport: Array.prototype.slice.call(gl.getParameter(gl.MAX_VIEWPORT_DIMS) || [])
+    };
+  };
+
+
   GF.renderGPU = function (mesh, o) {
     const tAll = o.timing ? Date.now() : 0;
     try {
@@ -970,6 +1002,13 @@
       if (!(zmax > zmin)) { zmax = zmin + 1; }
 
       const gl = g.gl;
+      // 全精度出图会到 1 万像素以上，超过显卡纹理上限就老实回落 CPU，
+      // 否则 Framebuffer 建不起来，readPixels 拿到的是一整片透明黑。
+      const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      if (maxTex && (W > maxTex || H > maxTex)) {
+        console.warn('[gpu] ' + W + 'x' + H + ' 超过显卡纹理上限 ' + maxTex + '，回落 CPU');
+        return null;
+      }
       gpuFBO(g, W, H);
 
       // 材质表
@@ -1036,6 +1075,7 @@
       gl.uniform1f(g.u.u_zmin, zmin);
       gl.uniform1f(g.u.u_zmax, zmax);
       gl.uniform1f(g.u.u_dbg, o.debugVertex ? 2 : (o.debugDirect ? 1 : 0));
+      gl.uniform1f(g.u.u_clipY, o.clipY == null ? 1e9 : o.clipY);
       gl.uniform3f(g.u.u_light, light[0], light[1], light[2]);
       gl.uniform3fv(g.u.u_ramps, ramps);
       gl.uniform1fv(g.u.u_pat, pats);
@@ -1064,6 +1104,15 @@
       gl.enableVertexAttribArray(5);
       gl.vertexAttribPointer(5, 1, gl.FLOAT, false, 28, 24);
       gl.drawArrays(gl.TRIANGLES, 0, geo.count);
+      // 画完立刻验一次：FBO 不完整或 GL 报错时，宁可回落 CPU 也不能交付一张空图
+      const fbsStatus = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+      const glErr = gl.getError();
+      if (fbsStatus !== gl.FRAMEBUFFER_COMPLETE || glErr !== 0) {
+        console.warn('[gpu] 绘制失败 fbo=' + fbsStatus + ' err=' + glErr + '，回落 CPU');
+        if (typeof GF.gpuBroken !== 'undefined') GF.gpuBroken = true;
+        GF.__gpuFail = (GF.__gpuFail || 0) + 1;
+        return null;
+      }
       let dbg = null;
       if (o.debugGpu) {
         gl.bindVertexArray(g.vao);

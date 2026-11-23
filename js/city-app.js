@@ -27,12 +27,13 @@
     if (!b) return;
     const ok = GF.gpuAvailable ? GF.gpuAvailable() : false;
     if (!ok) state.gpu = false;
+    const gi = ok && GF.gpuInfo ? GF.gpuInfo() : null;
     b.textContent = state.gpu ? 'GPU' : 'CPU';
     b.classList.toggle('ghost', !state.gpu);
     b.title = !ok
       ? '当前环境不支持 WebGL2，只能用 CPU'
       : state.gpu
-        ? '当前：GPU 硬件光栅（只用于预览，导出仍走 CPU 全精度）；点一下切到 CPU'
+        ? '当前：GPU 硬件光栅（' + (gi ? gi.renderer : 'WebGL2') + '）· 预览与导出都走它；点一下切到 CPU'
         : '当前：CPU 软件光栅；点一下切到 GPU';
   }
 
@@ -239,12 +240,11 @@
       sunAz: r.sunAz == null ? null : Number(r.sunAz),
       shadowAngle: r.shadowAngle == null ? null : r.shadowAngle,
       transparent: r.transparent !== false, focus: false, seed: state.city.seed,
-      pad: pad
+      pad: pad, gpu: state.gpu
     };
     if (preview) {
       o.preview = true;
       o.maxPixels = previewBudget();
-      o.gpu = state.gpu;
     }
     return o;
   }
@@ -252,6 +252,17 @@
   function draw() {
     const f = state.frame;
     if (!f) return;
+    if (state.gpu && f.gpu !== true) {
+      state.gpuMiss = (state.gpuMiss || 0) + 1;
+      if (state.gpuMiss >= 2) {
+        state.gpu = false;
+        try { localStorage.setItem('gf.renderMode', 'cpu'); } catch (e) {}
+        paintMode();
+        $('#stat').textContent = 'GPU 光栅不可用，已自动切回 CPU';
+      }
+    } else if (state.gpu) {
+      state.gpuMiss = 0;
+    }
     canvas.width = f.w;
     canvas.height = f.h;
     canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(f.rgba), f.w, f.h), 0, 0);
@@ -375,9 +386,10 @@
     setBusy(true, '按全精度出图…');
     setTimeout(() => {
       try {
+        const t0 = performance.now();
         const f = GF.render(state.mesh, renderOpts());
         download(GF.encodePNG(f.w, f.h, f.rgba), `国风${cityName()}.png`, 'image/png');
-        $('#stat').textContent = `全精度出图 ${f.w}×${f.h}px`;
+        $('#stat').textContent = `全精度出图 ${f.w}×${f.h}px · ${f.gpu ? 'GPU' : 'CPU'} ${Math.round(performance.now() - t0)}ms`;
       } catch (e) { console.error(e); }
       setBusy(false, '');
     }, 0);

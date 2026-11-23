@@ -30,7 +30,7 @@
     width: 10, wallH: 5.0, gateW: 3.2, gateH: 4.2, depthTower: 4.8,
     courtW: 20, courtD: 18, courtStyle: 'siheyuan', span: 12, bridgeW: 3.2, arch: 1.4,
     /* ---- 阶段④ 布局类 ---- */
-    jin: 0, axisRaise: true, fangStyle: 'classic',
+    jin: 1, axisRaise: true, fangStyle: 'classic',
     /* ---- 阶段③ 城制（city）---- */
     cityW: 200, cityD: 180, wallBaseW: 2.5, wallTopW: 1.25,
     merlon: true, parapet: true,
@@ -65,12 +65,20 @@
 
   GF.normalize = function (src) {
     const r = Object.assign(clone(DEF), clone(src || {}));
+    if (!((GF.ERA || {})[r.era])) r.era = 'qing';
     r.cut = Object.assign({ front: false, back: false, left: false, right: false, roof: false }, src && src.cut);
     r.env = Object.assign(clone(DEF.env), src && src.env);
     r.render = Object.assign(clone(DEF.render), src && src.render);
     if (!Array.isArray(r.interior)) r.interior = [];
     if (!Array.isArray(r.env.trees)) r.env.trees = ['pine'];
     if (!Array.isArray(r.env.props)) r.env.props = [];
+    // 组件条落进去的自由件（数量不限、可单独调高度 / 旋转）也随配方保存
+    if (!Array.isArray(r.env.items)) r.env.items = [];
+    // 预设自带的环境陈设（树 / 假山 / 幡 / 道具）展开后的可编辑清单；
+    // 没展开时留空，首次构建由 environment() 按 trees / rocks / props / banners 生成
+    if (!Array.isArray(r.env.auto)) r.env.auto = null;
+    // 逐栋改写（院落里每栋建筑一份覆盖，按单体 id 存：main1 / wingE / 倒座 ……）
+    if (!r.units || typeof r.units !== 'object' || Array.isArray(r.units)) r.units = {};
     // 逐层数组：旧配方 / 手写 JSON 若漏写或写成非数组，归一为空数组，保证 file:// 打开不报错
     for (const ak of ['floorHList', 'shrinkList', 'eaveList', 'dgList']) {
       if (!Array.isArray(r[ak])) r[ak] = [];
@@ -92,7 +100,7 @@
     cityNum('northW', DEF.northW, true);
     cityNum('realW', DEF.realW, true); cityNum('realD', DEF.realD, true); cityNum('scale', DEF.scale);
     // 阶段④ 布局字段：旧配方缺省 / 非法值回落默认档
-    r.jin = Math.max(0, Math.min(6, Math.round(Number(r.jin) || 0)));
+    r.jin = Math.max(1, Math.min(5, Math.round(Number(r.jin) || 1)));
     r.axisRaise = r.axisRaise !== false;
     if (['classic', 'shifang'].indexOf(r.fangStyle) < 0) r.fangStyle = 'classic';
     r.gateCount = Number(r.gateCount);
@@ -123,7 +131,7 @@
   /* ------------------------------ 预设 ------------------------------ */
   const PRESETS = {
     jiangnan: {
-      name: '江南民居', type: 'house', seed: 101,
+      name: '江南民居', type: 'house', seed: 101, era: 'ming',
       bays: 3, bayW: 2.9, depth: 6.0, floors: 2, floorH: 3.0,
       baseH: 0.35, steps: 2, wallMat: 'plaster', colMat: 'wood',
       tileColor: 'grey', eave: 0.7, slope: 0.5, upturn: 0.18,
@@ -133,7 +141,7 @@
       env: { ground: 'stone', groundSize: 12, trees: ['willow', 'plum'], rocks: 1, pond: { x: 4.6, z: 4.2, w: 3.2, d: 2.2 }, banners: 0, path: true }
     },
     huizhou: {
-      name: '徽州民居', type: 'house', seed: 102,
+      name: '徽州民居', type: 'house', seed: 102, era: 'ming',
       bays: 3, bayW: 2.6, depth: 5.2, floors: 2, floorH: 2.9,
       baseH: 0.3, steps: 2, wallMat: 'plaster', colMat: 'wood',
       tileColor: 'grey', eave: 0.5, slope: 0.45, upturn: 0.12,
@@ -143,7 +151,7 @@
       env: { ground: 'stone', groundSize: 12, trees: ['bamboo', 'plum'], rocks: 2, pond: null, banners: 0, path: true }
     },
     tang: {
-      name: '唐风大殿', type: 'hall', seed: 103,
+      name: '唐风大殿', type: 'hall', seed: 103, era: 'tang',
       bays: 5, bayW: 3.4, depth: 9.5, floors: 1, floorH: 4.2,
       baseH: 1.0, steps: 4, railing: true, wallMat: 'plaster', colMat: 'timber',
       tileColor: 'grey', eave: 1.4, slope: 0.4, upturn: 0.3,
@@ -206,8 +214,17 @@
       plaque: true, table: true, lanterns: true,
       env: { ground: 'grass', groundSize: 13, trees: ['bamboo', 'pine'], rocks: 2, pond: null, banners: 0, path: true }
     },
+    yuandian: {
+      name: '圆殿·圆形平面', type: 'round', seed: 134,
+      bays: 3, bayW: 3.2, roundR: 3.6, floorH: 4.2, floors: 1,
+      wallMat: 'plaster', colMat: 'timber', tileColor: 'grey',
+      eave: 1.0, slope: 0.6, upturn: 0.5,
+      plaque: false,
+      env: { ground: 'marble', groundSize: 16, trees: ['pine', 'pine'], rocks: 1, pond: null, banners: 0, path: true, props: ['stonelamp', 'stonelamp'] }
+    },
     lou: {
-      name: '三层楼阁', type: 'hall', seed: 107,      bays: 3, bayW: 3.0, depth: 6.8, floors: 3, floorH: 3.0,
+      name: '三层楼阁', type: 'ge', seed: 107,      bays: 3, bayW: 3.0, depth: 6.8, floors: 3, floorH: 3.0,
+      pingzuo: true, pingzuoStyle: 'wood',
       baseH: 0.8, steps: 3, railing: false, wallMat: 'plaster', colMat: 'timber',
       tileColor: 'grey', eave: 1.0, slope: 0.5, upturn: 0.4,
       roofType: 'gableHip', ridgeStyle: 'plain', finial: false,
@@ -512,7 +529,7 @@
       env: { ground: 'soil', groundSize: 11, trees: ['willow', 'plum'], rocks: 1, pond: null, banners: 0, path: true }
     },
     hanMin: {
-      name: '汉式民居', type: 'house', seed: 203,
+      name: '汉式民居', type: 'house', seed: 203, era: 'han',
       bays: 3, bayW: 2.6, depth: 5.0, floors: 1, floorH: 2.3,
       baseH: 0.35, steps: 2, pedestal: 'plain', wallMat: 'soil', colMat: 'wood',
       tileColor: 'clay', eave: 0.75, slope: 0.55, upturn: 0.02,
@@ -524,7 +541,7 @@
       env: { ground: 'soil', groundSize: 12, trees: ['pine'], rocks: 1, pond: null, banners: 0, path: true }
     },
     tangMin: {
-      name: '唐式民居', type: 'house', seed: 204,
+      name: '唐式民居', type: 'house', seed: 204, era: 'tang',
       bays: 3, bayW: 3.0, depth: 5.6, floors: 1, floorH: 2.8,
       baseH: 0.5, steps: 2, pedestal: 'plain', wallMat: 'plaster', colMat: 'timber',
       colR: 0.24,
@@ -537,7 +554,7 @@
       env: { ground: 'stone', groundSize: 13, trees: ['pine', 'pine'], rocks: 1, pond: null, banners: 0, path: true }
     },
     songMin: {
-      name: '宋式民居', type: 'house', seed: 205,
+      name: '宋式民居', type: 'house', seed: 205, era: 'song',
       bays: 3, bayW: 2.8, depth: 5.2, floors: 1, floorH: 2.9,
       baseH: 0.4, steps: 2, pedestal: 'plain', wallMat: 'plaster', colMat: 'wood',
       tileColor: 'grey', eave: 0.9, slope: 0.55, upturn: 0.18,
@@ -767,6 +784,9 @@
     return GF.normalize(base);
   };
 })(typeof window !== 'undefined' ? window : globalThis);
+
+
+
 
 
 
