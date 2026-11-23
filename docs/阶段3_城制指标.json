@@ -1,0 +1,685 @@
+{
+ "tangchangan": {
+  "name": "城 · 唐长安",
+  "type": "city",
+  "tris": 116740,
+  "bounds": {
+   "x0": -205.5,
+   "x1": 205.5,
+   "y0": -0.8,
+   "y1": 9.3,
+   "z0": -183.5,
+   "z1": 183.5
+  },
+  "pixels": {
+   "default": {
+    "w": 7260,
+    "h": 5871,
+    "kb": 166516.4
+   },
+   "top": {
+    "w": 5442,
+    "h": 4583,
+    "kb": 97436.5
+   },
+   "gate": {
+    "w": 569,
+    "h": 335,
+    "kb": 745
+   },
+   "corner": {
+    "w": 286,
+    "h": 327,
+    "kb": 365.7
+   },
+   "bastion": {
+    "w": 163,
+    "h": 225,
+    "kb": 143.6
+   }
+  },
+  "scale": {
+   "realW": 9721,
+   "realD": 8651,
+   "cityW": 400,
+   "cityD": 356,
+   "scaleX": 24.3,
+   "scaleY": 24.3,
+   "ratioTool": 1.124,
+   "ratioReal": 1.124
+  },
+  "wards": {
+   "nx": 12,
+   "nz": 10,
+   "count": 108,
+   "wardEdge": 30.77,
+   "streetW": 1.9,
+   "streetWardRatio": 0.062
+  },
+  "bastion": {
+   "count": 48,
+   "spacings": [
+    30.77,
+    30.77,
+    27.38,
+    27.38
+   ],
+   "spacingMean": 29.07,
+   "wallH": 4,
+   "spacingWallH": 7.27,
+   "proj": 1.3
+  },
+  "palace": {
+   "rect": [
+    0,
+    -150,
+    78,
+    52
+   ],
+   "corner": "north",
+   "cityHalfW": 200,
+   "cityHalfD": 178
+  },
+  "moat": {
+   "width": 3.5,
+   "depth": 0.8,
+   "corners": [
+    {
+     "x": -200,
+     "z": -178,
+     "minDist": 5.6
+    },
+    {
+     "x": 200,
+     "z": -178,
+     "minDist": 5.6
+    },
+    {
+     "x": 200,
+     "z": 178,
+     "minDist": 5.6
+    },
+    {
+     "x": -200,
+     "z": 178,
+     "minDist": 5.6
+    }
+   ],
+   "revetmentClear": -0.95,
+   "bridge": true
+  },
+  "mainHall": {
+   "roofW": 28.69,
+   "bodyW": 26.89,
+   "bodyRatioCityW": 0.067,
+   "roofRatioCityW": 0.072
+  },
+  "theoryBodyW": 28,
+  "wall": {
+   "baseW": 2,
+   "topW": 1,
+   "height": 4,
+   "baseTopRatio": 2
+  },
+  "counts": {
+   "gateCount": 5,
+   "side": "four",
+   "cornerTowers": 4,
+   "axisHalls": 3,
+   "rearPalaces": 3
+  },
+  "topTags": [
+   [
+    "垛口·雉堞",
+    8184
+   ],
+   [
+    "望孔",
+    8184
+   ],
+   [
+    "城墙·石脚",
+    5496
+   ],
+   [
+    "城墙·砖身",
+    5496
+   ],
+   [
+    "城墙·压顶条石",
+    5496
+   ],
+   [
+    "城墙顶面",
+    5496
+   ],
+   [
+    "城墙·砖缝",
+    5496
+   ],
+   [
+    "坊墙",
+    5184
+   ],
+   [
+    "宫殿·殿顶·瓦当",
+    4320
+   ],
+   [
+    "檐柱",
+    3328
+   ]
+  ]
+ },
+ "luoyang": {
+  "name": "城 · 洛阳",
+  "type": "city",
+  "tris": 97588,
+  "bounds": {
+   "x0": -155.5,
+   "x1": 155.5,
+   "y0": -0.8,
+   "y1": 9.3,
+   "z0": -154.95,
+   "z1": 154.95
+  },
+  "pixels": {
+   "default": {
+    "w": 5708,
+    "h": 4606,
+    "kb": 102711.8
+   },
+   "top": {
+    "w": 4122,
+    "h": 3759,
+    "kb": 60534.1
+   },
+   "gate": {
+    "w": 371,
+    "h": 287,
+    "kb": 416.3
+   },
+   "corner": {
+    "w": 286,
+    "h": 327,
+    "kb": 365.7
+   },
+   "bastion": {
+    "w": 163,
+    "h": 225,
+    "kb": 143.6
+   }
+  },
+  "scale": {
+   "realW": 7312,
+   "realD": 7290,
+   "cityW": 300,
+   "cityD": 299,
+   "scaleX": 24.37,
+   "scaleY": 24.38,
+   "ratioTool": 1.003,
+   "ratioReal": 1.003
+  },
+  "wards": {
+   "nx": 12,
+   "nz": 11,
+   "count": 128,
+   "wardEdge": 22.73,
+   "streetW": 1.6,
+   "streetWardRatio": 0.07
+  },
+  "bastion": {
+   "count": 40,
+   "spacings": [
+    30,
+    21.6,
+    30.19,
+    30.19
+   ],
+   "spacingMean": 28,
+   "wallH": 4,
+   "spacingWallH": 7,
+   "proj": 1.3
+  },
+  "palace": {
+   "rect": [
+    -78,
+    -71.76,
+    60,
+    52
+   ],
+   "corner": "corner",
+   "cityHalfW": 150,
+   "cityHalfD": 149.5
+  },
+  "moat": {
+   "width": 3.5,
+   "depth": 0.8,
+   "corners": [
+    {
+     "x": -108,
+     "z": -149.5,
+     "minDist": 5.45
+    },
+    {
+     "x": 108,
+     "z": -149.5,
+     "minDist": 5.45
+    },
+    {
+     "x": 150,
+     "z": 149.5,
+     "minDist": 5.6
+    },
+    {
+     "x": -150,
+     "z": 149.5,
+     "minDist": 5.6
+    }
+   ],
+   "revetmentClear": -0.95,
+   "bridge": true
+  },
+  "mainHall": {
+   "roofW": 21.94,
+   "bodyW": 20.14,
+   "bodyRatioCityW": 0.067,
+   "roofRatioCityW": 0.073
+  },
+  "theoryBodyW": 21,
+  "wall": {
+   "baseW": 2,
+   "topW": 1,
+   "height": 4,
+   "baseTopRatio": 2
+  },
+  "counts": {
+   "gateCount": 3,
+   "side": "four",
+   "cornerTowers": 4,
+   "axisHalls": 3,
+   "rearPalaces": 3
+  },
+  "topTags": [
+   [
+    "坊墙",
+    6144
+   ],
+   [
+    "垛口·雉堞",
+    6048
+   ],
+   [
+    "望孔",
+    6048
+   ],
+   [
+    "宫殿·殿顶·瓦当",
+    3360
+   ],
+   [
+    "檐柱",
+    3328
+   ],
+   [
+    "城墙·石脚",
+    3240
+   ],
+   [
+    "城墙·砖身",
+    3240
+   ],
+   [
+    "城墙·压顶条石",
+    3240
+   ],
+   [
+    "城墙顶面",
+    3240
+   ],
+   [
+    "城墙·砖缝",
+    3240
+   ]
+  ]
+ },
+ "beijing": {
+  "name": "城 · 明清北京",
+  "type": "city",
+  "tris": 96652,
+  "bounds": {
+   "x0": -156,
+   "x1": 156,
+   "y0": -1,
+   "y1": 11.3,
+   "z0": -156,
+   "z1": 156
+  },
+  "pixels": {
+   "default": {
+    "w": 5810,
+    "h": 4714,
+    "kb": 106998.5
+   },
+   "top": {
+    "w": 4135,
+    "h": 3789,
+    "kb": 61209.7
+   },
+   "gate": {
+    "w": 419,
+    "h": 358,
+    "kb": 586.4
+   },
+   "corner": {
+    "w": 307,
+    "h": 389,
+    "kb": 467
+   },
+   "bastion": {
+    "w": 215,
+    "h": 296,
+    "kb": 249
+   }
+  },
+  "scale": {
+   "realW": 6200,
+   "realD": 6200,
+   "cityW": 300,
+   "cityD": 300,
+   "scaleX": 20.67,
+   "scaleY": 20.67,
+   "ratioTool": 1,
+   "ratioReal": 1
+  },
+  "wards": {
+   "nx": 9,
+   "nz": 9,
+   "count": 72,
+   "wardEdge": 30.13,
+   "streetW": 2,
+   "streetWardRatio": 0.066
+  },
+  "bastion": {
+   "count": 32,
+   "spacings": [
+    37.5,
+    37.5,
+    37.5,
+    37.5
+   ],
+   "spacingMean": 37.5,
+   "wallH": 5.5,
+   "spacingWallH": 6.82,
+   "proj": 1.7
+  },
+  "palace": {
+   "rect": [
+    0,
+    0,
+    70,
+    84
+   ],
+   "corner": "center",
+   "cityHalfW": 150,
+   "cityHalfD": 150
+  },
+  "moat": {
+   "width": 2.6,
+   "depth": 1,
+   "corners": [
+    {
+     "x": -150,
+     "z": -150,
+     "minDist": 6.25
+    },
+    {
+     "x": 150,
+     "z": -150,
+     "minDist": 6.25
+    },
+    {
+     "x": 150,
+     "z": 150,
+     "minDist": 6.25
+    },
+    {
+     "x": -150,
+     "z": 150,
+     "minDist": 6.25
+    }
+   ],
+   "revetmentClear": -1.65,
+   "bridge": true
+  },
+  "mainHall": {
+   "roofW": 22.13,
+   "bodyW": 20.13,
+   "bodyRatioCityW": 0.067,
+   "roofRatioCityW": 0.074
+  },
+  "theoryBodyW": 21,
+  "wall": {
+   "baseW": 3.4,
+   "topW": 1.7,
+   "height": 5.5,
+   "baseTopRatio": 2
+  },
+  "counts": {
+   "gateCount": 3,
+   "side": "four",
+   "cornerTowers": 4,
+   "axisHalls": 3,
+   "rearPalaces": 3
+  },
+  "topTags": [
+   [
+    "垛口·雉堞",
+    6480
+   ],
+   [
+    "望孔",
+    6480
+   ],
+   [
+    "城墙·石脚",
+    3600
+   ],
+   [
+    "城墙·砖身",
+    3600
+   ],
+   [
+    "城墙·压顶条石",
+    3600
+   ],
+   [
+    "城墙顶面",
+    3600
+   ],
+   [
+    "城墙·砖缝",
+    3600
+   ],
+   [
+    "坊墙",
+    3456
+   ],
+   [
+    "宫殿·殿顶·瓦当",
+    3360
+   ],
+   [
+    "檐柱",
+    3328
+   ]
+  ]
+ },
+ "gugong": {
+  "name": "城 · 紫禁城",
+  "type": "city",
+  "tris": 67636,
+  "bounds": {
+   "x0": -69.67,
+   "x1": 69.67,
+   "y0": -0.96,
+   "y1": 8.57,
+   "z0": -86.17,
+   "z1": 86.17
+  },
+  "pixels": {
+   "default": {
+    "w": 2914,
+    "h": 2356,
+    "kb": 26822.3
+   },
+   "top": {
+    "w": 1898,
+    "h": 2031,
+    "kb": 15061.2
+   },
+   "gate": {
+    "w": 348,
+    "h": 252,
+    "kb": 342.9
+   },
+   "corner": {
+    "w": 287,
+    "h": 305,
+    "kb": 342.3
+   },
+   "bastion": {
+    "w": 4,
+    "h": 4,
+    "kb": 0.1
+   }
+  },
+  "scale": {
+   "realW": 753,
+   "realD": 961,
+   "cityW": 120,
+   "cityD": 153,
+   "scaleX": 6.28,
+   "scaleY": 6.28,
+   "ratioTool": 0.784,
+   "ratioReal": 0.784
+  },
+  "wards": {
+   "nx": 2,
+   "nz": 2,
+   "count": 0,
+   "wardEdge": 55.03,
+   "streetW": 1.6,
+   "streetWardRatio": 0.029
+  },
+  "bastion": {
+   "count": 0,
+   "spacings": [],
+   "spacingMean": 0,
+   "wallH": 3.2,
+   "spacingWallH": null,
+   "proj": 1
+  },
+  "palace": {
+   "rect": [
+    0,
+    0,
+    96,
+    130
+   ],
+   "corner": "center",
+   "cityHalfW": 60,
+   "cityHalfD": 76.5
+  },
+  "moat": {
+   "width": 8.3,
+   "depth": 0.96,
+   "corners": [
+    {
+     "x": -60,
+     "z": -76.5,
+     "minDist": 9.7
+    },
+    {
+     "x": 60,
+     "z": -76.5,
+     "minDist": 9.7
+    },
+    {
+     "x": 60,
+     "z": 76.5,
+     "minDist": 9.7
+    },
+    {
+     "x": -60,
+     "z": 76.5,
+     "minDist": 9.7
+    }
+   ],
+   "revetmentClear": -0.64,
+   "bridge": true
+  },
+  "mainHall": {
+   "roofW": 9.94,
+   "bodyW": 7.94,
+   "bodyRatioCityW": 0.066,
+   "roofRatioCityW": 0.083
+  },
+  "theoryBodyW": 8.4,
+  "wall": {
+   "baseW": 1.37,
+   "topW": 1.06,
+   "height": 3.2,
+   "baseTopRatio": 1.29
+  },
+  "counts": {
+   "gateCount": 3,
+   "side": "four",
+   "cornerTowers": 4,
+   "axisHalls": 3,
+   "rearPalaces": 3
+  },
+  "topTags": [
+   [
+    "檐柱",
+    3328
+   ],
+   [
+    "墙体·前",
+    3240
+   ],
+   [
+    "墙体·后",
+    3240
+   ],
+   [
+    "垛口·雉堞",
+    2904
+   ],
+   [
+    "望孔",
+    2904
+   ],
+   [
+    "门·front·隔扇",
+    2688
+   ],
+   [
+    "门·back·隔扇",
+    2688
+   ],
+   [
+    "城墙·石脚",
+    2400
+   ],
+   [
+    "城墙·砖身",
+    2400
+   ],
+   [
+    "城墙·压顶条石",
+    2400
+   ]
+  ]
+ }
+}

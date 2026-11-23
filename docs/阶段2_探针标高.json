@@ -1,0 +1,584 @@
+{
+ "leifeng": {
+  "name": "雷峰塔",
+  "type": "pagoda",
+  "tris": 14060,
+  "bounds": {
+   "x0": -8.268,
+   "x1": 6.273,
+   "y0": 0,
+   "y1": 16.731,
+   "z0": -7.568,
+   "z1": 7.13
+  },
+  "size": {
+   "W": 14.541,
+   "D": 14.698,
+   "H": 16.731
+  },
+  "schedule": [
+   {
+    "floor": 1,
+    "baseY": 0.94,
+    "colTop": 2.79,
+    "eaveBottom": 2.79,
+    "eaveH": 0.91,
+    "pingzuo": 3.7,
+    "nextBase": 3.8400000000000003,
+    "roofEave": null,
+    "gapEaveCol": 0,
+    "gapPingzuoBody": 0.14000000000000012
+   },
+   {
+    "floor": 2,
+    "baseY": 3.84,
+    "colTop": 5.54,
+    "eaveBottom": 5.54,
+    "eaveH": 0.9058504000000002,
+    "pingzuo": 6.4458504,
+    "nextBase": 6.5858504,
+    "roofEave": null,
+    "gapEaveCol": 0,
+    "gapPingzuoBody": 0.13999999999999968
+   },
+   {
+    "floor": 3,
+    "baseY": 6.5858504,
+    "colTop": 8.1858504,
+    "eaveBottom": 8.1858504,
+    "eaveH": 0.9006495680000001,
+    "pingzuo": 9.086499968,
+    "nextBase": 9.226499968,
+    "roofEave": null,
+    "gapEaveCol": 0,
+    "gapPingzuoBody": 0.14000000000000057
+   },
+   {
+    "floor": 4,
+    "baseY": 9.226499968,
+    "colTop": 10.726499968,
+    "eaveBottom": 10.726499968,
+    "eaveH": 0.8946686112000001,
+    "pingzuo": 11.6211685792,
+    "nextBase": 11.761168579200001,
+    "roofEave": null,
+    "gapEaveCol": 0,
+    "gapPingzuoBody": 0.14000000000000057
+   },
+   {
+    "floor": 5,
+    "baseY": 11.761168579200001,
+    "colTop": 13.181168579200001,
+    "eaveBottom": 13.181168579200001,
+    "eaveH": 0.8882091778560001,
+    "pingzuo": null,
+    "nextBase": 13.531168579200001,
+    "roofEave": null,
+    "gapEaveCol": 0,
+    "gapPingzuoBody": null
+   }
+  ],
+  "ratio": {
+   "bodyDiameter": 6.52,
+   "totalH": 16.731,
+   "dOverH": 0.39,
+   "anchor": 0.39
+  }
+ },
+ "yingxian": {
+  "name": "应县木塔",
+  "type": "pagoda",
+  "tris": 20312,
+  "bounds": {
+   "x0": -8.1,
+   "x1": 8.1,
+   "y0": 0,
+   "y1": 17.875,
+   "z0": -8.1,
+   "z1": 8.9
+  },
+  "size": {
+   "W": 16.2,
+   "D": 17,
+   "H": 17.875
+  },
+  "schedule": [
+   {
+    "floor": 1,
+    "baseY": 0.94,
+    "colTop": 2.94,
+    "eaveBottom": 2.94,
+    "eaveH": 0.9244000000000001,
+    "pingzuo": 3.8644,
+    "nextBase": 4.0044,
+    "roofEave": null,
+    "gapEaveCol": 0,
+    "gapPingzuoBody": 0.14000000000000057
+   },
+   {
+    "floor": 2,
+    "baseY": 4.0044,
+    "colTop": 5.904400000000001,
+    "eaveBottom": 5.904400000000001,
+    "eaveH": 0.9187796480000001,
+    "pingzuo": 6.823179648000001,
+    "nextBase": 6.9631796480000006,
+    "roofEave": null,
+    "gapEaveCol": 0,
+    "gapPingzuoBody": 0.13999999999999968
+   },
+   {
+    "floor": 3,
+    "baseY": 6.9631796480000006,
+    "colTop": 8.763179648000001,
+    "eaveBottom": 8.763179648000001,
+    "eaveH": 0.9123162432000002,
+    "pingzuo": 9.6754958912,
+    "nextBase": 9.815495891200001,
+    "roofEave": null,
+    "gapEaveCol": 0,
+    "gapPingzuoBody": 0.14000000000000057
+   },
+   {
+    "floor": 4,
+    "baseY": 9.815495891200001,
+    "colTop": 11.5154958912,
+    "eaveBottom": 11.5154958912,
+    "eaveH": 0.9064991788800002,
+    "pingzuo": 12.421995070080001,
+    "nextBase": 12.561995070080002,
+    "roofEave": null,
+    "gapEaveCol": 0,
+    "gapPingzuoBody": 0.14000000000000057
+   },
+   {
+    "floor": 5,
+    "baseY": 12.561995070080002,
+    "colTop": 14.161995070080001,
+    "eaveBottom": 14.161995070080001,
+    "eaveH": 0.9002167494144001,
+    "pingzuo": null,
+    "nextBase": 14.511995070080001,
+    "roofEave": null,
+    "gapEaveCol": 0,
+    "gapPingzuoBody": null
+   }
+  ],
+  "ratio": {
+   "baseDiameter": 8,
+   "totalH": 17.875,
+   "dOverH": 0.448,
+   "anchor": 0.45
+  }
+ },
+ "wenchang": {
+  "name": "文昌阁·城关",
+  "type": "ge",
+  "tris": 44246,
+  "bounds": {
+   "x0": -5.31,
+   "x1": 5.999,
+   "y0": 0,
+   "y1": 13.383,
+   "z0": -4.99,
+   "z1": 4.99
+  },
+  "size": {
+   "W": 11.309,
+   "D": 9.98,
+   "H": 13.383
+  },
+  "schedule": [
+   {
+    "floor": 1,
+    "baseY": 4.5,
+    "colTop": 7.5,
+    "eaveBottom": 7.5,
+    "pingzuo": 8.17,
+    "nextBase": 8.17,
+    "roofEave": null,
+    "joints": []
+   },
+   {
+    "floor": 2,
+    "baseY": 8.17,
+    "colTop": 11.17,
+    "eaveBottom": null,
+    "pingzuo": null,
+    "nextBase": null,
+    "roofEave": 11.17,
+    "joints": []
+   }
+  ]
+ },
+ "feiyun": {
+  "name": "飞云楼",
+  "type": "ge",
+  "tris": 118980,
+  "bounds": {
+   "x0": -7.748,
+   "x1": 7.52,
+   "y0": 0,
+   "y1": 14.939,
+   "z0": -7.52,
+   "z1": 8.32
+  },
+  "size": {
+   "W": 15.268,
+   "D": 15.84,
+   "H": 14.939
+  },
+  "schedule": [
+   {
+    "floor": 1,
+    "baseY": 0.9400000000000001,
+    "colTop": 4.19,
+    "eaveBottom": 4.19,
+    "pingzuo": 4.86,
+    "nextBase": 4.86,
+    "roofEave": null,
+    "joints": [
+     {
+      "side": "front",
+      "axis": "z",
+      "wallFace": 5.75,
+      "innerEave": 5.63,
+      "outerEave": 7.7,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     },
+     {
+      "side": "back",
+      "axis": "z",
+      "wallFace": -5.75,
+      "innerEave": -5.63,
+      "outerEave": -7.7,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     },
+     {
+      "side": "right",
+      "axis": "x",
+      "wallFace": 5.75,
+      "innerEave": 5.63,
+      "outerEave": 7.7,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     },
+     {
+      "side": "left",
+      "axis": "x",
+      "wallFace": -5.75,
+      "innerEave": -5.63,
+      "outerEave": -7.7,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     }
+    ],
+    "midEave": 2.565
+   },
+   {
+    "floor": 2,
+    "baseY": 4.86,
+    "colTop": 7.91,
+    "eaveBottom": 7.91,
+    "pingzuo": 8.58,
+    "nextBase": 8.58,
+    "roofEave": null,
+    "joints": [
+     {
+      "side": "front",
+      "axis": "z",
+      "wallFace": 5.52,
+      "innerEave": 5.3999999999999995,
+      "outerEave": 7.3999999999999995,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     },
+     {
+      "side": "back",
+      "axis": "z",
+      "wallFace": -5.52,
+      "innerEave": -5.3999999999999995,
+      "outerEave": -7.3999999999999995,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     },
+     {
+      "side": "right",
+      "axis": "x",
+      "wallFace": 5.52,
+      "innerEave": 5.3999999999999995,
+      "outerEave": 7.3999999999999995,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     },
+     {
+      "side": "left",
+      "axis": "x",
+      "wallFace": -5.52,
+      "innerEave": -5.3999999999999995,
+      "outerEave": -7.3999999999999995,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     }
+    ]
+   },
+   {
+    "floor": 3,
+    "baseY": 8.58,
+    "colTop": 11.43,
+    "eaveBottom": null,
+    "pingzuo": null,
+    "nextBase": null,
+    "roofEave": 11.43,
+    "joints": [
+     {
+      "side": "front",
+      "axis": "z",
+      "wallFace": 5.1336,
+      "innerEave": 5.0136,
+      "outerEave": 6.9436,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     },
+     {
+      "side": "back",
+      "axis": "z",
+      "wallFace": -5.1336,
+      "innerEave": -5.0136,
+      "outerEave": -6.9436,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     },
+     {
+      "side": "right",
+      "axis": "x",
+      "wallFace": 5.1336,
+      "innerEave": 5.0136,
+      "outerEave": 6.9436,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     },
+     {
+      "side": "left",
+      "axis": "x",
+      "wallFace": -5.1336,
+      "innerEave": -5.0136,
+      "outerEave": -6.9436,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     }
+    ]
+   }
+  ],
+  "ratio": {
+   "shaftH": 9.15,
+   "totalH": 14.939,
+   "shaftOverH": 0.612,
+   "anchor": 0.666
+  }
+ },
+ "fanlou": {
+  "name": "樊楼·彩楼欢门",
+  "type": "ge",
+  "tris": 56066,
+  "bounds": {
+   "x0": -7.737,
+   "x1": 6.27,
+   "y0": 0,
+   "y1": 13.566,
+   "z0": -5.488,
+   "z1": 5.77
+  },
+  "size": {
+   "W": 14.007,
+   "D": 11.258,
+   "H": 13.566
+  },
+  "schedule": [
+   {
+    "floor": 1,
+    "baseY": 0.74,
+    "colTop": 3.74,
+    "eaveBottom": 3.74,
+    "pingzuo": 4.41,
+    "nextBase": 4.41,
+    "roofEave": null,
+    "joints": []
+   },
+   {
+    "floor": 2,
+    "baseY": 4.41,
+    "colTop": 7.41,
+    "eaveBottom": 7.41,
+    "pingzuo": 8.08,
+    "nextBase": 8.08,
+    "roofEave": null,
+    "joints": []
+   },
+   {
+    "floor": 3,
+    "baseY": 8.08,
+    "colTop": 11.08,
+    "eaveBottom": null,
+    "pingzuo": null,
+    "nextBase": null,
+    "roofEave": 11.08,
+    "joints": []
+   }
+  ]
+ },
+ "fanhuaju": {
+  "name": "繁花居·山居群组",
+  "type": "courtyard",
+  "tris": 42602,
+  "bounds": {
+   "x0": -9.23,
+   "x1": 9.23,
+   "y0": 0,
+   "y1": 5.87,
+   "z0": -8.23,
+   "z1": 8.885
+  },
+  "size": {
+   "W": 18.46,
+   "D": 17.115,
+   "H": 5.87
+  },
+  "schedule": null
+ },
+ "shilou": {
+  "name": "时楼·转角搭接",
+  "type": "ge",
+  "tris": 58528,
+  "bounds": {
+   "x0": -7.684,
+   "x1": 6.252,
+   "y0": 0,
+   "y1": 10.397,
+   "z0": -5.557,
+   "z1": 5.553
+  },
+  "size": {
+   "W": 13.937,
+   "D": 11.11,
+   "H": 10.397
+  },
+  "schedule": [
+   {
+    "floor": 1,
+    "baseY": 0.8400000000000001,
+    "colTop": 4.04,
+    "eaveBottom": 4.04,
+    "pingzuo": 4.71,
+    "nextBase": 4.71,
+    "roofEave": null,
+    "joints": [
+     {
+      "side": "front",
+      "axis": "z",
+      "wallFace": 3,
+      "innerEave": 2.88,
+      "outerEave": 4.765,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     },
+     {
+      "side": "back",
+      "axis": "z",
+      "wallFace": -3,
+      "innerEave": -2.88,
+      "outerEave": -4.765,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     },
+     {
+      "side": "right",
+      "axis": "x",
+      "wallFace": 4.5,
+      "innerEave": 4.38,
+      "outerEave": 6.265,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     },
+     {
+      "side": "left",
+      "axis": "x",
+      "wallFace": -4.5,
+      "innerEave": -4.38,
+      "outerEave": -6.265,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     }
+    ]
+   },
+   {
+    "floor": 2,
+    "baseY": 4.71,
+    "colTop": 7.91,
+    "eaveBottom": null,
+    "pingzuo": null,
+    "nextBase": null,
+    "roofEave": 7.91,
+    "joints": [
+     {
+      "side": "front",
+      "axis": "z",
+      "wallFace": 2.7600000000000002,
+      "innerEave": 2.64,
+      "outerEave": 4.525,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     },
+     {
+      "side": "back",
+      "axis": "z",
+      "wallFace": -2.7600000000000002,
+      "innerEave": -2.64,
+      "outerEave": -4.525,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     },
+     {
+      "side": "right",
+      "axis": "x",
+      "wallFace": 4.140000000000001,
+      "innerEave": 4.0200000000000005,
+      "outerEave": 5.905,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     },
+     {
+      "side": "left",
+      "axis": "x",
+      "wallFace": -4.140000000000001,
+      "innerEave": -4.0200000000000005,
+      "outerEave": -5.905,
+      "overlap": 0.12,
+      "gap": -0.1200000000000001
+     }
+    ]
+   }
+  ]
+ },
+ "zuihuayin": {
+  "name": "醉花阴·临水亭榭",
+  "type": "xie",
+  "tris": 8818,
+  "bounds": {
+   "x0": -7.591,
+   "x1": 6.117,
+   "y0": 0,
+   "y1": 4.775,
+   "z0": -5.145,
+   "z1": 6.742
+  },
+  "size": {
+   "W": 13.708,
+   "D": 11.887,
+   "H": 4.775
+  },
+  "schedule": null
+ }
+}

@@ -1,0 +1,282 @@
+[
+ {
+  "key": "jiangnan",
+  "before": 11108,
+  "after": 15416,
+  "delta": 4308,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "huizhou",
+  "before": 11004,
+  "after": 15766,
+  "delta": 4762,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "tang",
+  "before": 25092,
+  "after": 37260,
+  "delta": 12168,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "qing",
+  "before": 34496,
+  "after": 47684,
+  "delta": 13188,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "wujian",
+  "before": 25740,
+  "after": 37256,
+  "delta": 11516,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "xieshan",
+  "before": 11912,
+  "after": 18124,
+  "delta": 6212,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "ting",
+  "before": 3740,
+  "after": 6470,
+  "delta": 2730,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "bajiaoting",
+  "before": 5284,
+  "after": 8286,
+  "delta": 3002,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "lou",
+  "before": 22020,
+  "after": 28288,
+  "delta": 6268,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "ta",
+  "before": 6168,
+  "after": 8984,
+  "delta": 2816,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "muta",
+  "before": 13644,
+  "after": 16064,
+  "delta": 2420,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "paifang",
+  "before": 5336,
+  "after": 10404,
+  "delta": 5068,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "chenglou",
+  "before": 15668,
+  "after": 21800,
+  "delta": 6132,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "siheyuan",
+  "before": 31140,
+  "after": 47666,
+  "delta": 16526,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "xiaoxiang",
+  "before": 25700,
+  "after": 42186,
+  "delta": 16486,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "langqiao",
+  "before": 1798,
+  "after": 3270,
+  "delta": 1472,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "yuanlin",
+  "before": 16688,
+  "after": 30446,
+  "delta": 13758,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "siyuan",
+  "before": 34836,
+  "after": 49926,
+  "delta": 15090,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "shuixie",
+  "before": 4940,
+  "after": 9550,
+  "delta": 4610,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "huafang",
+  "before": 4412,
+  "after": 7702,
+  "delta": 3290,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "chongge",
+  "before": 28660,
+  "after": 39832,
+  "delta": 11172,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "tengwang",
+  "before": 62924,
+  "after": 84350,
+  "delta": 21426,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "que",
+  "before": 4568,
+  "after": 7950,
+  "delta": 3382,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "changlang",
+  "before": 4460,
+  "after": 9764,
+  "delta": 5304,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "luntai",
+  "before": 3880,
+  "after": 4450,
+  "delta": 570,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "juanpeng",
+  "before": 10164,
+  "after": 14940,
+  "delta": 4776,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "shizijia",
+  "before": 30732,
+  "after": 44926,
+  "delta": 14194,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "luding",
+  "before": 26924,
+  "after": 31300,
+  "delta": 4376,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "shuimo",
+  "before": 12940,
+  "after": 18970,
+  "delta": 6030,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "subi",
+  "before": 10700,
+  "after": 14620,
+  "delta": 3920,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "kuXue",
+  "before": 904,
+  "after": 1476,
+  "delta": 572,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "banPo",
+  "before": 4636,
+  "after": 7268,
+  "delta": 2632,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "hanMin",
+  "before": 5960,
+  "after": 9368,
+  "delta": 3408,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "tangMin",
+  "before": 6916,
+  "after": 12136,
+  "delta": 5220,
+  "eb": null,
+  "ec": null
+ },
+ {
+  "key": "songMin",
+  "before": 10920,
+  "after": 17312,
+  "delta": 6392,
+  "eb": null,
+  "ec": null
+ }
+]

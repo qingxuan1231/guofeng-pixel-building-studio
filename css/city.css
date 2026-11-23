@@ -1,0 +1,20 @@
+/* 城池工坊 · 页面专用样式（控件与古建工坊同一套，这里只补少量） */
+
+/* 忙碌提示（叠在画布上方） */
+.busy {
+  position: absolute; left: 50%; top: 16px; transform: translateX(-50%);
+  padding: 6px 14px; border-radius: 999px;
+  background: rgba(43,39,34,.82); color: #f4ead4; font-size: 12px;
+  opacity: 0; pointer-events: none; transition: .18s; z-index: 10;
+}
+.busy.on { opacity: 1; }
+
+/* 城池专属：配方 chip 选中态（与古建 .chip.active 同色） */
+.chip.active { background: var(--ink); color: #f6ecd6; border-color: var(--ink); }
+
+/* 画布底纹略淡，避免和城内的土黄地面撞色 */
+.canvas-wrap::before { opacity: .75; }
+
+/* 舞台顶的俯角 Z 控件：沿用顶栏密度控件的样式，压到 28px 高 */
+.stage-top .dens { height: 28px; padding: 0 8px; }
+.stage-top .dens input[type='range'] { width: 96px; }

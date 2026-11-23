@@ -1,0 +1,48 @@
+<div class="modal" id="helpModal">
+83	    <div class="modal-card">
+84	      <h2>使用说明</h2>
+85	      <p>这是一款本地离线的国风古建生成器：以“三维参数化 → 正交投影 → 像素化后处理”的流程，把构件级的三维古建渲染成可进游戏的 2:1 像素等轴素材。</p>
+86	      <ul>
+87	        <li><b>左侧参数</b>：形制、开间、屋顶、墙体、门窗、剖切、环境、渲染，改哪一项都会即时重排整栋建筑。</li>
+88	        <li><b>屋顶</b>：悬山/硬山、歇山、庑殿、攒尖、卷棚（元宝脊）、十字歇山、盝顶；另有重檐、腰檐、剪边、悬鱼惹草、檐角风铎。</li>
+89	        <li><b>台基与栏杆</b>：须弥座 / 直台基 / 毛石台；石栏望柱、木寻杖、美人靠。</li>
+90	        <li><b>细部</b>：一斗三升 / 五踩 / 七踩斗拱、栱眼壁、雀替、匾额、楹联、门簪、抱鼓石、井口天花、藻井；檐口瓦当 + 滴水 + 连檐，窗楣 + 窗台，墙脚阶条石 / 楼层腰线，踏跺御路石，塔身贴面开窗。</li>
+91	        <li><b>院落</b>：四合院、江南园林（月洞门 + 影壁对景 + 叠山理水 + 曲桥湖心亭）、寺院（山门 + 钟鼓楼 + 五间大殿）。</li>
+92	        <li><b>剖切</b>：勾选“前墙/右墙”或“隐藏屋面”，即可看到室内隔断（碧纱橱）、家具与陈设，做到室内外无缝。</li>
+93	        <li><b>绘画风格</b>：右侧「六 · 绘画风格」单独成组（画风 / 风格强度 / 配色底子）。画风共 8 种——像素硬边（原味）、水墨手绘、枯笔速写、双色套印、工笔重彩、木刻版画、金石拓片、水彩晕染；风格强度控制各画风的力度，配色底子另有水墨·宣纸 / 赭石·双套印 / 青绿·绢本。</li>
+94	        <li><b>预置</b>：顶上「配方」一排按钮共 30 个，含新增的「八角亭」「木塔·五层」（每层带平座）「五间歇山正殿」「滕王阁」。</li>
+95	        <li><b>逐层微调</b>：一 · 形制与尺度里有「逐层层高（殿 / 阁）」与「逐层层高（塔）」，每层一个数字框，层数改了格子自动增减；塔另有「逐层收分比」、「层间平座（木围栏）」开关与「平座栏杆」样式（木栏杆 / 石栏）。拖动「层高」滑块会清掉逐层值回到统一层高。</li>
+96	        <li><b>副阶周匝</b>：塔勾上「副阶周匝（底层围廊）」后，底层外圈出柱加一圈腰檐；殿 / 厅堂勾上后四周出一圈廊柱 + 一层下檐，直接变重檐。出挑可调 0.8–3.0m，台基自动放大；「木塔·五层」默认开着。</li>
+97	        <li><b>塔的逐层细部</b>：另有「逐层出檐」（每层 0.3–2.0m）与「逐层斗拱铺作」（每层 0–3 档：无 / 一斗三升 / 五踩 / 七踩），改动都按层生效。</li>
+98	        <li><b>像素密度</b>：顶栏那条「像素密度」拉条就是出图密度（8–160 像素/米，默认 40），拖一下即时重绘；面板「七 · 渲染与出图」里的同名滑杆与它联动。密度越高细节越清楚，160 时单张可到 3000px 级。</li>
+99	        <li><b>导出</b>：单张 PNG、八方向精灵表、ZIP（含 <code>recipe.json</code> 配方）三种方式。PNG 均为透明底，可直接拖进 Unity/Godot。</li>
+100	        <li><b>取景</b>：出图默认以建筑本体居中（场地、树木只作背景）。顶栏「全景 / 屋面 / 门面 / 台基 / 院落」可一键跳到对应部位的放大视角；「中轴」把旋向转到 0° 正立面、保持当前缩放与俯角。滚轮以光标为锚点缩放，右键或 Shift 拖动平移，双击画面复位。</li>
+101	        <li><b>场地</b>：不再默认一块方地台。可切换平地（石板 / 砖 / 夯土 / 草地 / 汉白玉）、整片湖面、湖畔（单岸）、两岸（水道 + 对岸），水面在前 / 后 / 左 / 右，并带驳岸条石与水纹；「显示场地」关掉即只出建筑。</li>
+102	        <li><b>光照与阴影</b>：渲染面板可调「光照方位」八向与「阴影长度」，方位角同时改变受光面与投影方向，转视角时不再出现门钉糊成栅格的情况。</li>
+103	        <li><b>拖动陈设</b>：顶栏开启「拖动陈设」后，可直接用鼠标拖树、假山、石灯、井、碑、幡旗、水池；松手即按地面落位，配方里记录为 <code>env.move</code>，下次载入保持原位。</li>
+104	        <li><b>落成演示</b>：顶栏点一下，建筑按“台基 → 柱梁 → 墙面 → 屋面 → 脊饰”自下而上逐层生长（参考 <a href="https://github.com/lhlGitHub/threejs-architecture-effects" target="_blank">lhlGitHub/threejs-architecture-effects</a> 的单时间线建造思路），播放中再点一次即可停止。</li>
+105	        <li><b>配方</b>：保存的 JSON 可再次载入，或交给命令行批量出图（<code>node cli/render.js --recipe 配方.json</code>）。</li>
+106	      </ul>
+107	      <p class="muted">结构参考：B 站 @迷有事 的“2D 像素建筑模块化”思路（三维参数化 + 规则化算角度 + 像素化后处理），以及 @东君之桃 的红楼梦院落复原（正房前廊 + 抄手游廊 + 内室隔断的宅院格局）。</p>
+108	      <p class="muted">形制拆解（按类型对照开间、柱网与檐口，见 README「结构参考」）：塔 <a href="https://www.bilibili.com/video/BV1MqHi6gEH9/" target="_blank">BV1MqHi6gEH9</a> / <a href="https://www.bilibili.com/video/BV1mJQnY3EbV/" target="_blank">BV1mJQnY3EbV</a> / <a href="https://www.bilibili.com/video/BV1qY4y1w78x/" target="_blank">BV1qY4y1w78x</a> / <a href="https://www.bilibili.com/video/BV1Nv9BBHE61/" target="_blank">BV1Nv9BBHE61</a>；六角亭 <a href="https://www.bilibili.com/video/BV1tZ4y157v5/" target="_blank">BV1tZ4y157v5</a>；八角亭 <a href="https://www.bilibili.com/video/BV1RZ4y1K7oF" target="_blank">BV1RZ4y1K7oF</a>；佛殿 <a href="https://www.bilibili.com/video/BV1V8411w7MJ" target="_blank">BV1V8411w7MJ</a>；县衙 <a href="https://www.bilibili.com/video/BV16HkkB4EuX" target="_blank">BV16HkkB4EuX</a>；四方大殿 <a href="https://www.bilibili.com/video/BV1xU14BeEFX" target="_blank">BV1xU14BeEFX</a>；道观 <a href="https://www.bilibili.com/video/BV1ka4y1L7f9" target="_blank">BV1ka4y1L7f9</a>；钟鼓楼 <a href="https://www.bilibili.com/video/BV1sy4y1B78B" target="_blank">BV1sy4y1B78B</a>；五开间正殿 <a href="https://www.bilibili.com/video/BV1ra411w7SL" target="_blank">BV1ra411w7SL</a>；三进四合院 <a href="https://www.bilibili.com/video/BV1p44y1Q73Q/" target="_blank">BV1p44y1Q73Q</a>；楼阁 <a href="https://www.bilibili.com/video/BV1GLhd6bEDm/" target="_blank">BV1GLhd6bEDm</a> / 滕王阁 <a href="https://www.bilibili.com/video/BV1StGYzxEcK/" target="_blank">BV1StGYzxEcK</a> / 开元寺 <a href="https://www.bilibili.com/video/BV15WJy6PEry/" target="_blank">BV15WJy6PEry</a>。</p>
+109	      <p class="muted">古建开源参考（做构件比例与新形制时的对照资料）：<a href="https://github.com/xyiqq/china-heritage-3d" target="_blank">china-heritage-3d</a>、<a href="https://sketchfab.com/tags/chinese-architecture" target="_blank">Sketchfab 中式建筑</a>、<a href="https://sketchfab.com/tigerofchen/collections/chinese-traditional-architecture-158e6234ff5b4a8ab4930d0956fb4493" target="_blank">tigerofchen 合集</a>、<a href="https://www.cyark.org/" target="_blank">CyArk</a>、<a href="https://github.com/in-a-mist/miniLibs" target="_blank">miniLibs</a>、<a href="https://ip.e-dunhuang.com/" target="_blank">数字敦煌</a>、<a href="https://caalib.cn/" target="_blank">caalib 中国古建资料库</a>、<a href="https://github.com/Chartreuse310/chinese-architecture-wiki-online" target="_blank">中国古建 wiki</a>。</p>
+110	      <p class="muted">提示：连续导出（PNG 之后再导精灵表 / ZIP）时，Chrome 会弹一次“允许多个下载”，点允许即可；也可以用命令行批量出图，不受此限制。</p>
+111	      <div class="modal-actions"><button class="btn" id="btnHelpClose">知道了</button></div>
+112	    </div>
+113	  </div>
+114	
+115	  <input type="file" id="fileInput" accept=".json" style="display:none" />
+116	
+117	  <script src="js/gf-core.js"></script>
+118	  <script src="js/gf-roof.js"></script>
+119	  <script src="js/gf-parts.js"></script>
+120	  <script src="js/gf-build.js"></script>
+121	  <script src="js/gf-render.js"></script>
+122	  <script src="js/gf-presets.js"></script>
+123	  <script src="js/gf-export.js"></script>
+124	  <script src="js/app.js"></script>
+125	</body>
+126	</html>
+127	
+
+[End of file.]

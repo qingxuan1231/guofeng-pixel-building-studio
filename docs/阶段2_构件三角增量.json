@@ -1,0 +1,32 @@
+[
+ {
+  "label": "feiyun 抱厦(baoxia)",
+  "on": 118980,
+  "off": 78916,
+  "delta": 40064
+ },
+ {
+  "label": "shilou 抱厦(baoxia)",
+  "on": 58528,
+  "off": 37280,
+  "delta": 21248
+ },
+ {
+  "label": "wenchang 城关台(terraceGate)",
+  "on": 44246,
+  "off": 41942,
+  "delta": 2304
+ },
+ {
+  "label": "fanlou 欢门(huamen)",
+  "on": 56066,
+  "off": 54486,
+  "delta": 1580
+ },
+ {
+  "label": "ge 三层 分层平座路径(pingzuo on) vs 旧路径(off)",
+  "on": 39832,
+  "off": 39832,
+  "delta": 0
+ }
+]

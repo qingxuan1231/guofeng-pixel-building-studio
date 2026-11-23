@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>国风古建 · 城池像素工坊</title>
+<link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <!-- 顶栏 -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">楼</div>
+      <div class="brand-text">
+        <h1>国风古建像素工坊</h1>
+        <p>参数化三维古建 · 正交 2:1 像素等轴出图</p>
+      </div>
+    </div>
+    <a class="btn ghost switch-btn" href="city.html" title="切到城池工坊：造一座城">城池工坊</a>
+    <button class="btn switch-btn" id="btnMode" title="切换渲染内核：GPU（WebGL2 硬件光栅）/ CPU（软件光栅）">GPU</button>
+    <div class="topbar-actions">
+      <div class="dens">
+        <label for="densRange">像素密度</label>
+        <input type="range" id="densRange" min="8" max="320" step="4" title="拖动即可提高出图密度，细节会跟着变清楚">
+        <b id="densVal">40</b><span class="unit">px/m</span>
+      </div>
+      <button class="btn ghost" id="btnRandom">随机一座</button>
+      <button class="btn" id="btnExport">导出 PNG</button>
+      <button class="btn" id="btnSheet">导出八向精灵表</button>
+      <button class="btn ghost" id="btnZip">导出 ZIP（多向+配方）</button>
+      <button class="btn ghost" id="btnSave">保存配方</button>
+      <button class="btn ghost" id="btnLoad">载入配方</button>
+      <button class="btn ghost" id="btnHelp">说明</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- 左侧参数区 -->
+    <aside class="sidebar" id="sidebar">
+      <div class="panel-head">
+        <span>配方</span>
+        <div class="preset-chips" id="presetChips"></div>
+      </div>
+      <div id="controls"></div>
+      <div class="panel-foot">
+        <div class="tiny">所有构件均为三维参数化生成；导出的 PNG 可含生成配方（JSON）。</div>
+      </div>
+    </aside>
+
+    <!-- 画布 -->
+    <section class="stage">
+      <div class="stage-top">
+        <div class="badge">2:1 像素正交</div>
+        <div class="badge light" id="camInfo">俯视 30° · 每次旋转 45°</div>
+        <div class="spacer"></div>
+        <button class="mini" data-view="all" title="全景取景">全景</button>
+        <button class="mini" data-view="roof" title="放大到屋面">屋面</button>
+        <button class="mini" data-view="facade" title="放大到门窗檐下">门面</button>
+        <button class="mini" data-view="base" title="放大到台基踏跺">台基</button>
+        <button class="mini" data-view="court" title="放大到院落环境">院落</button>
+        <button class="mini" id="rotL" title="逆时针 45°">⟲ 45°</button>
+        <button class="mini" id="rotR" title="顺时针 45°">⟳ 45°</button>
+        <button class="mini" id="btnBuild" title="自下而上逐层落成演示">落成演示</button>
+        <button class="mini" id="btnAxis" title="转到中轴正立面（旋向 0°，保持当前缩放）">中轴</button>
+        <button class="mini" id="btnMove" title="开启后可直接拖动树、假山、石灯、幡旗、水池">拖动陈设</button>
+        <button class="mini" id="btnFull">全屏</button>
+        <button class="mini" id="btnCut">剖切：室内外</button>
+      </div>
+
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="view"></canvas>
+        <div class="canvas-hint" id="hint">左键拖动旋转 · 右键 / Shift 拖动平移 · 滚轮以光标为锚点缩放 · 双击复位</div>
+      </div>
+
+      <div class="stage-bottom">
+        <div class="stat" id="stat"></div>
+        <div class="spacer"></div>
+        <div class="stat">左键旋转 · 右键平移 · 滚轮缩放</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 说明弹层 -->
+    <div class="modal" id="helpModal" data-mode="build">
+    <div class="modal-card" id="helpBody"></div>
+  </div>
+
+  <input type="file" id="fileInput" accept=".json" style="display:none" />
+
+  <script src="js/gf-core.js"></script>
+  <script src="js/gf-roof.js"></script>
+  <script src="js/gf-parts.js"></script>
+  <script src="js/gf-build.js"></script>
+  <script src="js/gf-render.js"></script>
+  <script src="js/gf-presets.js"></script>
+  <script src="js/gf-export.js"></script>
+  <script src="js/gf-help.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

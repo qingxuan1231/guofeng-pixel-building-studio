@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>国风古建 · 城池像素工坊</title>
+<link rel="stylesheet" href="css/app.css" />
+<link rel="stylesheet" href="css/city.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">城</div>
+      <div class="brand-text">
+        <h1>国风城池像素工坊</h1>
+        <p>城墙里坊 · 随机筑城 · 参数化三维正等轴出图</p>
+      </div>
+    </div>
+    <a class="btn ghost switch-btn" href="index.html" title="回到古建工坊：造单栋建筑">古建工坊</a>
+    <button class="btn switch-btn" id="btnMode" title="切换渲染内核：GPU（WebGL2 硬件光栅）/ CPU（软件光栅）">GPU</button>
+    <div class="topbar-actions">
+      <div class="dens">
+        <label for="densRange">像素密度</label>
+        <input type="range" id="densRange" min="6" max="44" step="1" value="14" title="拖动即刻重绘，密度越高细节越清楚">
+        <b id="densVal">14</b><span class="unit">px/m</span>
+      </div>
+      <button class="btn ghost" id="btnSeed">换一批城池</button>
+      <button class="btn ghost" id="btnGrow">扩一坊</button>
+      <button class="btn" id="btnExport">导出 PNG</button>
+      <button class="btn ghost" id="btnSheet">导出四向环视图</button>
+      <button class="btn ghost" id="btnZip">导出 ZIP（四向+配方）</button>
+      <button class="btn ghost" id="btnSave">保存配方</button>
+      <button class="btn ghost" id="btnLoad">载入配方</button>
+      <button class="btn ghost" id="btnHelp">说明</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <aside class="sidebar" id="sidebar">
+      <div class="panel-head">
+        <span>城池配方</span>
+        <div class="preset-chips" id="presetChips"></div>
+      </div>
+      <div id="controls"></div>
+      <div class="panel-foot">
+        <div class="tiny">同一颗种子生成的城完全一致；导出的 PNG 为透明底，可直接进引擎。</div>
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div class="stage-top">
+        <div class="badge">2:1 像素正交</div>
+        <div class="badge light" id="camInfo">俯角 Z 52° · 方位 Y 35°</div>
+        <div class="dens cam-dens" title="Z 轴俯角：从近平视一路拉到正俯视">
+          <label for="pitchRange">俯角 Z</label>
+          <input type="range" id="pitchRange" min="15" max="88" step="1" value="52">
+          <b id="pitchVal">52</b><span class="unit">°</span>
+        </div>
+        <div class="spacer"></div>
+        <button class="mini" data-view="bird" title="俯角 78°，近乎正俯视">鸟瞰</button>
+        <button class="mini" data-view="iso" title="俯角 52°，等轴视角">等轴</button>
+        <button class="mini" data-view="low" title="俯角 30°">低视</button>
+        <button class="mini" data-view="ground" title="俯角 16°，接近平视">近平视</button>
+        <button class="mini" data-rot="-45" title="逆时针 45°">⟲ 45°</button>
+        <button class="mini" data-rot="45" title="顺时针 45°">⟳ 45°</button>
+        <button class="mini" id="btnAxis" title="转到中轴正立面（旋向 0°，保持当前缩放）">中轴</button>
+        <button class="mini" id="btnFull">全屏</button>
+      </div>
+
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="view"></canvas>
+        <div class="canvas-hint" id="hint">左键拖动旋转 · 右键 / Shift 拖动平移 · 滚轮以光标为锚点缩放 · 双击复位</div>
+        <div class="busy" id="busy">正在筑城…</div>
+      </div>
+
+      <div class="stage-bottom">
+        <div class="stat" id="stat"></div>
+        <div class="spacer"></div>
+        <div class="stat" id="cityStat"></div>
+      </div>
+    </section>
+  </div>
+
+    <div class="modal" id="helpModal" data-mode="city">
+    <div class="modal-card" id="helpBody"></div>
+  </div>
+
+  <input type="file" id="fileInput" accept=".json" style="display:none" />
+
+  <script src="js/gf-core.js"></script>
+  <script src="js/gf-roof.js"></script>
+  <script src="js/gf-parts.js"></script>
+  <script src="js/gf-build.js"></script>
+  <script src="js/gf-render.js"></script>
+  <script src="js/gf-presets.js"></script>
+  <script src="js/gf-export.js"></script>
+  <script src="js/gf-city.js"></script>
+  <script src="js/gf-help.js"></script>
+  <script src="js/city-app.js"></script>
+</body>
+</html>
