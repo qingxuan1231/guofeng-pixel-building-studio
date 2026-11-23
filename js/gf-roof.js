@@ -23,31 +23,48 @@
   // 剪边：屋面最靠檐口的一圈改用另一种瓦色（故宫常见做法）
   let TRIM = null;
 
-  // 瓦垄起伏：每条垄在 u 方向压出三角棱（脊顶 +1、垄沟 -0.6），檐口三行内淡出，
-  // 这样瓦面本身有 4cm 级起伏，法线随之变化，像素渲染才有真实明暗而不只是色带。
-  let RIB = 0.03;
+  // 瓦垄起伏：每条垄在 u 方向压出断面。
+  // 中档以上不再是“三角棱”，而是按半圆断面的筒瓦垄（沟—坡—顶—坡—沟），
+  // 320 px/m 时垄距 0.33 m ≈ 105 px、垄高 0.024 m ≈ 8 px，圆垄在像素上才读得出“瓦”。
+  let RIB = 0.024;
+  // 半圆断面：5 点一垄，两端落在垄沟、中点为瓦顶，避免出现“平顶亮带”
+  const RIB5 = [0, 0.6, 1, 0.6, 0];
+  const PROF2 = [1, -0.6];
 
   /** 参数化曲面片：fn(u,v) -> [x,y,z] */
   function patch(mb, nu, nv, fn, matA, matB, tag, rib) {
     const amp = rib == null ? RIB : rib;
-    const NU = amp ? nu * 2 : nu;
-    const fade = (j) => Math.min(1, j / Math.max(1, nv * 0.3));
+    const per = amp ? (GF.detail(2) ? 5 : 2) : 1;
+    const NU = amp ? nu * per : nu;
+    const prof = per === 5 ? RIB5 : PROF2;
+    // 檐口最外一行略收（35%），防止瓦垄在檐边形成一排“梳齿”；脊侧保持满垄高。
+    const fade = (j) => (amp ? (per === 5 ? (j === 0 ? 0.35 : 1) : Math.min(1, j / Math.max(1, nv * 0.3))) : 0);
+    // 剪边只在檐口最外一条窄带上：把 v 采样在 0 附近加密，第一条只有 5% 坡长（≈0.1–0.2 m），
+    // 否则整皮瓦（1.5 m 宽）都会变成一条光板绿带。
+    const vs = [];
+    if (TRIM && nv >= 3) {
+      vs.push(0, 0.05);
+      for (let j = 1; j <= nv; j++) if (j / nv > 0.0501) vs.push(j / nv);
+    } else {
+      for (let j = 0; j <= nv; j++) vs.push(j / nv);
+    }
     const grid = [];
-    for (let j = 0; j <= nv; j++) {
+    for (let j = 0; j < vs.length; j++) {
       const row = [];
       for (let i = 0; i <= NU; i++) {
-        const p = fn(i / NU, j / nv);
-        if (amp) p[1] += amp * (i % 2 === 0 ? 1 : -0.6) * fade(j);
+        const p = fn(i / NU, vs[j]);
+        if (amp) p[1] += amp * prof[i % per] * fade(vs[j] * nv);
         row.push(p);
       }
       grid.push(row);
     }
-    for (let j = 0; j < nv; j++) {
+    for (let j = 0; j < grid.length - 1; j++) {
       for (let i = 0; i < NU; i++) {
         const a = grid[j][i], b = grid[j][i + 1];
         const c = grid[j + 1][i + 1], d = grid[j + 1][i];
-        // 每隔一垄换一条色带，形成瓦垄明暗
-        let mat = ((amp ? Math.floor(i / 2) : i) % 2 === 0) ? matA : matB;
+        // 瓦垄色带只在低档用；中档以上同一瓦色，靠圆垄的明暗分垄
+        const tileIdx = amp ? Math.floor(i / per) : i;
+        let mat = (GF.detail(2) || tileIdx % 2 === 0) ? matA : matB;
         if (TRIM && j === 0) mat = TRIM;
         mb.quad(a, b, c, d, mat, tag);
       }
@@ -56,6 +73,17 @@
 
   // 檐角起翘：u 在两端（0/1）时最大
   const cornerLift = (u) => Math.pow(Math.abs(u * 2 - 1), 6);
+
+  /* 环形屋面（攒尖 / 腰檐）的瓦垄：
+   * 这类屋面沿边参数 u 展开，瓦垄必须按“每条边多少垄”对齐，
+   * 不能按累积弧长——否则每圈半径不同，垄位会错开，整片屋面叠出鱼骨状褶皱。 */
+  const TILE_PITCH = 0.33;
+  function ribOffset(u, tiles) {
+    if (!GF.detail(2)) return 0;
+    const q = (u * tiles) % 1;
+    return RIB * (Math.sin(Math.PI * q) * 1.15 - 0.15);
+  }
+
 
   function bands(width) {
     return GF.clamp(Math.round(width / 0.2), 8, 96);
@@ -66,23 +94,42 @@
     const RD = ridgeOf(o);
     const style = o.ridgeStyle || 'plain';
     if (style === 'none') return;
+    const det = GF.detailLevel();
     const rh = style === 'ornate' ? 0.34 : 0.22;
     const rw = style === 'ornate' ? 0.36 : 0.26;
     const y = yb + rise;
-    // 正脊主体
-    mb.box(cx - xr - 0.1, cx + xr + 0.1, y - rh * 0.5, y + rh, cz - rw / 2, cz + rw / 2, RD, o.tag + '·正脊');
+    if (det >= 2) {
+      // 三道线脚的正脊断面：脊座（出檐小挑）→ 脊筒（收分）→ 脊帽（出唇）
+      mb.box(cx - xr - 0.14, cx + xr + 0.14, y - rh * 0.62, y - rh * 0.34, cz - (rw + 0.14) / 2, cz + (rw + 0.14) / 2, RD, o.tag + '·脊座');
+      mb.taper(cx, cz, rw + 0.02, rw + 0.02, rw - 0.04, rw - 0.04, y - rh * 0.5, y + rh * 0.32, RD, o.tag + '·脊筒');
+      mb.taper(cx, cz, rw - 0.02, rw - 0.02, rw + 0.06, rw + 0.06, y + rh * 0.3, y + rh * 0.52, RD, o.tag + '·脊帽');
+      // 瓦条：脊筒上压两道细线，近看才有“叠瓦”的层次
+      for (const dy of [0.06, 0.16]) {
+        mb.box(cx - xr - 0.02, cx + xr + 0.02, y + rh * dy, y + rh * dy + 0.022, cz - rw / 2 - 0.014, cz + rw / 2 + 0.014, RD, o.tag + '·瓦条');
+      }
+    } else {
+      mb.box(cx - xr - 0.1, cx + xr + 0.1, y - rh * 0.5, y + rh, cz - rw / 2, cz + rw / 2, RD, o.tag + '·正脊');
+    }
     // 脊上线条（金/白）
     if (style === 'ornate') {
-      mb.box(cx - xr - 0.06, cx + xr + 0.06, y + rh, y + rh + 0.08, cz - rw * 0.28, cz + rw * 0.28, 'gold', o.tag + '·脊线');
+      mb.box(cx - xr - 0.06, cx + xr + 0.06, y + rh * 0.52, y + rh * 0.52 + 0.08, cz - rw * 0.28, cz + rw * 0.28, 'gold', o.tag + '·脊线');
     }
-    // 两端鸱吻
+    // 两端鸱吻（吞口朝内、卷尾朝外挑）：四段叠出剪影，而不是两个方盒子
     const beastN = o.beasts || 0;
     for (const s of [-1, 1]) {
       const ex = cx + s * (xr + 0.1);
-      mb.boxC(ex, cz, 0.34, 0.3, y - 0.1, y + 0.52, RD, o.tag + '·鸱吻');
-      mb.boxC(ex + s * 0.04, cz, 0.2, 0.22, y + 0.5, y + 0.78, RD, o.tag + '·鸱吻');
+      const yo = y + rh * 0.34;
+      mb.boxC(ex, cz, 0.4, 0.34, yo - 0.12, yo + 0.1, RD, o.tag + '·吻座');
+      mb.taper(ex, cz, 0.3, 0.3, 0.24, 0.26, yo + 0.08, yo + 0.42, RD, o.tag + '·吻身');
+      mb.boxC(ex - s * 0.03, cz, 0.26, 0.3, yo + 0.4, yo + 0.6, RD, o.tag + '·吻头');
+      // 卷尾：向外上方挑出
+      mb.taper(ex + s * 0.08, cz, 0.16, 0.2, 0.05, 0.08, yo + 0.58, yo + 0.86, RD, o.tag + '·吻尾');
+      if (det >= 2) {
+        // 剑把：吻背上的小金饰
+        mb.boxC(ex + s * 0.02, cz, 0.06, 0.1, yo + 0.84, yo + 0.96, 'gold', o.tag + '·剑把');
+      }
       if (style === 'ornate') {
-        mb.boxC(ex, cz, 0.16, 0.16, y + 0.72, y + 0.86, 'gold', o.tag + '·吻金');
+        mb.boxC(ex, cz, 0.16, 0.16, yo + 0.72, yo + 0.86, 'gold', o.tag + '·吻金');
       }
     }
     // 脊兽（沿正脊向中间排布）
@@ -105,6 +152,7 @@
   /* ------------------------------ 垂脊 ------------------------------ */
   function addHipRidges(mb, cx, cz, xe, ze, xr, yb, rise, o) {
     const RD = ridgeOf(o);
+    const det = GF.detailLevel();
     // 沿四条斜脊铺细石条（简化：把檐角到脊端的折线串起来）
     const ptsAlong = (sx, sz) => {
       const out = [];
@@ -124,9 +172,31 @@
         for (let i = 0; i < pts.length - 1; i++) {
           GF.beamBetween(mb, pts[i], pts[i + 1], 0.16, 0.12, RD, o.tag + '·垂脊');
         }
-        // 檐角套兽
+        // 檐角套兽：包住角梁头的兽面，微微向下颌
         const tip = pts[0];
-        mb.boxC(tip[0], tip[2], 0.2, 0.2, tip[1] - 0.1, tip[1] + 0.16, RD, o.tag + '·套兽');
+        mb.taper(tip[0], tip[2], 0.24, 0.24, 0.15, 0.15, tip[1] + 0.12, tip[1] - 0.03, RD, o.tag + '·套兽');
+        mb.boxC(tip[0], tip[2], 0.1, 0.16, tip[1] - 0.1, tip[1] + 0.02, RD, o.tag + '·套兽颌');
+
+        // 走兽（仙人骑凤 + 若干蹲兽）：320 档才做，沿垂脊自檐角向脊端排
+        if (det >= 3) {
+          const nBeast = 5;
+          const at = (t) => {
+            const x = sx * V.lerp(xe, xr, t);
+            const z = sz * V.lerp(ze, 0, t);
+            const y = yb + rise * curve(t);
+            return [cx + x, y, cz + z];
+          };
+          // 仙人骑凤：位置最靠檐角，形体最高
+          const fi = at(0.03);
+          mb.taper(fi[0], fi[2], 0.14, 0.16, 0.1, 0.12, fi[1] + 0.08, fi[1] + 0.34, RD, o.tag + '·仙人');
+          mb.boxC(fi[0], fi[2], 0.12, 0.13, fi[1] + 0.32, fi[1] + 0.42, RD, o.tag + '·仙人首');
+          for (let b = 0; b < nBeast; b++) {
+            const t = 0.1 + b * 0.045;
+            const p = at(t);
+            mb.taper(p[0], p[2], 0.11, 0.13, 0.09, 0.1, p[1] + 0.06, p[1] + 0.24, RD, o.tag + '·走兽');
+            mb.boxC(p[0], p[2], 0.1, 0.11, p[1] + 0.22, p[1] + 0.3, RD, o.tag + '·兽首');
+          }
+        }
       }
     }
   }
@@ -134,26 +204,59 @@
   /* ---------------------------- 檐口瓦当 ---------------------------- */
   function addEaveTiles(mb, pts, o) {
     const RD = ridgeOf(o);
-    // pts: 檐口折线（世界坐标）
+    const TM = o.tileEnd || o.tile || RD;   // 瓦当/滴水用瓦色，别用脊色（脊色偏紫棕，檐口会读成一圈项链）
+    const det = GF.detailLevel();
+    // 瓦当间距跟着垄距走：320 px/m 时每垄一枚瓦当。
+    // 按整条檐口的累积长度排布（不是按每一小段），否则檐口细分一加密就变成“一圈尖刺”。
+    const pitch = det >= 3 ? 0.33 : det >= 2 ? 0.36 : 0.42;
+    const rw = det >= 2 ? 0.075 : 0.085;
+    let ccx = 0, ccz = 0;
+    for (const p of pts) { ccx += p[0]; ccz += p[2]; }
+    ccx /= pts.length; ccz /= pts.length;
+
+    // 预计算每段长度与朝外法线
+    const segs = [];
+    let total = 0;
     for (let i = 0; i < pts.length - 1; i++) {
       const a = pts[i], b = pts[i + 1];
-      // 檐口连檐：瓦口下方一道通长木条，把瓦当滴水托住，檐口不再“悬空”
-      GF.beamBetween(mb, [a[0], a[1] - 0.1, a[2]], [b[0], b[1] - 0.1, b[2]], 0.11, 0.15, 'woodDark', o.tag + '·连檐');
       const len = Math.hypot(b[0] - a[0], b[2] - a[2]);
-      const n = Math.max(1, Math.round(len / 0.42));
-      for (let k = 0; k < n; k++) {
-        const t = (k + 0.5) / n;
-        const x = a[0] + (b[0] - a[0]) * t;
-        const z = a[2] + (b[2] - a[2]) * t;
-        const y = a[1] + (b[1] - a[1]) * t;
-        mb.cyl(x, z, 0.085, y - 0.16, y + 0.02, 8, RD, o.tag + '·瓦当');
-        // 滴水：瓦当之间再垂一片舌形瓦，上宽下窄，形成“瓦当—滴水”相间的檐口节奏
-        const t2 = k / n;
-        const x2 = a[0] + (b[0] - a[0]) * t2;
-        const z2 = a[2] + (b[2] - a[2]) * t2;
-        const y2 = a[1] + (b[1] - a[1]) * t2;
-        mb.taper(x2, z2, 0.115, 0.115, 0.07, 0.07, y2 - 0.24, y2 - 0.1, RD, o.tag + '·滴水');
+      if (len < 1e-6) continue;
+      const mx = (a[0] + b[0]) / 2, mz = (a[2] + b[2]) / 2;
+      let nx = mx - ccx, nz = mz - ccz;
+      const nl = Math.hypot(nx, nz) || 1;
+      segs.push({ a, b, len, s0: total, nx: nx / nl, nz: nz / nl });
+      total += len;
+    }
+    if (!segs.length) return;
+
+    // 连檐 + 瓦口板：逐段贴合檐口（做薄一点，太粗会把整条檐口读成一圈木箍）
+    for (const s of segs) {
+      GF.beamBetween(mb, [s.a[0], s.a[1] - 0.08, s.a[2]], [s.b[0], s.b[1] - 0.08, s.b[2]], 0.08, 0.1, o.tileEnd || 'woodDark', o.tag + '·连檐');
+      if (det >= 2 && o.woodEdge !== false) {
+        GF.beamBetween(mb, [s.a[0] + s.nx * 0.03, s.a[1] - 0.15, s.a[2] + s.nz * 0.03],
+          [s.b[0] + s.nx * 0.03, s.b[1] - 0.15, s.b[2] + s.nz * 0.03], 0.035, 0.06, 'wood', o.tag + '·瓦口');
       }
+    }
+
+    const at = (dist) => {
+      let s = segs[segs.length - 1];
+      for (const g of segs) { if (dist <= g.s0 + g.len) { s = g; break; } }
+      const t = Math.min(1, (dist - s.s0) / s.len);
+      return {
+        x: s.a[0] + (s.b[0] - s.a[0]) * t, z: s.a[2] + (s.b[2] - s.a[2]) * t,
+        y: s.a[1] + (s.b[1] - s.a[1]) * t, nx: s.nx, nz: s.nz
+      };
+    };
+
+    const n = Math.max(1, Math.round(total / pitch));
+    for (let k = 0; k < n; k++) {
+      const p = at((k + 0.5) * total / n);
+      // 瓦当：短圆柱 + 圆帽，从上方看是一枚圆鼓
+      mb.cyl(p.x + p.nx * 0.015, p.z + p.nz * 0.015, rw, p.y - 0.06, p.y + 0.01, det >= 2 ? 10 : 8, TM, o.tag + '·瓦当');
+      if (det >= 2) mb.lathe(p.x + p.nx * 0.015, p.z + p.nz * 0.015, [[0.001, 0], [rw * 0.9, 0.004], [rw, 0.016], [0.001, 0.026]], 8, TM, o.tag + '·瓦当心');
+      // 滴水：瓦当之间一片舌尖瓦
+      const q = at(k * total / n);
+      mb.taper(q.x + q.nx * 0.035, q.z + q.nz * 0.035, 0.1, 0.1, 0.07, 0.07, q.y - 0.19, q.y - 0.07, TM, o.tag + '·滴水');
     }
   }
 
@@ -482,11 +585,20 @@
     const sides = o.sides || 4;
     const up = o.upturn == null ? 0.45 : o.upturn;
     const apex = [cx, yb + rise + 0.05, cz];
-    const rings = 5;
-    const per = Math.max(2, sides); // 每边细分，檐口只有角上起翘，边中落在柱头上
+    const rings = GF.detail(2) ? 7 : 5;
+    // 每边细分：按真实边长定垄数（原来按 2*xe/sides 估，六角亭只有 2 垄，
+    // 2.4 cm 的小起伏拉成 1 m 一浪，整片屋面读成一块布）。
+    const cA = [cx + Math.cos(o.rot || 0) * xe, cz + Math.sin(o.rot || 0) * ze];
+    const cB = [cx + Math.cos((1 / sides) * Math.PI * 2 + (o.rot || 0)) * xe,
+    cz + Math.sin((1 / sides) * Math.PI * 2 + (o.rot || 0)) * ze];
+    const edgeLen = Math.max(Math.hypot(cB[0] - cA[0], cB[1] - cA[1]), 0.3);
+    const tilesPerEdge = Math.max(2, Math.round(edgeLen / TILE_PITCH));
+    const per = GF.detail(2)
+      ? Math.max(4, Math.min(320, tilesPerEdge * 5))
+      : Math.max(2, sides);
 
     // 由多边形底边向顶点收敛；u 为所在边的归一位置，用来只抬角、不抬整圈檐口
-    const ringPts = (s) => {
+    const ringPts = (s, dy) => {
       const out = [];
       const segs = sides * per;
       for (let i = 0; i <= segs; i++) {
@@ -498,28 +610,50 @@
         const eb = [cx + Math.cos(b) * Math.max(0.02, xe * (1 - s)), cz + Math.sin(b) * Math.max(0.02, ze * (1 - s))];
         const px = ea[0] + (eb[0] - ea[0]) * u;
         const pz = ea[1] + (eb[1] - ea[1]) * u;
-        out.push([px, yb + rise * curve(s) + up * cornerLift(u) * Math.pow(1 - s, 1.8), pz]);
+        // 瓦垄沿半径对齐（u 为常量），近檐满高、近脊收平
+        out.push([px, yb + rise * curve(s) + up * cornerLift(u) * Math.pow(1 - s, 1.8) + ribOffset(u, tilesPerEdge) * (1 - 0.45 * s) + (dy || 0), pz]);
       }
       return out;
     };
+
+    // 瓦面分“垄”与“筒”：沿坡向按一垄瓦的长度分皮，每皮之间起 1.2 cm 叠压唇口，
+    // 唇口用暗瓦色画一条横线——屋面才有横向的瓦皮节奏，不再是一整块垂布。
+    const slant = Math.hypot(rise, edgeLen / 2);
+    const nC = GF.detail(2) ? Math.max(3, Math.min(26, Math.round(slant / 0.32))) : 4;
+    const LIP = 0.012;
     const rows = [];
-    for (let j = 0; j <= rings; j++) rows.push(ringPts(j / rings));
-    for (let j = 0; j < rings; j++) {
-      for (let i = 0; i < rows[j].length - 1; i++) {
-        const seg = Math.floor(i / per);
-        const mat = (o.trim && j === 0) ? o.trim : (seg % 2 === 0 ? o.tile : o.tileB);
-        mb.quad(rows[j][i], rows[j][i + 1], rows[j + 1][i + 1], rows[j + 1][i], mat, o.tag + '·坡面');
+    const pushR = (pts, k) => rows.push({ p: pts, k });
+    pushR(ringPts(0, 0), o.trim ? 'trim' : 'tile');
+    if (o.trim) pushR(ringPts(0.16 / nC, 0), 'tile');   // 剪边只占最外一条窄边
+    for (let j = 1; j < nC; j++) { pushR(ringPts(j / nC, 0), 'tile'); pushR(ringPts(j / nC, LIP), 'lip'); }
+    pushR(ringPts(1, 0), 'tile');
+
+    for (let j = 0; j < rows.length - 1; j++) {
+      const cur = rows[j].k, nxt = rows[j + 1].k;
+      const mat = nxt === 'lip' ? RD : cur === 'trim' ? o.trim : o.tile;
+      for (let i = 0; i < rows[j].p.length - 1; i++) {
+        mb.quad(rows[j].p[i], rows[j].p[i + 1], rows[j + 1].p[i + 1], rows[j + 1].p[i], mat, o.tag + (nxt === 'lip' ? '·瓦皮' : '·坡面'));
       }
     }
     // 檐口瓦当（沿起翘后的檐口折线走）
-    addEaveTiles(mb, rows[0], o);
+    addEaveTiles(mb, rows[0].p, o);
 
-    // 垂脊（每条棱）
+    // 垂脊（每条棱）：沿举折曲线折线连到宝顶，不再是角点到顶点的直线（凹曲屋面上会悬空）
     for (let i = 0; i < sides; i++) {
       const a = (i / sides) * Math.PI * 2 + (o.rot || 0);
-      const base = [cx + Math.cos(a) * xe, yb + up, cz + Math.sin(a) * ze];
-      GF.beamBetween(mb, base, apex, 0.14, 0.12, RD, o.tag + '·垂脊');
-      if (o.windDuo) addWindDuo(mb, base[0], base[1], base[2], o.tag);
+      const steps = 6;
+      let prev = null;
+      for (let k = 0; k <= steps; k++) {
+        const s = k / steps;
+        const p = [
+          cx + Math.cos(a) * Math.max(0.02, xe * (1 - s)),
+          yb + rise * curve(s) + (k === 0 ? up : 0) + 0.03,
+          cz + Math.sin(a) * Math.max(0.02, ze * (1 - s))
+        ];
+        if (prev) GF.beamBetween(mb, prev, p, 0.14, 0.12, RD, o.tag + '·垂脊');
+        prev = p;
+      }
+      if (o.windDuo) addWindDuo(mb, cx + Math.cos(a) * xe, yb + up, cz + Math.sin(a) * ze, o.tag);
     }
     // 宝顶（攒尖顶没有正脊，宝顶单独画，不再借 addRidge，否则 ridgeStyle='none' 会把它一起省掉）
     addRidge(mb, cx, cz, xe, 0, yb, rise, Object.assign({}, o, { ridgeStyle: 'none', finial: false }));
@@ -541,49 +675,139 @@
     const up = o.upturn == null ? 0.3 : o.upturn;
     const rings = 4;
     const yTop = ytop == null ? yb + 1.2 : ytop;
+    // 檐面细分：原来每边固定 8 段（33 m 宽的重檐，一段就是 4 m），
+    // 320 档下整圈是折线、也没有瓦垄。按边长定段数，再沿周长叠瓦垄起伏。
+    const perX = GF.detail(2) ? Math.max(8, Math.min(320, Math.round(2 * xe / TILE_PITCH * 5))) : 8;
+    const perZ = GF.detail(2) ? Math.max(8, Math.min(320, Math.round(2 * ze / TILE_PITCH * 5))) : 8;
+    const tilesX = Math.max(2, Math.round(2 * xe / TILE_PITCH));
+    const tilesZ = Math.max(2, Math.round(2 * ze / TILE_PITCH));
 
-    const ring = (s) => {
+    const ring = (s, dy) => {
       const X = V.lerp(xe, xi, s), Z = V.lerp(ze, zi, s);
-      const y = yb + (yTop - yb) * curve(s);
+      const y = yb + (yTop - yb) * curve(s) + (dy || 0);
       const lift = up * Math.pow(1 - s, 1.6);
+      const shrink = 1 - 0.3 * s;
       const out = [];
-      const per = 8;
-      // 顺时针走一圈：前 -> 右 -> 后 -> 左
-      for (let i = 0; i <= per; i++) { // 前檐 x: -X..X
-        const t = i / per;
-        out.push([cx + (-X + 2 * X * t), y + lift * cornerLift(t) * 0.15, cz + Z]);
+      // 顺时针走一圈：前 -> 右 -> 后 -> 左（u 沿边参数，瓦垄按边对齐）
+      for (let i = 0; i <= perX; i++) { // 前檐 x: -X..X
+        const t = i / perX;
+        out.push([cx + (-X + 2 * X * t), y + lift * cornerLift(t) * 0.15 + ribOffset(t, tilesX) * shrink, cz + Z]);
       }
-      for (let i = 1; i <= per; i++) { // 右檐 z: Z..-Z
-        const t = i / per;
-        out.push([cx + X, y + lift * cornerLift(t) * 0.15, cz + (Z - 2 * Z * t)]);
+      for (let i = 1; i <= perZ; i++) { // 右檐 z: Z..-Z
+        const t = i / perZ;
+        out.push([cx + X, y + lift * cornerLift(t) * 0.15 + ribOffset(t, tilesZ) * shrink, cz + (Z - 2 * Z * t)]);
       }
-      for (let i = 1; i <= per; i++) { // 后檐 x: X..-X
-        const t = i / per;
-        out.push([cx + (X - 2 * X * t), y + lift * cornerLift(t) * 0.15, cz - Z]);
+      for (let i = 1; i <= perX; i++) { // 后檐 x: X..-X
+        const t = i / perX;
+        out.push([cx + (X - 2 * X * t), y + lift * cornerLift(t) * 0.15 + ribOffset(t, tilesX) * shrink, cz - Z]);
       }
-      for (let i = 1; i <= per; i++) { // 左檐 z: -Z..Z
-        const t = i / per;
-        out.push([cx - X, y + lift * cornerLift(t) * 0.15, cz + (-Z + 2 * Z * t)]);
+      for (let i = 1; i <= perZ; i++) { // 左檐 z: -Z..Z
+        const t = i / perZ;
+        out.push([cx - X, y + lift * cornerLift(t) * 0.15 + ribOffset(t, tilesZ) * shrink, cz + (-Z + 2 * Z * t)]);
       }
       return out;
     };
 
+    const slant = Math.hypot(yTop - yb, Math.max(xe - xi, ze - zi)) * 1.2;
+    const nC = GF.detail(2) ? Math.max(3, Math.min(24, Math.round(slant / 0.32))) : 4;
+    const LIPS = 0.012;
     const rows = [];
-    for (let j = 0; j <= rings; j++) rows.push(ring(j / rings));
-    for (let j = 0; j < rings; j++) {
-      const n = rows[j].length;
+    const pushR = (pts, k) => rows.push({ p: pts, k });
+    pushR(ring(0, 0), o.trim ? 'trim' : 'tile');
+    if (o.trim) pushR(ring(0.16 / nC, 0), 'tile');
+    for (let j = 1; j < nC; j++) { pushR(ring(j / nC, 0), 'tile'); pushR(ring(j / nC, LIPS), 'lip'); }
+    pushR(ring(1, 0), 'tile');
+    for (let j = 0; j < rows.length - 1; j++) {
+      const cur = rows[j].k, nxt = rows[j + 1].k;
+      const mat = nxt === 'lip' ? RD : cur === 'trim' ? o.trim : o.tile;
+      const n = rows[j].p.length;
       for (let i = 0; i < n - 1; i++) {
-        const mat = (o.trim && j === 0) ? o.trim : (i % 2 === 0 ? o.tile : o.tileB);
-        mb.quad(rows[j][i], rows[j][i + 1], rows[j + 1][i + 1], rows[j + 1][i], mat, o.tag + '·腰檐');
+        mb.quad(rows[j].p[i], rows[j].p[i + 1], rows[j + 1].p[i + 1], rows[j + 1].p[i], mat, o.tag + '·腰檐');
       }
     }
-    // 檐口瓦当
-    const eavePts = rows[0].slice(0, 9);
-    addEaveTiles(mb, eavePts, o);
+    // 檐口瓦当：整圈（原来只取前 9 个点，细分加密后等于只在正面铺了一小段）
+    addEaveTiles(mb, rows[0].p, o);
+    // 四条垂脊：沿举折曲线从外角走到内角，中段才贴住瓦面
+    if (GF.detail(2)) {
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          let prev = null;
+          for (let k = 0; k <= 5; k++) {
+            const s = k / 5;
+            const p = [
+              cx + sx * V.lerp(xe, xi, s),
+              yb + (yTop - yb) * curve(s) + (k === 0 ? up * 0.5 : 0) + 0.02,
+              cz + sz * V.lerp(ze, zi, s)
+            ];
+            if (prev) GF.beamBetween(mb, prev, p, 0.13, 0.11, RD, o.tag + '·垂脊');
+            prev = p;
+          }
+        }
+      }
+    }
     // 四角套兽
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
         mb.boxC(cx + sx * xe, cz + sz * ze, 0.22, 0.22, yb - 0.12, yb + up + 0.16, RD, o.tag + '·套兽');
+      }
+    }
+  }
+
+  /* ------------------------------ 环形檐（塔檐 / 八角檐） ------------------------------ */
+  // 塔檐原来只是两圈 8 段的 polyRing：8 个平面三角面拼成的“伞”，既没有瓦垄，
+  // 也没有瓦皮叠压和瓦当。这里按边展开，跟攒尖、腰檐共用同一套垄—皮—瓦当。
+  function coneRoof(mb, o) {
+    const RD = ridgeOf(o);
+    const cx = o.cx || 0, cz = o.cz || 0;
+    const rOut = o.rOut, rIn = Math.max(0.05, o.rIn == null ? rOut * 0.6 : o.rIn);
+    const sides = Math.max(4, o.sides || 8);
+    const rot = o.rot || 0;
+    const yb = o.yb, ytop = o.ytop == null ? yb + 0.8 : o.ytop;
+    const edgeLen = 2 * rOut * Math.sin(Math.PI / sides);
+    const tilesPerEdge = Math.max(2, Math.round(edgeLen / TILE_PITCH));
+    const per = GF.detail(2) ? Math.max(4, Math.min(200, tilesPerEdge * 5)) : 2;
+    const shrinkRib = (s) => 1 - 0.4 * s;
+
+    const ringAt = (s, dy) => {
+      const r = V.lerp(rOut, rIn, s);
+      const y0 = yb + (ytop - yb) * curve(s) + (dy || 0);
+      const out = [];
+      const segs = sides * per;
+      for (let i = 0; i <= segs; i++) {
+        const k = Math.min(sides - 1, Math.floor(i / per));
+        const u = i / per - k;
+        const a = ((k + u) / sides) * Math.PI * 2 + rot;
+        out.push([cx + Math.cos(a) * r, y0 + ribOffset(u, tilesPerEdge) * shrinkRib(s), cz + Math.sin(a) * r]);
+      }
+      return out;
+    };
+
+    const slant = Math.hypot(ytop - yb, rOut - rIn) * 1.15;
+    const nC = GF.detail(2) ? Math.max(2, Math.min(14, Math.round(slant / 0.34))) : 2;
+    const LIPC = 0.012;
+    const rows = [];
+    const pushR = (pts, k) => rows.push({ p: pts, k });
+    pushR(ringAt(0, 0), o.trim ? 'trim' : 'tile');
+    if (o.trim) pushR(ringAt(0.14 / nC, 0), 'tile');
+    for (let j = 1; j < nC; j++) { pushR(ringAt(j / nC, 0), 'tile'); pushR(ringAt(j / nC, LIPC), 'lip'); }
+    pushR(ringAt(1, 0), 'tile');
+
+    for (let j = 0; j < rows.length - 1; j++) {
+      const cur = rows[j].k, nxt = rows[j + 1].k;
+      const mat = nxt === 'lip' ? RD : cur === 'trim' ? o.trim : o.tile;
+      for (let i = 0; i < rows[j].p.length - 1; i++) {
+        mb.quad(rows[j].p[i], rows[j].p[i + 1], rows[j + 1].p[i + 1], rows[j + 1].p[i], mat, o.tag + (nxt === 'lip' ? '·瓦皮' : '·檐面'));
+      }
+    }
+    addEaveTiles(mb, rows[0].p, o);
+    // 檐角起翘：贴着檐口外沿压一小段翘尖（原来是横在外面的方块，读成“须”）
+    if (GF.detail(2) && o.cornerTip !== false) {
+      for (let k = 0; k < sides; k++) {
+        const a = (k / sides) * Math.PI * 2 + rot;
+        const dir = [Math.cos(a), Math.sin(a)];
+        const p0 = [cx + dir[0] * (rOut - 0.18), yb + 0.015, cz + dir[1] * (rOut - 0.18)];
+        const p1 = [cx + dir[0] * (rOut + 0.04), yb + 0.07 + (o.upturn == null ? 0.3 : o.upturn) * 0.18, cz + dir[1] * (rOut + 0.04)];
+        GF.beamBetween(mb, p0, p1, 0.13, 0.06, RD, o.tag + '·翘角');
       }
     }
   }
@@ -615,6 +839,7 @@
         else if (type === 'gableHip') gableHipRoof(mb, oo);
         else if (type === 'pyramid') pyramidRoof(mb, oo);
         else if (type === 'skirt') skirtRoof(mb, oo);
+        else if (type === 'cone') coneRoof(mb, oo);
         else if (type === 'lu') luRoof(mb, oo);
         else if (type === 'cross') crossRoof(mb, oo);
         else hipRoof(mb, oo);
@@ -628,6 +853,12 @@
       const oo = withDefaults(o);
       TRIM = oo.trim || null;
       skirtRoof(mb, oo);
+      TRIM = null;
+    },
+    cone(mb, o) {
+      const oo = withDefaults(o);
+      TRIM = oo.trim || null;
+      coneRoof(mb, oo);
       TRIM = null;
     },
     roll: rollRoof,

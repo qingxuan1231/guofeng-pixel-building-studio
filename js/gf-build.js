@@ -807,15 +807,12 @@
             }
           }
         }
-        polyRing(mb, 0, 0, rOut, rIn, sides, y + tierHi, y + tierHi + eaveH, r.tile, r.tileB, '塔檐', rot);
-        // 檐口连檐：一道深色瓦口压住檐外沿，檐口不是一条薄薄的悬空线
-        polyRing(mb, 0, 0, rOut, rOut - 0.16, sides, y + tierHi - 0.18, y + tierHi - 0.02, 'tileEnd', 'tileEnd', '塔檐连檐', rot);
-        // 檐角起翘：小翘角从檐口边缘长出来，别悬在半空当碎点
-        for (let k = 0; k < sides; k++) {
-          const a = (k / sides) * Math.PI * 2 + rot;
-          mb.boxC(Math.cos(a) * rOut, Math.sin(a) * rOut, 0.14, 0.14,
-            y + tierHi - 0.08, y + tierHi + 0.1 + up * 0.45, 'tileEnd', '檐角');
-        }
+        GF.roofs.cone(mb, {
+          cx: 0, cz: 0, rOut, rIn, sides, rot,
+          yb: y + tierHi, ytop: y + tierHi + eaveH,
+          tile: r.tile, tileB: r.tileB, tag: '塔檐', tileEnd: 'tileEnd', woodEdge: false,
+          upturn: up, trim: r.trim
+        });
         // 平座：檐上一层挑出的坐凳栏杆，楼阁式塔的竖向节奏就靠它
         if (i < tiers - 1 && r.pingzuo) {
           // 平座宽度对齐檐口（原来只比塔身宽 0.5，压在大出檐下面，俯视只剩一条窄边，看着像透空）
@@ -3233,8 +3230,11 @@
   }
 
   /* ------------------------------ 总装 ------------------------------ */
-  GF.build = function (recipe) {
+  GF.build = function (recipe, opts) {
     const r = GF.normalize ? GF.normalize(recipe) : recipe;
+    // 出图密度决定细部档位：320 px/m 会启用瓦当逐垄、门钉九路、斗拱铺作等
+    const ppm = (opts && opts.ppm) || (r.render && r.render.ppm) || 40;
+    GF.setDetail(GF.detailFor(ppm));
     const mb = new GF.Mesh();
     // 屋面通用参数（剪边 / 悬鱼 / 风铎 / 山花材质）统一透传，任何屋顶都会生效
     GF.roofs.setDefaults({
