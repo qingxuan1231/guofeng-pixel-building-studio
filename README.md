@@ -1,4 +1,4 @@
-![](out/演示.gif "演示")
+![](image/演示.gif "演示")
 
 # 国风古建像素工坊 · Guofeng Pixel Building Studio
 
