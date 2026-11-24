@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>国风古建 · 城池像素工坊</title>
-<link rel="stylesheet" href="css/app.css" />
+<link rel="stylesheet" href="css/app.css?v=20261124gridpersp" />
 </head>
 <body>
   <!-- 顶栏 -->
@@ -50,7 +50,7 @@
     <!-- 画布 -->
     <section class="stage">
       <div class="stage-top">
-        <div class="badge">2:1 像素正交</div>
+        <div class="badge">2:1 像素视图</div>
         <div class="badge light" id="camInfo">俯视 30° · 每次旋转 45°</div>
         <div class="spacer"></div>
         <button class="mini" data-view="all" title="全景取景">全景</button>
@@ -66,20 +66,38 @@
         <button class="mini" id="btnGrid" title="地面栅格：1 m 一格，5 格加重">网格</button>
         <button class="mini" id="btnCut">剖切：室内外</button>
       </div>
+      <div class="stage-cam">
+        <div class="cam-title">相机</div>
+        <div class="dens cam-ctl" title="Z 轴俯角：从近平视一路拉到俯视">
+          <label for="pitchRange">俯角</label>
+          <input type="range" id="pitchRange" min="18" max="55" step="1" value="30">
+          <b id="pitchVal">30</b><span class="unit">°</span>
+        </div>
+        <div class="dens cam-ctl" title="透视强度：0 为正交轴测，100% 为人眼透视">
+          <label for="perspRange">透视</label>
+          <input type="range" id="perspRange" min="0" max="100" step="5" value="0">
+          <b id="perspVal">0</b><span class="unit">%</span>
+        </div>
+        <div class="cam-tip">拖动即时轻量预览 · 松手补全图 · 左键上下拖也能调俯角</div>
+      </div>
 
       <div class="canvas-wrap" id="canvasWrap">
         <canvas id="view"></canvas>
+        <div class="scale-bar" id="scaleBar" title="按世界原点处地面投影换算的线段比例尺">
+          <div class="sb-track" id="sbTrack"></div>
+          <div class="sb-labels"><span>0</span><span id="sbLen">5 m</span></div>
+        </div>
         <div class="comp-bar" id="compBar" title="按住组件拖进画面即可落位；数量不再由配方写死"></div>
         <div class="comp-bar bld-bar" id="bldBar" title="建筑本体：点台基 / 每层 / 屋面，逐件调整；面板可拖动"></div>
         <div class="comp-panel" id="compPanel"></div>
         <div class="comp-panel bld-panel" id="bldPanel"></div>
-        <div class="canvas-hint" id="hint">左键拖动旋转 · 右键 / Shift 拖动平移 · 滚轮以光标为锚点缩放 · 双击复位</div>
+        <div class="canvas-hint" id="hint">左键左右拖动转旋向 / 上下拖动调俯视 · 右键 / Shift 拖动平移 · 滚轮以光标为锚点缩放 · 双击复位</div>
       </div>
 
       <div class="stage-bottom">
         <div class="stat" id="stat"></div>
         <div class="spacer"></div>
-        <div class="stat">左键旋转 · 右键平移 · 滚轮缩放</div>
+        <div class="stat">左键旋转 / 俯视 · 右键平移 · 滚轮缩放</div>
       </div>
     </section>
   </div>
@@ -91,17 +109,18 @@
 
   <input type="file" id="fileInput" accept=".json" style="display:none" />
 
-  <script src="js/gf-core.js"></script>
-  <script src="js/gf-roof.js"></script>
-  <script src="js/gf-parts.js"></script>
-  <script src="js/gf-build.js?v=20261124e"></script>
-  <script src="js/gf-render.js"></script>
-  <script src="js/gf-presets.js?v=20261124e"></script>
-  <script src="js/gf-export.js"></script>
-  <script src="js/gf-help.js?v=20261124c"></script>
-  <script src="js/app.js?v=20261124f"></script>
+  <script src="js/gf-core.js?v=20261124gridpersp"></script>
+  <script src="js/gf-roof.js?v=20261124gridpersp"></script>
+  <script src="js/gf-parts.js?v=20261124gridpersp"></script>
+  <script src="js/gf-build.js?v=20261124gridpersp"></script>
+  <script src="js/gf-render.js?v=20261124gridpersp"></script>
+  <script src="js/gf-presets.js?v=20261124gridpersp"></script>
+  <script src="js/gf-export.js?v=20261124gridpersp"></script>
+  <script src="js/gf-help.js?v=20261124gridpersp"></script>
+  <script src="js/app.js?v=20261124gridpersp"></script>
 </body>
 </html>
+
 
 
 

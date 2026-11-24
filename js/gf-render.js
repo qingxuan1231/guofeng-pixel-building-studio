@@ -678,7 +678,11 @@
     return {
       w: W, h: H, rgba,
       // 世界上一点 → 帧内像素：给“拖动陈设”做拾取/反算用（正交投影，地面 y=0）
-      map: { right: cam.right, up: cam.up, ox, oy, ppm },
+      map: {
+        right: cam.right, up: cam.up, view: cam.view,
+        camC: ps ? ps.c : null, camD: ps ? ps.D : 1, persp: ps ? ps.p : 0,
+        ox, oy, ppm
+      },
       occl
     };
   };
@@ -1230,7 +1234,11 @@
         }
         return {
           w: W, h: H, rgba, gpu: true, orbit: true,
-          map: { right: cam.right, up: cam.up, ox, oy, ppm }
+          map: {
+            right: cam.right, up: cam.up, view: cam.view,
+            camC: ps ? ps.c : null, camD: ps ? ps.D : 1, persp: ps ? ps.p : 0,
+            ox, oy, ppm
+          }
         };
       }
 
@@ -1307,7 +1315,11 @@
       }
       return {
         w: W, h: H, rgba, gpu: true, debug: dbg,
-        map: { right: cam.right, up: cam.up, ox, oy, ppm }
+        map: {
+          right: cam.right, up: cam.up, view: cam.view,
+          camC: ps ? ps.c : null, camD: ps ? ps.D : 1, persp: ps ? ps.p : 0,
+          ox, oy, ppm
+        }
       };
     } catch (e) {
       if (typeof console !== 'undefined') console.warn('[gpu] 渲染失败，回落 CPU：' + e.message);

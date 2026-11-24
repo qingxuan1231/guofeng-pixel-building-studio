@@ -16,15 +16,14 @@
 /* 画布底纹略淡，避免和城内的土黄地面撞色 */
 .canvas-wrap::before { opacity: .75; }
 
-/* 舞台顶的俯角 Z 控件：沿用顶栏密度控件的样式，压到 28px 高 */
-.stage-top .dens { height: 28px; padding: 0 8px; }
-.stage-top .dens input[type='range'] { width: 96px; }
+/* 舞台顶的俯角 Z / 透视控件：沿用顶部相机条的紧凑样式 */
+.stage-top { height: 40px; }
 
 /* --------------------------------------------------------------------------
  * 古建配方入城 · 悬浮选框（贴在左菜单右侧，可展开 / 收缩）
  * ------------------------------------------------------------------------ */
 .ancient-dock {
-  position: fixed; left: 330px; top: 100px; z-index: 35;
+  position: fixed; left: 330px; top: 136px; z-index: 35;
   display: flex; align-items: flex-start;
   height: calc(100% - 100px);
   pointer-events: none;

@@ -4,8 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>国风古建 · 城池像素工坊</title>
-<link rel="stylesheet" href="css/app.css" />
-<link rel="stylesheet" href="css/city.css?v=20261124pitchdrag" />
+<link rel="stylesheet" href="css/app.css?v=20261124gridpersp" />
+<link rel="stylesheet" href="css/city.css?v=20261124gridpersp" />
 </head>
 <body>
   <header class="topbar">
@@ -90,13 +90,8 @@
 
     <section class="stage">
       <div class="stage-top">
-        <div class="badge">2:1 像素正交</div>
+        <div class="badge">2:1 像素视图</div>
         <div class="badge light" id="camInfo">俯角 Z 52° · 方位 Y 35°</div>
-        <div class="dens cam-dens" title="Z 轴俯角：从近平视一路拉到正俯视">
-          <label for="pitchRange">俯角 Z</label>
-          <input type="range" id="pitchRange" min="15" max="88" step="1" value="52">
-          <b id="pitchVal">52</b><span class="unit">°</span>
-        </div>
         <div class="spacer"></div>
         <button class="mini" data-view="bird" title="俯角 78°，近乎正俯视">鸟瞰</button>
         <button class="mini" data-view="iso" title="俯角 52°，等轴视角">等轴</button>
@@ -106,6 +101,20 @@
         <button class="mini" data-rot="45" title="顺时针 45°">⟳ 45°</button>
         <button class="mini" id="btnAxis" title="转到中轴正立面（旋向 0°，保持当前缩放）">中轴</button>
         <button class="mini" id="btnFull">全屏</button>
+      </div>
+      <div class="stage-cam">
+        <div class="cam-title">相机</div>
+        <div class="dens cam-ctl" title="Z 轴俯角：从近平视一路拉到正俯视">
+          <label for="pitchRange">俯角 Z</label>
+          <input type="range" id="pitchRange" min="15" max="88" step="1" value="52">
+          <b id="pitchVal">52</b><span class="unit">°</span>
+        </div>
+        <div class="dens cam-ctl" title="透视强度：0 为正交轴测，100% 为人眼透视">
+          <label for="perspRange">透视</label>
+          <input type="range" id="perspRange" min="0" max="100" step="5" value="100">
+          <b id="perspVal">100</b><span class="unit">%</span>
+        </div>
+        <div class="cam-tip">拖动即时轻量预览 · 松手补全图 · 左键上下拖也能调俯角</div>
       </div>
 
       <div class="canvas-wrap" id="canvasWrap">
@@ -128,18 +137,19 @@
 
   <input type="file" id="fileInput" accept=".json" style="display:none" />
 
-  <script src="js/gf-core.js?v=20261124pitchdrag"></script>
+  <script src="js/gf-core.js?v=20261124gridpersp"></script>
   <script src="js/gf-roof.js"></script>
   <script src="js/gf-parts.js"></script>
   <script src="js/gf-build.js?v=20261124"></script>
-  <script src="js/gf-render.js?v=20261124pitchdrag"></script>
+  <script src="js/gf-render.js?v=20261124gridpersp"></script>
   <script src="js/gf-presets.js?v=20261124"></script>
   <script src="js/gf-export.js"></script>
-  <script src="js/gf-city.js?v=20261124pitchdrag"></script>
-  <script src="js/gf-help.js?v=20261124pitchdrag"></script>
-  <script src="js/city-app.js?v=20261124pitchdrag"></script>
+  <script src="js/gf-city.js?v=20261124gridpersp"></script>
+  <script src="js/gf-help.js?v=20261124gridpersp"></script>
+  <script src="js/city-app.js?v=20261124gridpersp"></script>
 </body>
 </html>
+
 
 
 

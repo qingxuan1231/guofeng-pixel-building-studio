@@ -70,7 +70,7 @@
     if (!b) return;
     b.classList.toggle('on', !!state.grid);
     b.title = state.grid
-      ? '地面栅格：开着（1 m 一格，5 格加重；X 轴偏红、Z 轴偏蓝）。点一下关掉'
+      ? '地面栅格：世界米制，按视距 1/2/5m 分档，5 格加重；左上角线段比例尺可读真实尺寸'
       : '地面栅格：关着。点一下打开';
   }
 
@@ -327,20 +327,20 @@
     if (hide) hide.addEventListener('click', () => panel.classList.remove('open'));
     makeDraggable(panel);
     if (!it) return;
-    $('#cpY').addEventListener('input', (e) => {
+    bindCompSlider($('#cpY'), (e) => {
       it.y = +e.target.value;
       $('#cpYv').textContent = it.y.toFixed(2);
-      dragRender();
+      compDragRender();
     });
-    $('#cpR').addEventListener('input', (e) => {
+    bindCompSlider($('#cpR'), (e) => {
       it.rot = +e.target.value;
       $('#cpRv').textContent = Math.round(it.rot) + '°';
-      dragRender();
+      compDragRender();
     });
-    $('#cpS').addEventListener('input', (e) => {
+    bindCompSlider($('#cpS'), (e) => {
       it.s = +e.target.value;
       $('#cpSv').textContent = it.s.toFixed(2);
-      dragRender();
+      compDragRender();
     });
     $('#cpDel').addEventListener('click', () => {
       removeEnvItem(state.selItem);
@@ -1025,6 +1025,7 @@
       items: [
         { path: 'render.ppm', label: '像素 / 米', type: 'range', min: 8, max: 320, step: 4 },
         { path: 'render.pitch', label: '俯视角度', type: 'range', min: 18, max: 55, step: 1, unit: '°' },
+        { path: 'render.persp', label: '透视强度', type: 'range', min: 0, max: 1, step: 0.05 },
         { path: 'render.outline', label: '描边', type: 'toggle' },
         { path: 'render.shadow', label: '投影', type: 'toggle' },
         { path: 'render.sunAz', label: '光照方位', type: 'select', opts: SHADOW_DIRS, dep: { path: 'render.shadow', equals: true } },
@@ -1163,6 +1164,16 @@
     const val = row.querySelector('.val');
     const fmt = (v) => (it.step < 1 ? Number(v).toFixed(2) : Number(v)) + (it.unit || '');
     rg.addEventListener('input', () => {
+      if (it.path === 'render.pitch') {
+        val.textContent = fmt(rg.value);
+        setPitch(Number(rg.value));
+        return;
+      }
+      if (it.path === 'render.persp') {
+        val.textContent = String(Math.round(Number(rg.value) * 100) / 100);
+        setPersp(Number(rg.value));
+        return;
+      }
       setPath(state.recipe, it.path, Number(rg.value));
       // 拖动“层高”＝整体统一层高，清掉逐层自定义值，避免滑块看起来没反应
       if (it.path === 'floorH') state.recipe.floorHList = [];
@@ -1170,6 +1181,8 @@
       if (it.path === 'render.ppm' && state.syncDens) state.syncDens(Number(rg.value));
       onChange(it);
     });
+    if (it.path === 'render.pitch') bindPitchSlider(rg);
+    if (it.path === 'render.persp') bindPerspSlider(rg);
     registry.push({ el: rg, it, kind: 'range', valEl: val, fmt });
     return row;
   }
@@ -1187,6 +1200,8 @@
     });
     if (state.syncDens) state.syncDens(r.render.ppm);
     applyVisibility();
+    syncPitchUI();
+    syncPerspUI();
   }
 
   /* 按「建筑类型」与「依赖开关」显隐 / 置灰控件：
@@ -1257,21 +1272,61 @@
       sunAz: r.render.sunAz,
       shadowAngle: r.render.shadowAngle,
       transparent: r.render.transparent,
+      persp: r.render.persp == null ? 0 : Math.max(0, Math.min(1, Number(r.render.persp))),
       focus: !(r.env.showGround === true),
       seed: r.seed
     }, extra || {});
   }
 
   // 预览预算：画布在屏幕上就那么大，多出来的像素算出来也看不见（导出永远不传，全精度）
+  const PREVIEW_MAX_PIXELS = 2600000;
   function previewBudget(zoom) {
     const w = wrap.clientWidth || 1600;
     const h = wrap.clientHeight || 900;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const z = Math.min(2.5, Math.max(1, (zoom == null ? state.zoom : zoom) / 2));
-    return w * h * dpr * dpr * z * z;
+    const dpr = Math.min(1.25, window.devicePixelRatio || 1);
+    const z = Math.min(2.2, Math.max(1, (zoom == null ? state.zoom : zoom) / 2));
+    return Math.min(PREVIEW_MAX_PIXELS, w * h * dpr * dpr * z * z);
   }
   function previewOpts(extra) {
     return renderOpts(Object.assign({ preview: true, maxPixels: previewBudget(), gpu: state.gpu, gridMask: !!state.grid }, extra || {}));
+  }
+
+  // 记录完整预览的画幅比例，并预先算好交互轻量帧的固定画布尺寸。
+  // 转动 / 调俯角时复用同一块 FBO，不会因取景包围盒差 1px 反复重建纹理。
+  function rememberViewFrame() {
+    if (!state.frame) return;
+    const f = state.frame;
+    state.viewAspect = f.w / f.h;
+    const cap = 1300000;
+    if (f.w * f.h <= cap) {
+      // 完整预览已在轻量预算内，直接用同尺寸 FBO，拖动时不会重新分配
+      state.lightFrame = [f.w, f.h];
+    } else {
+      const px = Math.min(previewBudget(), cap);
+      const fw = Math.max(4, Math.floor(Math.sqrt(px * state.viewAspect) / 4) * 4);
+      const fh = Math.max(4, Math.floor(px / fw / 4) * 4);
+      state.lightFrame = [fw, fh];
+    }
+  }
+
+  function orbitOpts() {
+    const aspect = state.viewAspect
+      || ((state.frame && state.frame.w) ? state.frame.w / state.frame.h : (wrap.clientWidth / wrap.clientHeight));
+    let fw, fh;
+    if (state.lightFrame) { fw = state.lightFrame[0]; fh = state.lightFrame[1]; }
+    else {
+      const px = Math.min(previewBudget(), 1300000);
+      fw = Math.max(4, Math.floor(Math.sqrt(px * aspect) / 4) * 4);
+      fh = Math.max(4, Math.floor(px / fw / 4) * 4);
+    }
+    return previewOpts({
+      orbit: true,
+      orbitAspect: fw / fh,
+      orbitFrame: [fw, fh],
+      maxPixels: Math.min(previewBudget(), 1300000),
+      outline: false,
+      style: 'pixel'
+    });
   }
 
   // 导出也走同一套内核：GPU 开着就用硬件光栅（全精度、不降像素），
@@ -1288,6 +1343,7 @@
       state.mesh = GF.build(r);
       state.moves = state.mesh.moves || [];
       state.frame = GF.render(state.mesh, previewOpts());
+      rememberViewFrame();
       draw();
       const b = state.mesh.bounds('ground');
       $('#stat').textContent = `出图 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · 占地 ${(b.x1 - b.x0).toFixed(1)}×${(b.z1 - b.z0).toFixed(1)}m`;
@@ -1299,6 +1355,141 @@
       $('#stat').textContent = '渲染出错：' + e.message;
     }
   }
+
+  /* ----------------------- 相机轻量帧（不重建几何） ----------------------- */
+  let camRaf = 0;
+  function renderOrbit(tag) {
+    if (!state.mesh || state.playing || camRaf) return;
+    camRaf = requestAnimationFrame(() => {
+      camRaf = 0;
+      if (!state.mesh || state.playing) return;
+      const t0 = performance.now();
+      state.frame = GF.render(state.mesh, orbitOpts());
+      draw();
+      $('#stat').textContent = `${tag || '视角'}预览 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · 轻量帧 ${Math.round(performance.now() - t0)}ms`;
+    });
+  }
+
+  function renderFullPreview() {
+    if (!state.mesh || state.playing) return;
+    if (camRaf) { cancelAnimationFrame(camRaf); camRaf = 0; }
+    const t0 = performance.now();
+    state.frame = GF.render(state.mesh, previewOpts());
+    rememberViewFrame();
+    draw();
+    $('#stat').textContent = `预览 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · ${Math.round(performance.now() - t0)}ms`;
+  }
+
+  /* 俯视角度滑块：拖动时只出轻量帧，松手/停手后补完整预览 */
+  let pitchDirty = false, pitchRaf = 0, pitchIdle = 0, pitchHeld = false;
+  function syncPitchUI() {
+    const val = Math.round(state.recipe.render.pitch);
+    if ($('#pitchRange')) $('#pitchRange').value = val;
+    if ($('#pitchVal')) $('#pitchVal').textContent = val;
+    registry.forEach((b) => {
+      if (b.kind === 'range' && b.it && b.it.path === 'render.pitch') {
+        b.el.value = val;
+        if (b.valEl) b.valEl.textContent = b.fmt(val);
+      }
+    });
+    updateCamInfo();
+  }
+  function pitchLightFrame() {
+    if (pitchRaf) return;
+    pitchRaf = requestAnimationFrame(() => {
+      pitchRaf = 0;
+      if (!pitchDirty) return;
+      renderOrbit('俯角');
+    });
+  }
+  function pitchCommit() {
+    if (!pitchDirty) return;
+    pitchDirty = false;
+    if (pitchRaf) { cancelAnimationFrame(pitchRaf); pitchRaf = 0; }
+    clearTimeout(pitchIdle); pitchIdle = 0;
+    renderFullPreview();
+  }
+  function setPitch(v) {
+    const val = Math.max(18, Math.min(55, Math.round(Number(v))));
+    if (!isFinite(val)) return;
+    state.recipe.render.pitch = val;
+    syncPitchUI();
+    pitchDirty = true;
+    pitchLightFrame();
+    clearTimeout(pitchIdle);
+    pitchIdle = setTimeout(() => { if (!pitchHeld) pitchCommit(); }, 260);
+  }
+  function bindPitchSlider(el) {
+    if (!el) return;
+    el.addEventListener('pointerdown', () => { pitchHeld = true; });
+    el.addEventListener('change', () => { pitchHeld = false; pitchCommit(); });
+  }
+  window.addEventListener('pointerup', () => {
+    if (!pitchHeld) return;
+    pitchHeld = false;
+    pitchCommit();
+  });
+  window.addEventListener('pointercancel', () => {
+    if (!pitchHeld) return;
+    pitchHeld = false;
+    pitchCommit();
+  });
+
+  /* 透视强度：拖动时轻量帧，松手/停手后补完整预览 */
+  let perspDirty = false, perspRaf = 0, perspIdle = 0, perspHeld = false;
+  function syncPerspUI() {
+    const v = Math.max(0, Math.min(1, Number(state.recipe.render.persp) || 0));
+    const pct = Math.round(v * 100);
+    if ($('#perspRange')) $('#perspRange').value = pct;
+    if ($('#perspVal')) $('#perspVal').textContent = pct;
+    registry.forEach((b) => {
+      if (b.kind === 'range' && b.it && b.it.path === 'render.persp') {
+        b.el.value = v;
+        if (b.valEl) b.valEl.textContent = String(Math.round(v * 100) / 100);
+      }
+    });
+    updateCamInfo();
+  }
+  function perspLightFrame() {
+    if (perspRaf) return;
+    perspRaf = requestAnimationFrame(() => {
+      perspRaf = 0;
+      if (!perspDirty) return;
+      renderOrbit('透视');
+    });
+  }
+  function perspCommit() {
+    if (!perspDirty) return;
+    perspDirty = false;
+    if (perspRaf) { cancelAnimationFrame(perspRaf); perspRaf = 0; }
+    clearTimeout(perspIdle); perspIdle = 0;
+    renderFullPreview();
+  }
+  function setPersp(v) {
+    const val = Math.max(0, Math.min(1, Math.round(Number(v) * 100) / 100));
+    if (!isFinite(val)) return;
+    state.recipe.render.persp = val;
+    syncPerspUI();
+    perspDirty = true;
+    perspLightFrame();
+    clearTimeout(perspIdle);
+    perspIdle = setTimeout(() => { if (!perspHeld) perspCommit(); }, 260);
+  }
+  function bindPerspSlider(el) {
+    if (!el) return;
+    el.addEventListener('pointerdown', () => { perspHeld = true; });
+    el.addEventListener('change', () => { perspHeld = false; perspCommit(); });
+  }
+  window.addEventListener('pointerup', () => {
+    if (!perspHeld) return;
+    perspHeld = false;
+    perspCommit();
+  });
+  window.addEventListener('pointercancel', () => {
+    if (!perspHeld) return;
+    perspHeld = false;
+    perspCommit();
+  });
 
   /* --------------------------- 落成演示 --------------------------- */
   // 参考 threejs-architecture-effects 的做法：用一条 0–1 时间线驱动“基础→台基→柱梁→墙面→屋面→脊饰”
@@ -1334,6 +1525,7 @@
       } else {
         stopBuild();
         state.frame = GF.render(state.mesh, previewOpts());
+        rememberViewFrame();
         draw();
         const bb = state.mesh.bounds('ground');
         $('#stat').textContent = `出图 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · 占地 ${(bb.x1 - bb.x0).toFixed(1)}×${(bb.z1 - bb.z0).toFixed(1)}m`;
@@ -1395,12 +1587,13 @@
     paintPartSelection();
     state.bbox = contentBBox(f);
     if (state.refit) { state.refit = false; viewAt(state.view || 'all'); } else layout();
+    updateScaleBar();
   }
 
   /* ------------------------------ 地面网格 ------------------------------ */
-  // 仿 3ds Max / Blender 的正交视图栅格：铺在 y=0 地面上，每格 1 m，
-  // 每五格加重一道；X 轴偏红、Z 轴偏蓝。离画面中心越远越淡，边界不生硬。
-  // 档距随缩放自动升档（1/2/5/10/25/50 m），任何倍率下格子都有 ~10 px，不会糊成一片。
+  // 世界坐标栅格：铺在 y=0 地面上，世界原点 (0,0,0) 是轴交点，
+  // X 轴偏红、Z 轴偏蓝。格距按真实世界跨度分档（1/2/5/10…），不看 ppm 或屏幕像素密度；
+  // 透视时和建筑共用同一相机中心与 k 系数。左上角线段比例尺按原点处地面投影标 0–N m。 */
   const GRID_STEPS = [1, 2, 5, 10, 25, 50, 100];
   function drawGrid(g) {
     const f = state.frame;
@@ -1409,26 +1602,42 @@
     // 画布四角反算到地面，得到「这一帧看得到的世界范围」
     const cs = [unproj(0, 0), unproj(f.w, 0), unproj(0, f.h), unproj(f.w, f.h)];
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    let cornersOk = true;
     for (const q of cs) {
-      if (!isFinite(q.x) || !isFinite(q.z)) return;
+      if (!isFinite(q.x) || !isFinite(q.z)) { cornersOk = false; continue; }
       x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x);
       z0 = Math.min(z0, q.z); z1 = Math.max(z1, q.z);
     }
-    const spanX = x1 - x0, spanZ = z1 - z0;
-    x0 -= spanX * 0.04; x1 += spanX * 0.04; z0 -= spanZ * 0.04; z1 += spanZ * 0.04;
-    // 一米在屏幕上大约多少像素
-    const pxPerM = Math.max(Math.abs(m.right[0]), Math.abs(m.up[2])) * m.ppm || 1;
-    let step = GRID_STEPS[GRID_STEPS.length - 1];
-    for (const s of GRID_STEPS) { if (s * pxPerM >= 10) { step = s; break; } }
+    // 透视下屏幕顶角可能落在视平线以上，反算会外扩得很大；这时用场景包围盒兜底
+    const bb = state.mesh && state.mesh.bounds ? state.mesh.bounds('ground') : null;
+    const sceneSpan = bb && isFinite(bb.x0) ? Math.max(bb.x1 - bb.x0, bb.z1 - bb.z0, 12) : 24;
+    const cover = Math.max(sceneSpan * 2.2, 32);
+    if (!cornersOk || !isFinite(x1) || (x1 - x0) > sceneSpan * 6 || (z1 - z0) > sceneSpan * 6) {
+      x0 = (bb ? Math.min(bb.x0, 0) : -sceneSpan / 2) - cover;
+      x1 = (bb ? Math.max(bb.x1, 0) : sceneSpan / 2) + cover;
+      z0 = (bb ? Math.min(bb.z0, 0) : -sceneSpan / 2) - cover;
+      z1 = (bb ? Math.max(bb.z1, 0) : sceneSpan / 2) + cover;
+    } else {
+      const ext = 0.04 + (m.persp ? 0.25 : 0);
+      const spanX = x1 - x0, spanZ = z1 - z0;
+      x0 = Math.min(x0 - spanX * ext, (bb ? Math.min(bb.x0, 0) : 0) - cover);
+      x1 = Math.max(x1 + spanX * ext, (bb ? Math.max(bb.x1, 0) : 0) + cover);
+      z0 = Math.min(z0 - spanZ * ext, (bb ? Math.min(bb.z0, 0) : 0) - cover);
+      z1 = Math.max(z1 + spanZ * ext, (bb ? Math.max(bb.z1, 0) : 0) + cover);
+    }
+    // 网格按真实世界尺寸分档，不看 ppm / 像素密度；镜头拉远才按跨度换成 2m、5m…
+    const span = Math.max(x1 - x0, z1 - z0);
+    let step = 1;
+    for (const s of GRID_STEPS) { if (span / s <= 100) { step = s; break; } }
     const cx = f.w / 2, cy = f.h / 2;
-    const reach = Math.max(f.w, f.h) * 0.68;
+    const reach = Math.max(f.w, f.h) * (0.68 + (m.persp ? 0.55 * m.persp : 0));
     const fade = (ax, ay, bx, by) => {
       const d = Math.hypot((ax + bx) / 2 - cx, (ay + by) / 2 - cy);
-      return GF.clamp(1 - d / reach, 0.05, 1);
+      return GF.clamp(1 - d / reach, 0.07, 1);
     };
-    const line = (ax, az, bx, bz, color, width) => {
+    const line = (ax, az, bx, bz, color, width, solid) => {
       const A = projWorld(ax, az), B = projWorld(bx, bz);
-      const a = fade(A.fx, A.fy, B.fx, B.fy);
+      const a = solid ? 1 : fade(A.fx, A.fy, B.fx, B.fy);
       g.globalAlpha = a;
       g.strokeStyle = color;
       g.lineWidth = width;
@@ -1453,11 +1662,59 @@
       const major = Math.abs(Math.round(z / step)) % 5 === 0;
       line(x0, z, x1, z, major ? 'rgba(84,74,58,.5)' : 'rgba(96,86,68,.26)', major ? 1.5 : 1);
     }
-    // 两根基准轴：X 轴（左右）偏红，Z 轴（前后）偏蓝
-    line(x0, 0, x1, 0, 'rgba(153,64,52,.9)', 2.2);
-    line(0, z0, 0, z1, 'rgba(58,92,146,.9)', 2.2);
+    // 两根基准轴：X 轴（左右）偏红，Z 轴（前后）偏蓝；透视下保持实色，方便认世界原点
+    line(x0, 0, x1, 0, 'rgba(153,64,52,.9)', 2.2, true);
+    line(0, z0, 0, z1, 'rgba(58,92,146,.9)', 2.2, true);
+    const O = projWorld(0, 0);
+    if (isFinite(O.fx) && isFinite(O.fy)) {
+      g.globalAlpha = 1;
+      g.fillStyle = 'rgba(43,39,34,.78)';
+      g.beginPath();
+      g.arc(O.fx, O.fy, 2.4, 0, Math.PI * 2);
+      g.fill();
+    }
     g.globalAlpha = 1;
     g.restore();
+  }
+
+  // 线段比例尺：用世界原点处 1m 的地面投影换算屏幕长度，不靠 ppm 猜格距
+  let scaleBarKey = '';
+  function updateScaleBar() {
+    const bar = $('#scaleBar');
+    if (!bar) return;
+    const f = state.frame, rect = canvas.getBoundingClientRect();
+    if (!f || !f.map || !rect.width || !f.w) { bar.style.display = 'none'; return; }
+    const O = projWorld(0, 0), X = projWorld(1, 0);
+    let framePerM = Math.hypot(X.fx - O.fx, X.fy - O.fy);
+    if (!isFinite(framePerM) || framePerM < 0.2) framePerM = f.map.ppm || 1;
+    const cssPerM = framePerM * (rect.width / f.w);
+    const choices = [0.5, 1, 2, 5, 10, 20, 50, 100, 200];
+    let len = choices[0], diff = Infinity;
+    for (const c of choices) {
+      const w = c * cssPerM;
+      if (w < 46 || w > 170) continue;
+      const d = Math.abs(w - 100);
+      if (d < diff) { diff = d; len = c; }
+    }
+    if (!isFinite(diff)) {
+      let near = Infinity;
+      for (const c of choices) {
+        const d = Math.abs(c * cssPerM - 100);
+        if (d < near) { near = d; len = c; }
+      }
+    }
+    const width = Math.max(24, Math.round(len * cssPerM));
+    const key = len + ':' + width;
+    if (key !== scaleBarKey) {
+      scaleBarKey = key;
+      const track = $('#sbTrack');
+      if (track) track.innerHTML = '<i class="sb-seg dark"></i><i class="sb-seg light"></i><i class="sb-seg dark"></i><i class="sb-seg light"></i>';
+      const end = $('#sbLen');
+      if (end) end.textContent = (len < 1 ? len.toFixed(1) : len) + ' m';
+    }
+    const track = $('#sbTrack');
+    if (track) track.style.width = width + 'px';
+    bar.style.display = '';
   }
 
   // 图内实际内容（非透明像素）的包围盒，用于取景锚点
@@ -1538,29 +1795,46 @@
     const f = state.frame, r = canvas.getBoundingClientRect();
     return { fx: (clientX - r.left) * f.w / r.width, fy: (clientY - r.top) * f.h / r.height, rect: r };
   }
+  function perspKAt(m, x, y, z) {
+    if (!m || !m.persp || !m.camC || !m.camD) return 1;
+    const depth = (x - m.camC[0]) * m.view[0] + (y - m.camC[1]) * m.view[1] + (z - m.camC[2]) * m.view[2];
+    return 1 + (m.camD / Math.max(0.4, m.camD - depth) - 1) * m.persp;
+  }
+  // 地面网格 / 拾取都按当前相机投影；透视时和 3D 顶点用同一个 k 系数
   function projWorld(x, z) {
     const f = state.frame, m = f.map;
-    const sx = x * m.right[0] + z * m.right[2];
-    const sy = x * m.up[0] + z * m.up[2];
+    const k = perspKAt(m, x, 0, z);
+    const sx = (x * m.right[0] + z * m.right[2]) * k;
+    const sy = (x * m.up[0] + z * m.up[2]) * k;
     return { fx: sx * m.ppm + m.ox, fy: -sy * m.ppm + m.oy };
   }
   function unproj(fx, fy) {
-    const m = state.frame.map;
-    const sx = (fx - m.ox) / m.ppm, sy = -(fy - m.oy) / m.ppm;
-    const det = m.right[0] * m.up[2] - m.right[2] * m.up[0] || 1;
-    return {
-      x: (sx * m.up[2] - m.right[2] * sy) / det,
-      z: (m.right[0] * sy - m.up[0] * sx) / det
-    };
+    return unprojM(state.frame.map, fx, fy);
   }
-  // 拖动建筑时相机映射会因重排而微调，用开始拖动那一刻的映射反算，抓取点才不跑
+  // 拖拽建筑时相机映射会因重排而微调，用开始拖动那一刻的映射反算，抓取点才不跑
   function unprojM(m, fx, fy) {
-    const sx = (fx - m.ox) / m.ppm, sy = -(fy - m.oy) / m.ppm;
-    const det = m.right[0] * m.up[2] - m.right[2] * m.up[0] || 1;
-    return {
-      x: (sx * m.up[2] - m.right[2] * sy) / det,
-      z: (m.right[0] * sy - m.up[0] * sx) / det
+    const px = m.ppm, right = m.right, up = m.up;
+    const U = (fx - m.ox) / px, V = -(fy - m.oy) / px;
+    const det = right[0] * up[2] - right[2] * up[0] || 1;
+    const solve = (k) => {
+      const sx = U / k, sy = V / k;
+      return {
+        x: (sx * up[2] - right[2] * sy) / det,
+        z: (right[0] * sy - up[0] * sx) / det
+      };
     };
+    if (!m.persp || !m.camC || !m.camD) return solve(1);
+    // 透视映射是非线性的：固定屏幕点，迭代求地面 (x, 0, z)
+    let k = 1, q = solve(1);
+    for (let i = 0; i < 12; i++) {
+      const nk = perspKAt(m, q.x, 0, q.z);
+      if (!isFinite(nk) || nk <= 0.05) break;
+      if (Math.abs(nk - k) < 0.0005) { k = nk; break; }
+      k = k * 0.65 + nk * 0.35;
+      q = solve(k);
+      if (!isFinite(q.x) || !isFinite(q.z)) break;
+    }
+    return q;
   }
   // 单体拾取：按这一栋的投影轮廓（地面四角 + 檐顶四角围成的凸包）判断，
   // 点房子身上任意处都算点中，不必对准一个看不见的锚点
@@ -1632,6 +1906,7 @@
     return best;
   }
   let dragRaf = 0;
+  let dragPreviewDirty = false, dragPreviewHeld = false, dragIdle = 0;
   function dragRender() {
     if (dragRaf) return;
     dragRaf = requestAnimationFrame(() => {
@@ -1645,6 +1920,47 @@
       } catch (e) { console.error(e); }
     });
   }
+  // 陈设滑条：拖动时只出低像素预览，松手 / 停手后必须回到完整帧
+  function compDragRender() {
+    dragPreviewDirty = true;
+    clearTimeout(dragIdle);
+    dragIdle = setTimeout(() => { if (!dragPreviewHeld) commitDragPreview(); }, 260);
+    dragRender();
+  }
+  function commitDragPreview() {
+    if (!dragPreviewDirty) return;
+    dragPreviewDirty = false;
+    clearTimeout(dragIdle); dragIdle = 0;
+    if (dragRaf) { cancelAnimationFrame(dragRaf); dragRaf = 0; }
+    try {
+      // 最后一次 input 可能还没被 rAF 画出来，收尾时按当前配方重建一次，再把完整帧补回来
+      state.mesh = GF.build(state.recipe);
+      state.moves = state.mesh.moves || state.moves;
+      renderFullPreview();
+    } catch (e) { console.error(e); }
+  }
+  function bindCompSlider(el, fn) {
+    el.addEventListener('pointerdown', () => { dragPreviewHeld = true; });
+    el.addEventListener('input', fn);
+    const end = () => {
+      if (!dragPreviewHeld) return;
+      dragPreviewHeld = false;
+      commitDragPreview();
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('change', end);
+  }
+  window.addEventListener('pointerup', () => {
+    if (!dragPreviewHeld) return;
+    dragPreviewHeld = false;
+    commitDragPreview();
+  });
+  window.addEventListener('pointercancel', () => {
+    if (!dragPreviewHeld) return;
+    dragPreviewHeld = false;
+    commitDragPreview();
+  });
 
   /* ------------------------------ 交互 ------------------------------ */
   let dragging = null;
@@ -1722,7 +2038,7 @@
       setStat('拖动：' + hit.label + '（松手即落位）');
       return;
     }
-    dragging = { x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey, yaw: state.recipe.render.yaw };
+    dragging = { x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey, yaw: state.recipe.render.yaw, pitch: state.recipe.render.pitch, moved: false, yawMoved: false };
     canvas.classList.add('dragging');
     document.querySelectorAll('[data-view]').forEach((b) => b.classList.remove('on'));
   });
@@ -1771,8 +2087,13 @@
       dragging.x = e.clientX; dragging.y = e.clientY;
       layout();
     } else {
-      state.recipe.render.yaw = (dragging.yaw + dx * 0.4 + 360) % 360;
-      scheduleRender();
+      if (Math.abs(dx) + Math.abs(dy) > 0.5) dragging.moved = true;
+      if (Math.abs(dx) > 2) dragging.yawMoved = true;
+      state.recipe.render.yaw = Math.round((dragging.yaw + dx * 0.4 + 360) % 360);
+      // 上下拖动 = 俯视角度；向下拖看屋面，向上拖看立面
+      state.recipe.render.pitch = Math.max(18, Math.min(55, Math.round(dragging.pitch + dy * 0.3)));
+      syncPitchUI();
+      renderOrbit('视角');
     }
   });
   window.addEventListener('mouseup', () => {
@@ -1798,11 +2119,19 @@
       return;
     }
     if (!dragging) return;
-    // 松手吸附到最近的 15°
-    state.recipe.render.yaw = Math.round(state.recipe.render.yaw / 15) * 15 % 360;
+    const cameraMoved = dragging.moved && !dragging.pan;
+    const yawMoved = dragging.yawMoved;
+    if (cameraMoved) {
+      // 只上下拖俯角时不要把旋向从 35° 硬吸到 30°
+      if (yawMoved) state.recipe.render.yaw = Math.round(state.recipe.render.yaw / 15) * 15 % 360;
+      state.recipe.render.pitch = Math.max(18, Math.min(55, Math.round(state.recipe.render.pitch)));
+    }
     dragging = null;
     canvas.classList.remove('dragging');
-    scheduleRender(true);
+    if (cameraMoved) {
+      syncControls();
+      renderFullPreview();
+    }
   });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -1825,9 +2154,9 @@
   });
 
   let raf = 0;
-  function scheduleRender(force) {
+  function scheduleRender() {
     if (raf) return;
-    raf = requestAnimationFrame(() => { raf = 0; rebuild(); });
+    raf = requestAnimationFrame(() => { raf = 0; renderFullPreview(); });
   }
 
   /* ------------------------------ 导出 ------------------------------ */
@@ -1851,6 +2180,7 @@
         style: r.render.style, styleAmount: r.render.styleAmount,
         outline: r.render.outline, shadow: r.render.shadow,
         transparent: r.render.transparent, seed: r.seed,
+        persp: r.render.persp,
         gpu: state.gpu
       }));
     }
@@ -1919,6 +2249,7 @@
       palette: r.render.palette, style: r.render.style,
       styleAmount: r.render.styleAmount, outline: r.render.outline,
       shadow: r.render.shadow, transparent: r.render.transparent, seed: r.seed,
+      persp: r.render.persp,
       gpu: state.gpu
     });
   }
@@ -1971,6 +2302,15 @@
       chips.appendChild(c);
     });
     markChip('siheyuan');
+
+    if ($('#pitchRange')) {
+      $('#pitchRange').addEventListener('input', (e) => setPitch(Number(e.target.value)));
+      bindPitchSlider($('#pitchRange'));
+    }
+    if ($('#perspRange')) {
+      $('#perspRange').addEventListener('input', (e) => setPersp(Number(e.target.value) / 100));
+      bindPerspSlider($('#perspRange'));
+    }
 
     $('#btnRandom').addEventListener('click', () => {
       state.recipe = GF.randomRecipe(Date.now() % 1e9);

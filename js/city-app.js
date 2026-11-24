@@ -197,12 +197,18 @@
         setPitch(Number(rg.value));
         return;
       }
+      if (it.path === 'render.persp') {
+        val.textContent = fmt(rg.value);
+        setPersp(Number(rg.value));
+        return;
+      }
       setPath(state.city, it.path, Number(rg.value));
       val.textContent = fmt(rg.value);
       if (it.path === 'render.ppm') syncDens(Number(rg.value));
       onChange(it.path);
     });
     if (it.path === 'render.pitch') bindPitchSlider(rg);
+    if (it.path === 'render.persp') bindPerspSlider(rg);
     registry.push({ el: rg, it, kind: 'range', valEl: val, fmt });
     return row;
   }
@@ -238,6 +244,8 @@
     const rp = r.render;
     if ($('#densRange')) { $('#densRange').value = rp.ppm; $('#densVal').textContent = rp.ppm; }
     if ($('#pitchRange')) { $('#pitchRange').value = rp.pitch; $('#pitchVal').textContent = rp.pitch; }
+    const pct = Math.round((rp.persp == null ? 1 : rp.persp) * 100);
+    if ($('#perspRange')) { $('#perspRange').value = pct; $('#perspVal').textContent = pct; }
     setCamInfo();
   }
 
@@ -269,11 +277,18 @@
   // 拖动俯角/转向时始终复用同一块 FBO，不会因为取景包围盒差 1px 反复重建。
   function rememberViewFrame() {
     if (!state.frame) return;
-    state.viewAspect = state.frame.w / state.frame.h;
-    const px = Math.min(previewBudget(), 1050000);
-    const fw = Math.max(4, Math.floor(Math.sqrt(px * state.viewAspect) / 4) * 4);
-    const fh = Math.max(4, Math.floor(px / fw / 4) * 4);
-    state.lightFrame = [fw, fh];
+    const f = state.frame;
+    state.viewAspect = f.w / f.h;
+    const cap = 1050000;
+    if (f.w * f.h <= cap) {
+      // 完整预览本身就在轻量帧预算内：直接复用同尺寸 FBO，拖动时零重分配
+      state.lightFrame = [f.w, f.h];
+    } else {
+      const px = Math.min(previewBudget(), cap);
+      const fw = Math.max(4, Math.floor(Math.sqrt(px * state.viewAspect) / 4) * 4);
+      const fh = Math.max(4, Math.floor(px / fw / 4) * 4);
+      state.lightFrame = [fw, fh];
+    }
   }
 
   function renderOpts(ppmOverride, pad, preview, extra) {
@@ -436,6 +451,62 @@
     if (!pitchHeld) return;
     pitchHeld = false;
     pitchCommit();
+  });
+
+  /* 顶部透视滑杆：拖动时轻量帧，松手补完整图 */
+  let perspDirty = false, perspRAF = 0, perspIdle = 0, perspHeld = false;
+  function syncPerspUI() {
+    const v = Math.max(0, Math.min(1, Number(state.city.render.persp) || 0));
+    const pct = Math.round(v * 100);
+    if ($('#perspRange')) $('#perspRange').value = pct;
+    if ($('#perspVal')) $('#perspVal').textContent = pct;
+    const rg = document.querySelector('input[data-k="render.persp"]');
+    if (rg) {
+      rg.value = v;
+      const valEl = rg.parentElement.querySelector('.val');
+      if (valEl) valEl.textContent = String(Math.round(v * 100) / 100);
+    }
+    setCamInfo();
+  }
+  function perspLightFrame() {
+    if (perspRAF) return;
+    perspRAF = requestAnimationFrame(() => {
+      perspRAF = 0;
+      if (!perspDirty) return;
+      renderPreview(true, '透视');
+    });
+  }
+  function perspCommit() {
+    if (!perspDirty) return;
+    perspDirty = false;
+    if (perspRAF) { cancelAnimationFrame(perspRAF); perspRAF = 0; }
+    clearTimeout(perspIdle); perspIdle = 0;
+    renderPreview(false);
+  }
+  function setPersp(v) {
+    const val = Math.max(0, Math.min(1, Math.round(Number(v) * 100) / 100));
+    if (!isFinite(val)) return;
+    state.city.render.persp = val;
+    syncPerspUI();
+    perspDirty = true;
+    perspLightFrame();
+    clearTimeout(perspIdle);
+    perspIdle = setTimeout(() => { if (!perspHeld) perspCommit(); }, 260);
+  }
+  function bindPerspSlider(el) {
+    if (!el) return;
+    el.addEventListener('pointerdown', () => { perspHeld = true; });
+    el.addEventListener('change', () => { perspHeld = false; perspCommit(); });
+  }
+  window.addEventListener('pointerup', () => {
+    if (!perspHeld) return;
+    perspHeld = false;
+    perspCommit();
+  });
+  window.addEventListener('pointercancel', () => {
+    if (!perspHeld) return;
+    perspHeld = false;
+    perspCommit();
   });
 
   function rebuild(keepView) {
@@ -935,6 +1006,8 @@
     });
     $('#pitchRange').addEventListener('input', (e) => setPitch(Number(e.target.value)));
     bindPitchSlider($('#pitchRange'));
+    $('#perspRange').addEventListener('input', (e) => setPersp(Number(e.target.value) / 100));
+    bindPerspSlider($('#perspRange'));
 
     document.querySelectorAll('[data-view]').forEach((b) => {
       b.addEventListener('click', () => {

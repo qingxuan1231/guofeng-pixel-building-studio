@@ -59,7 +59,7 @@
       palette: 'qingya', ppm: 16, pitch: 30, yaw: 45, dirs: 1,
       outline: true, shadow: true, sunAz: null, shadowAngle: 1.15,
       transparent: true,
-      style: 'pixel', styleAmount: 0.75
+      style: 'pixel', styleAmount: 0.75, persp: 0
     }
   };
 
@@ -73,6 +73,8 @@
     r.cut = Object.assign({ front: false, back: false, left: false, right: false, roof: false }, src && src.cut);
     r.env = Object.assign(clone(DEF.env), src && src.env);
     r.render = Object.assign(clone(DEF.render), src && src.render);
+    r.render.persp = Math.max(0, Math.min(1, r.render.persp == null ? DEF.render.persp : Number(r.render.persp)));
+    if (!isFinite(r.render.persp)) r.render.persp = DEF.render.persp;
     if (!Array.isArray(r.interior)) r.interior = [];
     if (!Array.isArray(r.env.trees)) r.env.trees = ['pine'];
     if (!Array.isArray(r.env.props)) r.env.props = [];
