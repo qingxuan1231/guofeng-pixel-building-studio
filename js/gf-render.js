@@ -943,39 +943,59 @@
       const b = mesh.bounds();
       if (!isFinite(b.x0)) return null;
 
-      /* 取景：与 CPU 版完全同一套规则（先按顶点投影求范围，再按 focus 裁到建筑本体） */
-      const n = mesh.triCount * 3;
-      const px = new Float32Array(n), py = new Float32Array(n);
-      let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+      /* 取景：
+       * 普通帧与 CPU 版完全同一套规则（先按顶点投影求范围，再按 focus 裁到建筑本体）。
+       * 轨道拖拽帧（o.orbit）不逐顶点求包围盒：用世界包围盒+相机基向量算一个固定的
+       * 取景框（宽高比沿用当前画布）。这样每帧 W/H 不变，FBO 不会反复重建，也不用在
+       * CPU 上投影 50 万个顶点。 */
       const view0 = cam.view, right0 = cam.right, up0 = cam.up;
-      for (let i = 0; i < n; i++) {
-        const vx = mesh.pos[i * 3], vy = mesh.pos[i * 3 + 1], vz = mesh.pos[i * 3 + 2];
-        const sx = vx * right0[0] + vz * right0[2];
-        const sy = vx * up0[0] + vy * up0[1] + vz * up0[2];
-        px[i] = sx; py[i] = -sy;
-        if (px[i] < minx) minx = px[i]; if (px[i] > maxx) maxx = px[i];
-        if (py[i] < miny) miny = py[i]; if (py[i] > maxy) maxy = py[i];
-      }
-      let bx0 = minx, bx1 = maxx, by0 = miny, by1 = maxy;
-      if (o.focus === false) {
-        const m2 = Math.max(0.5, Math.max(maxx - minx, maxy - miny) * 0.07);
-        bx0 = minx - m2; bx1 = maxx + m2; by0 = miny - m2; by1 = maxy + m2;
-      }
-      if (o.focus !== false) {
-        const ENV_TAGS = ['ground', '树', '假山', '水池', '幡', '石灯', '井', '碑', '钟', '鼓', '盆景', '拴马桩', '曲桥', '花池', '甬道'];
-        let fx0 = 1e9, fx1 = -1e9, fy0 = 1e9, fy1 = -1e9, hit = 0;
-        for (let t = 0; t < mesh.triCount; t++) {
-          if (ENV_TAGS.indexOf(mesh.tag[t]) >= 0) continue;
-          hit++;
-          for (let k = 0; k < 3; k++) {
-            const p = t * 3 + k;
-            if (px[p] < fx0) fx0 = px[p]; if (px[p] > fx1) fx1 = px[p];
-            if (py[p] < fy0) fy0 = py[p]; if (py[p] > fy1) fy1 = py[p];
-          }
+      let bx0, bx1, by0, by1;
+      if (o.orbit) {
+        const cx = (b.x0 + b.x1) * 0.5, cy = (b.y0 + b.y1) * 0.5, cz = (b.z0 + b.z1) * 0.5;
+        const radXZ = Math.sqrt((b.x1 - b.x0) * (b.x1 - b.x0) + (b.z1 - b.z0) * (b.z1 - b.z0)) * 0.5;
+        // 方形框要同时覆盖水平对角线、建筑高度和投影后的进深，留 6% 余量
+        const side = Math.max(12, (radXZ * 2 + (b.y1 - b.y0)) * 1.06);
+        // 轨道帧沿用当前画布的宽高比，避免拖拽时方形帧被 CSS 拉宽、城池变形
+        const aspect = o.orbitAspect > 0 ? o.orbitAspect : 1;
+        const halfW = side * (aspect >= 1 ? aspect : 1) * 0.5;
+        const halfH = side * (aspect >= 1 ? 1 : 1 / aspect) * 0.5;
+        const sx = cx * right0[0] + cz * right0[2];
+        const sy = -(cx * up0[0] + cy * up0[1] + cz * up0[2]);
+        bx0 = sx - halfW; bx1 = sx + halfW;
+        by0 = sy - halfH; by1 = sy + halfH;
+      } else {
+        const n = mesh.triCount * 3;
+        const px = new Float32Array(n), py = new Float32Array(n);
+        let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+        for (let i = 0; i < n; i++) {
+          const vx = mesh.pos[i * 3], vy = mesh.pos[i * 3 + 1], vz = mesh.pos[i * 3 + 2];
+          const sx = vx * right0[0] + vz * right0[2];
+          const sy = vx * up0[0] + vy * up0[1] + vz * up0[2];
+          px[i] = sx; py[i] = -sy;
+          if (px[i] < minx) minx = px[i]; if (px[i] > maxx) maxx = px[i];
+          if (py[i] < miny) miny = py[i]; if (py[i] > maxy) maxy = py[i];
         }
-        if (hit > 0 && isFinite(fx0)) {
-          const m = Math.max(0.55, Math.max(fx1 - fx0, fy1 - fy0) * 0.16);
-          bx0 = fx0 - m; bx1 = fx1 + m; by0 = fy0 - m; by1 = fy1 + m;
+        bx0 = minx; bx1 = maxx; by0 = miny; by1 = maxy;
+        if (o.focus === false) {
+          const m2 = Math.max(0.5, Math.max(maxx - minx, maxy - miny) * 0.07);
+          bx0 = minx - m2; bx1 = maxx + m2; by0 = miny - m2; by1 = maxy + m2;
+        }
+        if (o.focus !== false) {
+          const ENV_TAGS = ['ground', '树', '假山', '水池', '幡', '石灯', '井', '碑', '钟', '鼓', '盆景', '拴马桩', '曲桥', '花池', '甬道'];
+          let fx0 = 1e9, fx1 = -1e9, fy0 = 1e9, fy1 = -1e9, hit = 0;
+          for (let t = 0; t < mesh.triCount; t++) {
+            if (ENV_TAGS.indexOf(mesh.tag[t]) >= 0) continue;
+            hit++;
+            for (let k = 0; k < 3; k++) {
+              const p = t * 3 + k;
+              if (px[p] < fx0) fx0 = px[p]; if (px[p] > fx1) fx1 = px[p];
+              if (py[p] < fy0) fy0 = py[p]; if (py[p] > fy1) fy1 = py[p];
+            }
+          }
+          if (hit > 0 && isFinite(fx0)) {
+            const m = Math.max(0.55, Math.max(fx1 - fx0, fy1 - fy0) * 0.16);
+            bx0 = fx0 - m; bx1 = fx1 + m; by0 = fy0 - m; by1 = fy1 + m;
+          }
         }
       }
       let ppm = ppmBase;
@@ -1131,9 +1151,24 @@
       /* 读回：颜色 + 元信息（材质、色阶、地面、16bit 深度） */
       const N = W * H;
       const bufC = new Uint8Array(N * 4);
-      const bufI = new Uint8Array(N * 4);
       gl.readBuffer(gl.COLOR_ATTACHMENT0);
       gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, bufC);
+
+      /* 轨道拖拽帧只做“颜色读回 + 上下翻行”：不读第二张信息缓冲、不做描边/画风/逐像素解包。
+       * 拖拽时用户看的是角度变化，不是最终笔触；松手后再走完整预览。 */
+      if (o.orbit) {
+        const rgba = new Uint8ClampedArray(N * 4);
+        const row = W * 4;
+        for (let y = 0; y < H; y++) {
+          rgba.set(bufC.subarray((H - 1 - y) * row, (H - y) * row), y * row);
+        }
+        return {
+          w: W, h: H, rgba, gpu: true, orbit: true,
+          map: { right: cam.right, up: cam.up, ox, oy, ppm }
+        };
+      }
+
+      const bufI = new Uint8Array(N * 4);
       gl.readBuffer(gl.COLOR_ATTACHMENT1);
       gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, bufI);
 

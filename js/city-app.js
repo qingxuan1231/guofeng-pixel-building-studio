@@ -10,7 +10,8 @@
     city: GF.getCityPreset('standard'),
     mesh: null, frame: null,
     zoom: 2, panX: 0, panY: 0,
-    busy: false, pending: false, preset: 'standard'
+    busy: false, pending: false, preset: 'standard',
+    pendingRender: false
   };
 
   /* 渲染内核：GPU（WebGL2 硬件光栅） / CPU（软件光栅）。与古建页共用同一个记忆。 */
@@ -138,6 +139,12 @@
   ];
 
   const registry = [];
+  // 只影响相机/成像、不需要重新筑城的参数。拖这些滑块只重渲染，不重建几何。
+  const CAMERA_KEYS = new Set([
+    'render.yaw', 'render.pitch', 'render.ppm', 'render.palette', 'render.style',
+    'render.styleAmount', 'render.outline', 'render.shadow', 'render.sunAz',
+    'render.shadowAngle', 'render.transparent'
+  ]);
 
   function buildRow(it) {
     const row = document.createElement('div');
@@ -146,7 +153,7 @@
     if (it.type === 'toggle') {
       row.innerHTML = `<label>${it.label}</label><div class="ctl"><input type="checkbox" /></div>`;
       const cb = row.querySelector('input');
-      cb.addEventListener('change', () => { setPath(state.city, it.path, cb.checked); onChange(); });
+      cb.addEventListener('change', () => { setPath(state.city, it.path, cb.checked); onChange(it.path); });
       registry.push({ el: cb, it, kind: 'toggle' });
       return row;
     }
@@ -158,7 +165,7 @@
         op.value = o.v; op.textContent = o.t;
         sel.appendChild(op);
       });
-      sel.addEventListener('change', () => { setPath(state.city, it.path, sel.value); onChange(); });
+      sel.addEventListener('change', () => { setPath(state.city, it.path, sel.value); onChange(it.path); });
       registry.push({ el: sel, it, kind: 'select' });
       return row;
     }
@@ -171,7 +178,7 @@
         v = Math.max(it.min, Math.min(it.max, Math.round(v)));
         inp.value = v;
         setPath(state.city, it.path, v);
-        onChange();
+        onChange(it.path);
       });
       registry.push({ el: inp, it, kind: 'number' });
       return row;
@@ -188,7 +195,7 @@
       val.textContent = fmt(rg.value);
       if (it.path === 'render.ppm') syncDens(Number(rg.value));
       if (it.path === 'render.pitch') setCamInfo();
-      onChange();
+      onChange(it.path);
     });
     registry.push({ el: rg, it, kind: 'range', valEl: val, fmt });
     return row;
@@ -242,15 +249,17 @@
 
   /* ----------------------------- 渲染与视图 ----------------------------- */
   // 预览预算：屏幕只看得见这么大，多出来的像素不必算（导出永远不传，全精度）
+  // 高 DPI / 高倍缩放不再把像素数乘到失控；像素画最终是 CSS 放大显示，1.25x 足够。
+  const PREVIEW_MAX_PIXELS = 2600000;
   function previewBudget(zoom) {
     const w = wrap.clientWidth || 1600;
     const h = wrap.clientHeight || 900;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const z = Math.min(2.5, Math.max(1, (zoom == null ? state.zoom : zoom) / 2));
-    return w * h * dpr * dpr * z * z;
+    const dpr = Math.min(1.25, window.devicePixelRatio || 1);
+    const z = Math.min(2.2, Math.max(1, (zoom == null ? state.zoom : zoom) / 2));
+    return Math.min(PREVIEW_MAX_PIXELS, w * h * dpr * dpr * z * z);
   }
 
-  function renderOpts(ppmOverride, pad, preview) {
+  function renderOpts(ppmOverride, pad, preview, extra) {
     const r = state.city.render;
     const o = {
       ppm: ppmOverride || r.ppm, pitch: r.pitch, yaw: r.yaw, palette: r.palette,
@@ -265,10 +274,11 @@
       o.preview = true;
       o.maxPixels = previewBudget();
     }
+    if (extra) Object.assign(o, extra);
     return o;
   }
 
-  function draw() {
+  function draw(skipLayout) {
     const f = state.frame;
     if (!f) return;
     if (state.gpu && f.gpu !== true) {
@@ -282,10 +292,17 @@
     } else if (state.gpu) {
       state.gpuMiss = 0;
     }
-    canvas.width = f.w;
-    canvas.height = f.h;
-    canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(f.rgba), f.w, f.h), 0, 0);
-    layout();
+    // 同尺寸不要反复设置 canvas.width/height：每次赋值都会清空画布并重置上下文。
+    if (canvas.width !== f.w || canvas.height !== f.h) {
+      canvas.width = f.w;
+      canvas.height = f.h;
+    }
+    const ctx = canvas.getContext('2d');
+    const img = (f.rgba instanceof Uint8ClampedArray)
+      ? new ImageData(f.rgba, f.w, f.h)
+      : new ImageData(new Uint8ClampedArray(f.rgba), f.w, f.h);
+    ctx.putImageData(img, 0, 0);
+    if (!skipLayout) layout();
   }
 
   function layout() {
@@ -304,6 +321,29 @@
     canvas.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
   }
 
+  /* 只重画，不重建几何：转视角、俯角、画风、像素密度都走这里 */
+  function renderPreview(orbit) {
+    if (!state.mesh) return;
+    if (state.busy) { state.pendingRender = true; return; }
+    const t0 = performance.now();
+    const o = orbit
+      ? renderOpts(null, null, true, {
+          orbit: true,
+          orbitAspect: (state.frame && state.frame.w) ? state.frame.w / state.frame.h : (wrap.clientWidth / wrap.clientHeight),
+          maxPixels: Math.min(previewBudget(), 1050000),
+          outline: false,
+          style: 'pixel'
+        })
+      : renderOpts(null, null, true);
+    state.frame = GF.render(state.mesh, o);
+    draw(!!orbit);
+    if (!orbit) {
+      $('#stat').textContent = `预览 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · ${Math.round(performance.now() - t0)}ms`;
+    } else {
+      $('#stat').textContent = `旋转预览 ${state.frame.w}×${state.frame.h}px · 轻量帧 ${Math.round(performance.now() - t0)}ms`;
+    }
+  }
+
   function rebuild(keepView) {
     if (state.busy) { state.pending = true; return; }
     state.busy = true;
@@ -312,6 +352,7 @@
       const t0 = performance.now();
       state.mesh = GF.buildCity(state.city);
       state.frame = GF.render(state.mesh, renderOpts(null, null, true));
+      state.pendingRender = false;
       draw();
       if (!keepView) { state.panX = state.panY = 0; state.zoom = 2; layout(); }
       $('#stat').textContent = `出图 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · ${Math.round(performance.now() - t0)}ms`;
@@ -332,17 +373,38 @@
     }, 0);
   }
 
-  let timer = 0;
-  function onChange() {
+  let timer = 0, needRebuild = false, needRender = false;
+  function onChange(path) {
     clearTimeout(timer);
-    timer = setTimeout(() => rebuild(true), 160);
+    if (path && CAMERA_KEYS.has(path)) needRender = true;
+    else needRebuild = true;
+    const delay = needRebuild ? 160 : 80;
+    timer = setTimeout(() => {
+      const rb = needRebuild, rr = needRender;
+      needRebuild = needRender = false;
+      if (rb) rebuild(true);
+      else if (rr) renderPreview(false);
+    }, delay);
   }
 
   /* ----------------------------- 交互 ----------------------------- */
   let dragging = null;
+  let orbitRAF = 0;
+
+  /* 拖拽转视角：只触发 rAF 一次的轻量轨道帧（不重建城池、不读第二张 GPU 缓冲、不做描边）。
+   * 鼠标停下来后，mouseup 再补一张完整预览；这样拖动过程不再被 400ms 的筑城卡住。 */
+  function scheduleOrbit() {
+    if (orbitRAF) return;
+    orbitRAF = requestAnimationFrame(() => {
+      orbitRAF = 0;
+      if (!dragging || dragging.pan) return;
+      renderPreview(true);
+    });
+  }
+
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener('mousedown', (e) => {
-    dragging = { x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey, yaw: state.city.render.yaw };
+    dragging = { x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey, yaw: state.city.render.yaw, moved: false };
     canvas.classList.add('dragging');
   });
   window.addEventListener('mousemove', (e) => {
@@ -351,20 +413,24 @@
     if (dragging.pan) {
       state.panX += dx; state.panY += dy;
       dragging.x = e.clientX; dragging.y = e.clientY;
+      dragging.moved = true;
       layout();
     } else {
+      if (Math.abs(dx) + Math.abs(dy) > 0.5) dragging.moved = true;
       state.city.render.yaw = Math.round((dragging.yaw + dx * 0.4 + 360) % 360);
       setCamInfo();
-      onChange();
+      scheduleOrbit();
     }
   });
   window.addEventListener('mouseup', () => {
     if (!dragging) return;
-    state.city.render.yaw = Math.round(state.city.render.yaw / 15) * 15 % 360;
+    if (orbitRAF) { cancelAnimationFrame(orbitRAF); orbitRAF = 0; }
+    const cameraMoved = dragging.moved && !dragging.pan;
+    if (cameraMoved) state.city.render.yaw = Math.round(state.city.render.yaw / 15) * 15 % 360;
     dragging = null;
     canvas.classList.remove('dragging');
     syncControls();
-    onChange();
+    if (cameraMoved) renderPreview(false);
   });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -751,7 +817,7 @@
       state.city.render.yaw = 0;
       state.panX = state.panY = 0;
       syncControls();
-      onChange();
+      onChange('render.yaw');
     });
     $('#btnFull').addEventListener('click', () => {
       if (document.fullscreenElement) document.exitFullscreen();
@@ -762,7 +828,7 @@
       syncDens(Number(e.target.value));
       const rg = document.querySelector('input[data-k="render.ppm"]');
       if (rg) { rg.value = state.city.render.ppm; const val = rg.parentElement.querySelector('.val'); if (val) val.textContent = state.city.render.ppm; }
-      onChange();
+      onChange('render.ppm');
     });
     $('#pitchRange').addEventListener('input', (e) => {
       state.city.render.pitch = Number(e.target.value);
@@ -770,7 +836,7 @@
       setCamInfo();
       const rg = document.querySelector('input[data-k="render.pitch"]');
       if (rg) { rg.value = state.city.render.pitch; const val = rg.parentElement.querySelector('.val'); if (val) val.textContent = state.city.render.pitch + '°'; }
-      onChange();
+      onChange('render.pitch');
     });
 
     document.querySelectorAll('[data-view]').forEach((b) => {
@@ -778,7 +844,7 @@
         const v = b.dataset.view;
         state.city.render.pitch = v === 'bird' ? 78 : v === 'iso' ? 52 : v === 'low' ? 30 : 16;
         syncControls();
-        onChange();
+        onChange('render.pitch');
       });
     });
     document.querySelectorAll('[data-rot]').forEach((b) => {
@@ -786,7 +852,7 @@
         const step = Number(b.dataset.rot);
         state.city.render.yaw = (state.city.render.yaw + step + 360) % 360;
         syncControls();
-        onChange();
+        onChange('render.yaw');
       });
     });
     window.addEventListener('resize', layout);
@@ -795,7 +861,7 @@
       state.gpu = !state.gpu;
       try { localStorage.setItem('gf.renderMode', state.gpu ? 'gpu' : 'cpu'); } catch (e) {}
       paintMode();
-      rebuild();
+      renderPreview(false);
     });
   }
 
