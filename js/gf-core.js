@@ -241,6 +241,13 @@
       for (let i = 0; i < this.wx.length; i++) { this.wx[i] += dx; this.wz[i] += dz; }
       return this;
     }
+    /** 等比缩放（城市落位时把外来配方缩到地块里；法线方向不变） */
+    scale(s) {
+      if (!isFinite(s) || Math.abs(s) < 1e-6 || s === 1) return this;
+      for (let i = 0; i < this.pos.length; i++) this.pos[i] *= s;
+      for (let i = 0; i < this.wx.length; i++) { this.wx[i] *= s; this.wz[i] *= s; }
+      return this;
+    }
     /** 绕 Y 轴旋转（以 (cx,cz) 为中心） */
     rotateY(deg, cx, cz) {
       const a = (deg * Math.PI) / 180;

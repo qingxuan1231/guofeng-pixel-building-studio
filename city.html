@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>国风古建 · 城池像素工坊</title>
 <link rel="stylesheet" href="css/app.css" />
-<link rel="stylesheet" href="css/city.css?v=20261124e" />
+<link rel="stylesheet" href="css/city.css?v=20261124panel4" />
 </head>
 <body>
   <header class="topbar">
@@ -47,6 +47,47 @@
       </div>
     </aside>
 
+    <!-- 古建配方入城：贴在左菜单右侧的悬浮选框，可展开 / 收缩 -->
+    <div class="ancient-dock open" id="ancientDock">
+      <button class="ancient-rail" id="ancientToggle" type="button" title="展开 / 收缩古建配方选框">
+        <span class="rail-text">古建配方</span>
+        <span class="rail-count" id="ancientRailCount">0</span>
+        <span class="rail-arrow">›</span>
+      </button>
+      <aside class="ancient-panel" id="ancientPanel">
+        <div class="ancient-head">
+          <div>
+            <b>古建配方入城</b>
+            <span>从古建工坊搬一栋进来，自动找空坊落位</span>
+          </div>
+          <button class="ancient-x" id="ancientClose" type="button" title="收缩">×</button>
+        </div>
+        <div class="ancient-body">
+          <section class="ancient-sec">
+            <div class="ancient-sec-head"><b>快速预设</b><span>点击 + 一键入城</span></div>
+            <div class="ancient-grid" id="ancientQuick"></div>
+          </section>
+          <section class="ancient-sec">
+            <div class="ancient-sec-head"><b>导入配方 JSON</b><span>单个 / 数组 / 工坊导出</span></div>
+            <div class="ancient-import">
+              <button class="ancient-file" id="ancientFileBtn" type="button">选择 .json 文件</button>
+              <input type="file" id="ancientFile" accept=".json,application/json" hidden>
+              <textarea id="ancientPaste" placeholder="也可以直接粘贴古建配方 JSON…"></textarea>
+              <button class="ancient-add" id="ancientPasteBtn" type="button">解析并加入</button>
+            </div>
+          </section>
+          <section class="ancient-sec">
+            <div class="ancient-sec-head"><b>已入城</b><span id="ancientCount">0 座</span></div>
+            <div class="ancient-list" id="ancientList"><div class="ancient-empty">还没有外部古建，先从上面的预设挑一座。</div></div>
+          </section>
+        </div>
+        <div class="ancient-foot">
+          <span id="ancientStatus">导入的配方会按地块自动缩放。</span>
+          <button class="ancient-clear" id="ancientClear" type="button">清空</button>
+        </div>
+      </aside>
+    </div>
+
     <section class="stage">
       <div class="stage-top">
         <div class="badge">2:1 像素正交</div>
@@ -87,18 +128,20 @@
 
   <input type="file" id="fileInput" accept=".json" style="display:none" />
 
-  <script src="js/gf-core.js"></script>
+  <script src="js/gf-core.js?v=20261124panel4"></script>
   <script src="js/gf-roof.js"></script>
   <script src="js/gf-parts.js"></script>
   <script src="js/gf-build.js?v=20261124"></script>
   <script src="js/gf-render.js"></script>
   <script src="js/gf-presets.js?v=20261124"></script>
   <script src="js/gf-export.js"></script>
-  <script src="js/gf-city.js?v=20261124i"></script>
+  <script src="js/gf-city.js?v=20261124panel4"></script>
   <script src="js/gf-help.js?v=20261124e"></script>
-  <script src="js/city-app.js?v=20261124j"></script>
+  <script src="js/city-app.js?v=20261124panel4"></script>
 </body>
 </html>
+
+
 
 
 

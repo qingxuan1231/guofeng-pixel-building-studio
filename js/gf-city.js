@@ -9,7 +9,7 @@
     wallH: 9.0, wallT: 4.6, gateW: 11, roadW: 9.5, moatW: 9,
     cols: 3, rows: 3, density: 0.9,
     moat: true, matta: true, tower: true, palace: true, gateTowerOn: true,
-    bastionGap: 26, blockWallH: 2.2, blockGateW: 3.6, blockWallOn: true, blockJit: 1, axisHalls: 1,
+    bastionGap: 26, blockWallH: 2.2, blockGateW: 3.6, blockWallOn: false, blockJit: 1, axisHalls: 1,
     wallTaper: 0.16, merlon: true, merlonStep: 1.8, merlonW: 1.0, merlonH: 0.95,
     parapet: false, parapetH: 0.8, mattaTower: true, mattaW: 8.0, mattaOut: 4.2,
     wengcheng: false, wengD: 10, wengW: 18, wengOffset: 0.35, arrowTower: true,
@@ -36,6 +36,8 @@
     r.wengW = Math.max(8, Number(r.wengW) || DEF_CITY.wengW);
     r.lifeDensity = Math.max(0, Math.min(1, r.lifeDensity == null ? DEF_CITY.lifeDensity : Number(r.lifeDensity)));
     r.blockJit = Math.max(0, Math.min(1, r.blockJit == null ? DEF_CITY.blockJit : Number(r.blockJit)));
+    // 古建配方入城：数组里每项 { recipe, name?, rot?, ... }，由城池统一找地块落位
+    r.extras = Array.isArray(r.extras) ? r.extras.filter((x) => x && (x.recipe || x.type)) : [];
     return r;
   };
 
@@ -243,6 +245,169 @@
     GF.parts.lantern(mb, x, 2.2, z, s, '街灯');
   }
 
+  /* --------------------------------------------------------------------------
+   * 古建配方入城
+   * 城市里的“建筑群”优先取自古建工坊的 preset：主栋 + 可选厢房/牌坊，
+   * 整组先量包围盒，只有真正塞得进地块才落位；外来 JSON 配方也走同一套。
+   * ------------------------------------------------------------------------ */
+  const HOUSE_KEYS = ['jiangnan', 'huizhou', 'hanMin', 'tangMin', 'songMin'];
+  const SMALL_KEYS = ['ting', 'bajiaoting', 'yuandian', 'shuixie', 'paifang'];
+
+  function presetSize(key) {
+    if (!GF.getPreset) return { w: 10, d: 8 };
+    const q = GF.getPreset(key);
+    if (q.type === 'courtyard') return { w: (q.courtW || 20) + 1.6, d: (q.courtD || 18) + 1.6 };
+    if (q.type === 'pagoda') {
+      const w = Math.max(8.5, (q.tierR || 2) * 2 + 2.2);
+      return { w, d: w };
+    }
+    if (q.type === 'archway') return { w: (q.bays || 3) * (q.bayW || 3) + 2.4, d: 3.4 };
+    const w = (q.bays || 3) * (q.bayW || 3) + 2 * (q.eave || 1) + 2.4;
+    const d = (q.depth || 6) + 2 * (q.eave || 1) + 2.2;
+    return { w, d };
+  }
+
+  function cleanCityEnv(rec, city) {
+    rec.env = Object.assign({}, rec.env || {}, {
+      showGround: false, ground: 'none', groundSize: 0, trees: [], rocks: 0,
+      pond: null, banners: 0, path: false, props: [], items: [], auto: [], move: null
+    });
+    rec.render = Object.assign({}, rec.render || {}, { transparent: true, ppm: city.render.ppm });
+    return rec;
+  }
+
+  function buildPresetMesh(key, seed, city) {
+    if (!GF.getPreset || !GF.build) return null;
+    const rec = GF.getPreset(key);
+    rec.seed = seed || rec.seed;
+    cleanCityEnv(rec, city);
+    try { return GF.build(rec, { ppm: city.render.ppm }); } catch (e) { return null; }
+  }
+
+  function buildRecipeMesh(src, seed, city) {
+    if (!src || !GF.build) return null;
+    let rec;
+    try { rec = GF.normalize(JSON.parse(JSON.stringify(src))); } catch (e) { return null; }
+    if (!rec || rec.type === 'city') return null;
+    rec.seed = seed || rec.seed || city.seed;
+    cleanCityEnv(rec, city);
+    try { return GF.build(rec, { ppm: city.render.ppm }); } catch (e) { return null; }
+  }
+
+  function meshBox(m) {
+    const b = m.bounds();
+    return { x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1, w: b.x1 - b.x0, d: b.z1 - b.z0 };
+  }
+
+  function centerMesh(m) {
+    const b = meshBox(m);
+    m.translate(-(b.x0 + b.x1) / 2, 0, -(b.z0 + b.z1) / 2);
+    return m;
+  }
+
+  function fitsArea(m, areaW, areaD, margin) {
+    const b = meshBox(m);
+    return b.w <= areaW - (margin || 0) && b.d <= areaD - (margin || 0);
+  }
+
+  function appendIfFits(base, piece, areaW, areaD, margin) {
+    const a = meshBox(base), b = meshBox(piece);
+    const x0 = Math.min(a.x0, b.x0), x1 = Math.max(a.x1, b.x1);
+    const z0 = Math.min(a.z0, b.z0), z1 = Math.max(a.z1, b.z1);
+    if (x1 - x0 > areaW - (margin || 0) || z1 - z0 > areaD - (margin || 0)) return false;
+    base.merge(piece);
+    centerMesh(base);
+    return true;
+  }
+
+  function chooseClusterKey(areaW, areaD, rng) {
+    const pool = [];
+    const add = (keys, weight) => {
+      for (const k of keys) {
+        const s = presetSize(k);
+        if (s.w <= areaW - 1.2 && s.d <= areaD - 1.2) {
+          for (let i = 0; i < weight; i++) pool.push(k);
+        }
+      }
+    };
+    if (areaW >= 20 && areaD >= 20) {
+      add(['siyuan'], 10); add(['daoguan'], 4); add(['langyuan'], 5); add(['yuanlin'], 4);
+    }
+    if (areaW >= 15 && areaD >= 13) { add(['siheyuan'], 12); add(['xiaoxiang'], 7); }
+    if (areaW >= 13 && areaD >= 8) {
+      add(['qing', 'tang', 'wujian'], 8); add(['xieshan', 'juanpeng', 'luding'], 7);
+    }
+    if (areaW >= 8.5 && areaD >= 6) {
+      add(['fanlou', 'chongge', 'shizijia', 'fanhuaju', 'shilou', 'lou', 'tengwang', 'feiyun'], 7);
+    }
+    if (areaW >= 7.2 && areaD >= 4.6) { add(HOUSE_KEYS, 9); }
+    if (areaW >= 9 && areaD >= 6.2) { add(['ta', 'muta', 'leifeng', 'yingxian'], 5); }
+    if (areaW >= 8 && areaD >= 5.6) { add(SMALL_KEYS, 5); }
+    if (!pool.length) { add(HOUSE_KEYS.concat(SMALL_KEYS), 1); }
+    if (!pool.length) return null;
+    return pool[rng.int(0, pool.length - 1)];
+  }
+
+  // 主栋取古建 preset，再按剩余地块加一栋厢房/牌坊，形成“建筑群”而不是单体
+  function buildPresetCluster(key, city, seed, rng, areaW, areaD) {
+    let main = buildPresetMesh(key, seed, city);
+    if (!main || !main.triCount) return null;
+    const rots = [0, 90, 180, 270];
+    main.rotateY(rots[rng.int(0, 3)]);
+    centerMesh(main);
+    if (!fitsArea(main, areaW, areaD, 1.2)) {
+      main = buildPresetMesh(key, seed, city);
+      if (!main) return null;
+      centerMesh(main);
+      if (!fitsArea(main, areaW, areaD, 1.2)) return null;
+    }
+
+    const mbBox = meshBox(main);
+    const isHouse = HOUSE_KEYS.indexOf(key) >= 0;
+    const sideKey = HOUSE_KEYS[rng.int(0, HOUSE_KEYS.length - 1)];
+
+    // 宅院/殿宇旁边补一栋厢房或民居，形成有主次的院落群
+    if (areaW >= mbBox.w + 7.8 && areaD >= Math.max(5.8, mbBox.d * 0.62)) {
+      const side = buildPresetMesh(sideKey, seed + 17, city);
+      if (side) {
+        side.rotateY(rng.next() < 0.5 ? 0 : 180);
+        const sb = meshBox(side);
+        const dir = rng.next() < 0.5 ? -1 : 1;
+        side.translate(dir * (mbBox.w / 2 + 1.1 + sb.w / 2), 0, rng.range(-1.4, 1.4));
+        appendIfFits(main, side, areaW, areaD, 0.8);
+      }
+    }
+
+    // 主栋前留出牌坊/小亭，作为建筑群的门面
+    const now = meshBox(main);
+    if (areaD >= now.d + 6.2 && areaW >= 8.5) {
+      const frontKey = isHouse ? (rng.next() < 0.55 ? 'paifang' : 'ting') : 'paifang';
+      const front = buildPresetMesh(frontKey, seed + 31, city);
+      if (front) {
+        const fb = meshBox(front);
+        const dir = rng.next() < 0.5 ? -1 : 1;
+        front.translate(rng.range(-2.0, 2.0), 0, dir * (now.d / 2 + 1.0 + fb.d / 2));
+        appendIfFits(main, front, areaW, areaD, 0.8);
+      }
+    }
+    return main;
+  }
+
+  function placeExtraMesh(mb, ex, cx, cz, areaW, areaD, city, rng) {
+    const src = ex.recipe || ex;
+    const m = buildRecipeMesh(src, city.seed + (ex.seedOffset || 0), city);
+    if (!m || !m.triCount) return false;
+    const rot = Number(ex.rot);
+    m.rotateY(isFinite(rot) ? rot : [0, 90, 180, 270][rng.int(0, 3)]);
+    const b = meshBox(m);
+    const s = Math.min(1, (areaW - 1.2) / Math.max(0.1, b.w), (areaD - 1.2) / Math.max(0.1, b.d));
+    if (!(s >= 0.3)) return false;
+    if (s < 0.995) m.scale(s);
+    m.translate(cx, 0, cz);
+    mb.merge(m);
+    return true;
+  }
+
   GF.buildCity = function (src) {
     const r = GF.cityNormalize(src);
     const rng = new GF.RNG(r.seed);
@@ -334,7 +499,7 @@
       }
     }
 
-    /* 街道：主街条石 + 御道石带 + 次街 + 坊内小巷 */
+    /* 街网：主街 + 随机宽度里坊（不再是一张等宽方格） */
     const road = (x0, x1, z0, z1, mat, tag) => pbox(mb, x0, x1, 0, 0.06, z0, z1, mat || 'slab', tag || '街道');
     const rw = r.roadW;
     road(-HW + T, HW - T, -rw / 2, rw / 2);
@@ -343,161 +508,166 @@
     const yd = rw * 0.22;
     road(-HW + T, HW - T, -yd, yd, 'stoneB', '御道');
     road(-yd, yd, -HD + T, HD - T, 'stoneB', '御道');
-    const cellW = (r.w - 2 * T) / r.cols, cellD = (r.d - 2 * T) / r.rows;
-    for (let c = 1; c < r.cols; c++) {
-      const x = -HW + T + cellW * c;
-      road(x - 2.2, x + 2.2, -HD + T, HD - T);
-    }
-    for (let rr = 1; rr < r.rows; rr++) {
-      const z = -HD + T + cellD * rr;
-      road(-HW + T, HW - T, z - 2.2, z + 2.2);
+
+    const usableX0 = -HW + T, usableX1 = HW - T;
+    const usableZ0 = -HD + T, usableZ1 = HD - T;
+    const nCols = Math.max(2, Math.min(8, Math.round(r.cols || 3)));
+    const nRows = Math.max(2, Math.min(8, Math.round(r.rows || 3)));
+    // 中轴两侧各分一半列 / 行；列宽再随机，避免所有坊一个尺寸
+    const halfCols = Math.max(1, Math.ceil(nCols / 2));
+    const halfRows = Math.max(1, Math.ceil(nRows / 2));
+    // 把一段长度切成 n 块：每块宽度随机，街缝宽度也随机，偶尔两块并成一坊
+    function splitSpan(a, b, n, gapMin, gapMax, minLot) {
+      n = Math.max(1, Math.round(n));
+      if (n <= 1 || b - a < minLot) return { cells: [[a, b]], gaps: [] };
+      const gaps = [];
+      let gapSum = 0;
+      for (let i = 0; i < n - 1; i++) {
+        let g = rng.range(gapMin, gapMax);
+        if (rng.next() < 0.24) g = 0;
+        gaps.push(g); gapSum += g;
+      }
+      let avail = (b - a) - gapSum;
+      if (avail < minLot * n) {
+        const maxGap = Math.max(0, ((b - a) - minLot * n) / Math.max(1, n - 1));
+        gapSum = 0;
+        for (let i = 0; i < gaps.length; i++) { gaps[i] = Math.min(gaps[i], maxGap); gapSum += gaps[i]; }
+        avail = (b - a) - gapSum;
+      }
+      if (avail <= 1) return { cells: [[a, b]], gaps: [] };
+      const weights = [];
+      let wsum = 0;
+      for (let i = 0; i < n; i++) { const w = 0.72 + rng.next() * 0.62; weights.push(w); wsum += w; }
+      const cells = [], outGaps = [];
+      let cursor = a;
+      for (let i = 0; i < n; i++) {
+        const w = Math.max(2.8, avail * weights[i] / wsum);
+        const end = Math.min(b, cursor + w);
+        if (cells.length && gaps[i - 1] < 0.8) cells[cells.length - 1][1] = Math.min(b, end + gaps[i - 1]);
+        else cells.push([cursor, end]);
+        if (i < n - 1) {
+          const g = gaps[i];
+          if (g >= 0.8) outGaps.push({ p: end + g / 2, w: g });
+          cursor = end + g;
+        }
+      }
+      if (cells.length) cells[cells.length - 1][1] = b;
+      return { cells, gaps: outGaps };
     }
 
-    /* 地块：坊墙 + 随机建筑 */
+    const gapMin = Math.max(2.0, rw * 0.30), gapMax = Math.max(gapMin, rw * 0.62);
+    const leftX = splitSpan(usableX0, -rw / 2, halfCols, gapMin, gapMax, 7.0);
+    const rightX = splitSpan(rw / 2, usableX1, halfCols, gapMin, gapMax, 7.0);
+    const northZ = splitSpan(usableZ0, -rw / 2, halfRows, gapMin, gapMax, 7.0);
+    const southZ = splitSpan(rw / 2, usableZ1, halfRows, gapMin, gapMax, 7.0);
+
+    // 里坊街：宽度随地块变化，不再是等距线；偶尔并坊处不铺街，留出大宅基
+    for (const g of leftX.gaps.concat(rightX.gaps)) {
+      road(g.p - g.w / 2, g.p + g.w / 2, usableZ0, usableZ1, 'stoneB', '里坊街');
+    }
+    for (const g of northZ.gaps.concat(southZ.gaps)) {
+      road(usableX0, usableX1, g.p - g.w / 2, g.p + g.w / 2, 'stoneB', '里坊街');
+    }
+
+    /* 地块：不设固定坊墙；建筑群优先从古建 preset 里取，塞不下才回落普通民居 */
     const nf = (v) => Math.round(v * 10) / 10;
     const kinds = [
-      () => ({ type: 'house', bays: rng.int(2, 4), bayW: 2.6 + rng.next() * 0.8, depth: 5.0 + rng.next() * 1.6,
-        floors: rng.int(1, 2), floorH: 2.8 + rng.next() * 0.4, baseH: 0.3, steps: 1, roofType: 'gable',
+      () => ({ type: 'house', bays: rng.int(2, 3), bayW: 2.3 + rng.next() * 0.6, depth: 4.4 + rng.next() * 1.2,
+        floors: rng.int(1, 2), floorH: 2.7 + rng.next() * 0.3, baseH: 0.3, steps: 1, roofType: 'gable',
         tileColor: r.roofColor }),
-      () => ({ type: 'hall', bays: rng.int(3, 5), bayW: 3.0 + rng.next() * 0.6, depth: 7.0 + rng.next() * 2,
-        floors: 1, floorH: 3.4, baseH: 0.5, steps: 2, roofType: 'gableHip', tileColor: r.roofColor,
+      () => ({ type: 'hall', bays: 3, bayW: 2.8 + rng.next() * 0.4, depth: 6.0 + rng.next() * 1.2,
+        floors: 1, floorH: 3.2, baseH: 0.5, steps: 2, roofType: 'gableHip', tileColor: r.roofColor,
         wallMat: 'plaster', colMat: 'timber', dougong: true, dgScale: 0.8 }),
-      () => ({ type: 'ge', bays: 2, bayW: 3.0, depth: 6.0, floors: 2, floorH: 3.2, baseH: 0.5, steps: 1,
+      () => ({ type: 'ge', bays: 2, bayW: 2.8, depth: 5.4, floors: 2, floorH: 3.0, baseH: 0.5, steps: 1,
         roofType: 'gableHip', tileColor: r.roofColor, wallMat: 'timber', colMat: 'timber', pingzuo: true }),
-      () => ({ type: 'pavilion', bays: 1, bayW: 3.6, depth: 3.6, floorH: 2.8, baseH: 0.3, steps: 1,
-        roofType: 'pyramid', tileColor: r.roofColor, wallMat: 'timber', colMat: 'wood' }),
-      () => ({ type: 'pagoda', floors: 5, bayW: 2.4, depth: 2.4, floorH: 2.2, baseH: 0.6, steps: 2,
-        tierR: 2.0, tileColor: r.roofColor })
+      () => ({ type: 'pavilion', bays: 1, bayW: 3.2, depth: 3.2, floorH: 2.6, baseH: 0.3, steps: 1,
+        roofType: 'pyramid', tileColor: r.roofColor, wallMat: 'timber', colMat: 'wood' })
     ];
 
+    // 坊门只作为生活层的落点；没有固定坊墙后默认不生成，保留数组兼容旧逻辑
     const wardGates = [];
+    const extras = (r.extras || []).slice();
+    let extrasPlaced = 0, extrasSkipped = 0;
+    let wardCount = 0;
+    const emptyCells = [];
 
-    for (let c = 0; c < r.cols; c++) {
-      for (let rr2 = 0; rr2 < r.rows; rr2++) {
-        if (r.palace && c === Math.floor(r.cols / 2) && rr2 <= Math.floor(r.rows / 2)) continue;
-        const x0 = -HW + T + cellW * c, z0 = -HD + T + cellD * rr2;
-        const laneW = r.alleyW == null ? 1.4 : r.alleyW;
-        const jit = r.blockJit == null ? 1 : r.blockJit;
-        const wallOn = r.blockWallOn !== false;
+    const quads = [
+      { xs: leftX.cells, zs: northZ.cells },
+      { xs: rightX.cells, zs: northZ.cells },
+      { xs: leftX.cells, zs: southZ.cells },
+      { xs: rightX.cells, zs: southZ.cells }
+    ];
 
-        // 坊墙不再贴着地块外框等距内缩：四边各留 0.35–1.5m 的随机退让，
-        // 大小与位置都跟着变，坊与坊之间才会出现宽窄不一的夹道。
-        let wx0, wx1, wz0, wz1;
-        if (wallOn) {
-          wx0 = x0 + rw / 2 + rng.range(0.35 * jit, 1.5 * jit);
-          wx1 = x0 + cellW - rw / 2 - rng.range(0.35 * jit, 1.5 * jit);
-          wz0 = z0 + rw / 2 + rng.range(0.35 * jit, 1.5 * jit);
-          wz1 = z0 + cellD - rw / 2 - rng.range(0.35 * jit, 1.5 * jit);
-        } else {
-          wx0 = x0 + rw / 2 + 1.0; wx1 = x0 + cellW - rw / 2 - 1.0;
-          wz0 = z0 + rw / 2 + 1.0; wz1 = z0 + cellD - rw / 2 - 1.0;
-        }
-        const areaW = (wx1 - wx0) - 2.2, areaD = (wz1 - wz0) - 2.2;
-        if (areaW < 6 || areaD < 6) continue;
+    for (const q of quads) {
+      for (const xc of q.xs) {
+        for (const zc of q.zs) {
+          const jit = r.blockJit == null ? 1 : r.blockJit;
+          const pad = rng.range(0.8, 1.2 + 2.0 * jit);
+          const areaW = (xc[1] - xc[0]) - pad * 2;
+          const areaD = (zc[1] - zc[0]) - pad * 2;
+          if (areaW < 5.2 || areaD < 5.2) continue;
 
-        // 坊内小巷贴着坊墙内皮走，不再按原 cell 边界算
-        if (laneW > 0.4) {
-          pbox(mb, wx0 + 0.75, wx1 - 0.75, 0, 0.045, wz0 + 0.75, wz0 + 0.75 + laneW, 'soil', '坊内小巷');
-          pbox(mb, wx0 + 0.75, wx0 + 0.75 + laneW, 0, 0.045, wz0 + 0.75, wz1 - 0.75, 'soil', '坊内小巷');
-        }
+          const cx = (xc[0] + xc[1]) / 2, cz = (zc[0] + zc[1]) / 2;
+          // 宫城只占中轴一段：按地块中心判断，别把整片北城都留空
+          if (r.palace && Math.abs(cx) < 17 && cz > -HD * 0.42 && cz < HD * 0.24) continue;
+          wardCount++;
 
-        // 坊墙：四面按随机退让砌；坊门按“临街面”选方向，位置沿墙偏 30%–70%，
-        // 不再永远南面居中；另有约两成坊开两门。
-        if (wallOn) {
-          const fwx = 0.45, FH = r.blockWallH == null ? 2.2 : r.blockWallH;
-          const gateW = Math.min(r.blockGateW || 3.6, Math.min(wx1 - wx0, wz1 - wz0) * 0.34);
-          const avail = ['south'];
-          if (rr2 > 0) avail.push('north');
-          if (c < r.cols - 1) avail.push('east');
-          if (c > 0) avail.push('west');
-          const pickSide = () => {
-            const w = avail.map((s) => (s === 'south' ? 1.6 : s === 'north' ? 0.8 : 1.2));
-            let x = rng.next() * w.reduce((a, b) => a + b, 0);
-            for (let i = 0; i < avail.length; i++) { x -= w[i]; if (x <= 0) return avail[i]; }
-            return avail[0];
-          };
-          // 主门优先朝最近的纵向街：中轴以西的坊开东门，以东开西门；
-          // 中轴这一列开南/北门；再留三成随机换向，避免又变成一条规律。
-          let mainSide;
-          if (r.cols >= 3 && c !== Math.floor(r.cols / 2)) mainSide = c < Math.floor(r.cols / 2) ? 'east' : 'west';
-          else mainSide = rng.next() < 0.6 ? 'south' : 'north';
-          if (avail.indexOf(mainSide) < 0) mainSide = avail[0];
-          if (rng.next() < 0.3) mainSide = pickSide();
-          const gateDefs = [[mainSide, rng.range(0.5 - 0.2 * jit, 0.5 + 0.2 * jit)]];
-          // 开门数量也分档：约两成坊四面开门，四成多开第二门，其余只留一门
-          const want = rng.next() < 0.18 ? 4 : (rng.next() < 0.45 ? 2 : 1);
-          while (gateDefs.length < Math.min(want, avail.length)) {
-            const s2 = pickSide();
-            if (!gateDefs.some(([s]) => s === s2)) gateDefs.push([s2, rng.range(0.5 - 0.2 * jit, 0.5 + 0.2 * jit)]);
-            if (gateDefs.length >= 4) break;
-          }
-          const sideGeom = {
-            south: [wx0, wz1, wx1, wz1, 'x', 0, 1],
-            north: [wx0, wz0, wx1, wz0, 'x', 0, -1],
-            east: [wx1, wz0, wx1, wz1, 'z', 1, 0],
-            west: [wx0, wz0, wx0, wz1, 'z', -1, 0]
-          };
-          const gmap = {};
-          for (const [s, t] of gateDefs) gmap[s] = t;
-          const wallSeg = (ax, az, bx, bz) => {
-            const dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz);
-            if (L < 1.0) return;
-            const ux = dx / L, uz = dz / L;
-            const qx = -uz * fwx / 2, qz = ux * fwx / 2;
-            const pts = [[ax + qx, az + qz], [bx + qx, bz + qz], [bx - qx, bz - qz], [ax - qx, az - qz]];
-            mb.prism(pts, 0, FH, 'brickB', '坊墙');
-            mb.prism(pts, FH, FH + 0.22, 'stoneDark', '坊墙压顶');
-          };
-          const drawSide = (s) => {
-            const [ax, az, bx, bz, axis, ox, oz] = sideGeom[s];
-            const dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz);
-            const ux = dx / L, uz = dz / L;
-            const t = gmap[s];
-            if (t == null) { wallSeg(ax, az, bx, bz); return; }
-            const c0 = t * L - gateW / 2, c1 = t * L + gateW / 2;
-            if (c0 < 0.9 || c1 > L - 0.9) { wallSeg(ax, az, bx, bz); return; }
-            wallSeg(ax, az, ax + ux * c0, az + uz * c0);
-            wallSeg(ax + ux * c1, az + uz * c1, bx, bz);
-            const gx = ax + ux * (t * L), gz = az + uz * (t * L);
-            wardGates.push({ x: gx, z: gz, axis, ox, oz, w: gateW });
-            // 坊门门头：两根门柱 + 横枋 + 一道压顶瓦脊，让“朝哪边开门”一眼看得出来
-            const postH = FH + 0.55;
-            if (axis === 'x') {
-              for (const s of [-1, 1]) mb.box(gx + s * gateW / 2 - 0.09, gx + s * gateW / 2 + 0.09, 0.05, postH, gz - 0.18, gz + 0.18, 'wood', '坊门·门柱');
-              mb.box(gx - gateW / 2, gx + gateW / 2, postH - 0.08, postH, gz - 0.2, gz + 0.2, 'woodDark', '坊门·横枋');
-              mb.box(gx - gateW / 2 + 0.15, gx + gateW / 2 - 0.15, postH - 0.55, postH - 0.3, gz - 0.23, gz + 0.23, 'gold', '坊门·门额');
-              mb.box(gx - gateW / 2 - 0.3, gx + gateW / 2 + 0.3, postH + 0.35, postH + 0.5, gz - 0.7, gz + 0.7, 'stoneDark', '坊门·门头');
-            } else {
-              for (const s of [-1, 1]) mb.box(gx - 0.18, gx + 0.18, 0.05, postH, gz + s * gateW / 2 - 0.09, gz + s * gateW / 2 + 0.09, 'wood', '坊门·门柱');
-              mb.box(gx - 0.2, gx + 0.2, postH - 0.08, postH, gz - gateW / 2, gz + gateW / 2, 'woodDark', '坊门·横枋');
-              mb.box(gx - 0.23, gx + 0.23, postH - 0.55, postH - 0.3, gz - gateW / 2 + 0.15, gz + gateW / 2 - 0.15, 'gold', '坊门·门额');
-              mb.box(gx - 0.7, gx + 0.7, postH + 0.35, postH + 0.5, gz - gateW / 2 - 0.3, gz + gateW / 2 + 0.3, 'stoneDark', '坊门·门头');
+          // 外部导入的古建配方优先落位：找得到地块就直接入城，替代本坊的随机建筑
+          if (extras.length) {
+            const ex = extras[0];
+            if (placeExtraMesh(mb, ex, cx, cz, areaW, areaD, r, rng)) {
+              extrasPlaced++;
+              extras.shift();
+              continue;
             }
-          };
-          drawSide('south'); drawSide('north'); drawSide('east'); drawSide('west');
-        }
-
-        if (rng.next() > r.density) continue;
-        const cx = (wx0 + wx1) / 2, cz = (wz0 + wz1) / 2;
-        if (areaW >= 13 && areaD >= 12 && rng.next() < 0.55) {
-          const sub = building({
-            type: 'courtyard', courtW: nf(Math.min(19, areaW)), courtD: nf(Math.min(16, areaD)),
-            courtStyle: 'house', bays: 3, bayW: 2.6, depth: 5.0, floors: 1, floorH: 2.8,
-            baseH: 0.3, steps: 1, roofType: 'gable', tileColor: r.roofColor
-          });
-          sub.rotateY(rng.int(0, 3) * 90, 0, 0);
-          sub.translate(nf(cx), 0, nf(cz));
-          mb.merge(sub);
-        } else {
-          const cnt = rng.int(1, areaW > 18 ? 3 : 2);
-          for (let k = 0; k < cnt; k++) {
-            const kind = kinds[rng.int(0, kinds.length - 1)]();
-            const sub = building(kind);
-            sub.rotateY(rng.int(0, 3) * 90, 0, 0);
-            sub.translate(nf(cx + rng.range(-areaW * 0.24, areaW * 0.24)), 0,
-              nf(cz + rng.range(-areaD * 0.24, areaD * 0.24)));
-            mb.merge(sub);
           }
+
+          if (rng.next() > r.density) {
+            emptyCells.push({ cx, cz, areaW, areaD });
+            continue;
+          }
+
+          // 先从古建 preset 里选一栋主栋，再按剩余空间补厢房/牌坊
+          let cluster = null;
+          const key = chooseClusterKey(areaW, areaD, rng);
+          if (key) cluster = buildPresetCluster(key, r, r.seed + wardCount * 37 + rng.int(0, 29), rng, areaW, areaD);
+          if (cluster) {
+            cluster.translate(nf(cx), 0, nf(cz));
+            mb.merge(cluster);
+          } else {
+            // 地块太小 / preset 塞不下时，退回普通民居，但仍尽量贴着地块中心
+            const cnt = rng.int(1, areaW > 12 ? 2 : 1);
+            for (let k = 0; k < cnt; k++) {
+              const sub = building(kinds[rng.int(0, kinds.length - 1)]());
+              sub.rotateY(rng.int(0, 3) * 90, 0, 0);
+              sub.translate(nf(cx + rng.range(-areaW * 0.18, areaW * 0.18)), 0,
+                nf(cz + rng.range(-areaD * 0.18, areaD * 0.18)));
+              mb.merge(sub);
+            }
+          }
+        }
+      }
+    }
+
+    // 空坊 / 低密度地块种树，不给每坊都塞满房子，城才有呼吸
+    for (const ec of emptyCells) {
+      const n = rng.int(1, ec.areaW > 12 ? 3 : 2);
+      for (let i = 0; i < n; i++) {
+        const kind = ['willow', 'pine', 'plum', 'gingko', 'bamboo'][rng.int(0, 4)];
+        const px = ec.cx + rng.range(-ec.areaW * 0.34, ec.areaW * 0.34);
+        const pz = ec.cz + rng.range(-ec.areaD * 0.34, ec.areaD * 0.34);
+        GF.parts.tree(mb, px, pz, kind, rng, 0.9 + rng.next() * 0.4, '城树');
+      }
+      if (rng.next() < 0.45) GF.parts.rock(mb, ec.cx + rng.range(-2, 2), ec.cz + rng.range(-2, 2), 1.0 + rng.next() * 0.4, rng, '城石');
+    }
+
+    // 城太小、实在找不到地块的导入配方，统一记数，页面提示，不硬塞到街上
+    extrasSkipped = extras.length;
+    if (extrasSkipped) {
+      const room = Math.max(10, Math.min(22, r.w * 0.18));
+      for (const ex of extras) {
+        if (placeExtraMesh(mb, ex, rng.range(-room, room), rng.range(-room, room), room * 2, room * 1.8, r, rng)) {
+          extrasPlaced++; extrasSkipped--;
         }
       }
     }
@@ -528,13 +698,6 @@
       gate.translate(0, 0, HD * 0.14);
       mb.merge(gate);
       pbox(mb, -14, 14, 0, 0.08, -HD * 0.42, HD * 0.22, 'slab', '宫殿广场');
-    }
-
-    /* 城树 */
-    for (let i = 0; i < 22; i++) {
-      const px = rng.range(-HW + 6, HW - 6), pz = rng.range(-HD + 6, HD - 6);
-      const kind = ['willow', 'pine', 'plum', 'gingko', 'bamboo'][rng.int(0, 4)];
-      GF.parts.tree(mb, px, pz, kind, rng, 0.9 + rng.next() * 0.4, '城树');
     }
 
     /* 生活层：沿主街的摊、幌子、街灯；夜里灯多、招牌多 */
@@ -595,9 +758,9 @@
       if (g.axis === 'x') gateStats[g.oz > 0 ? 'south' : 'north']++;
       else gateStats[g.ox > 0 ? 'east' : 'west']++;
     }
-    mb.cityInfo = { w: r.w, d: r.d, wallH: r.wallH, cells: r.cols * r.rows, seed: r.seed,
+    mb.cityInfo = { w: r.w, d: r.d, wallH: r.wallH, cells: wardCount, seed: r.seed,
       wengcheng: r.wengcheng ? 4 : 0, tapered: r.wallTaper, life: lifeCount,
-      gates: gateStats };
+      extras: extrasPlaced, extrasSkipped: extrasSkipped, gates: gateStats };
     return mb;
   };
 
