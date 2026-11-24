@@ -2,7 +2,7 @@
 
 
 
-<img src="image/演示.gif" alt="描述" width="50%" />
+<img src="image/演示.gif" alt="描述" width="80%" />
 
 # 国风古建像素工坊 · Guofeng Pixel Building Studio
 
@@ -234,7 +234,7 @@ guofeng-pixel-building-studio/
 方位角通过绕 Y 轴旋转光向量实现，同时改变受光面明暗与投影方向；阴影长度用压低太阳高度模拟长影 / 短影。
 
 ## 组件拖拽条（环境与陈设的取用面板）
-<img src="image/演示2.gif" alt="描述" width="300" />
+<img src="image/演示2.gif" alt="描述" width="80%" />
 
 画布底边、键位提示栏正上方是一条组件拖拽条，按「树 / 石 / 陈设」三组列出二十种可放置物件：
 
