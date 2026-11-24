@@ -27,6 +27,33 @@
     };
   }
 
+  /* 人眼透视：把正交轴测换成中心投影。
+   * 相机放在场景中心沿 view 方向 D 米处；投影坐标 = 轴测坐标 × D/(D-depth)。
+   * persp=0 退回原来的等轴测，persp=1 是完全透视，中间值用于保留一点像素画版味。 */
+  function makePersp(b, cam, o) {
+    const p = Math.max(0, Math.min(1, o.persp == null ? 0 : Number(o.persp)));
+    if (!p || !isFinite(p)) return null;
+    const span = Math.max(b.x1 - b.x0, b.z1 - b.z0, (b.y1 - b.y0) * 1.8, 20);
+    const D = Math.max(span * 2.2, 40);
+    const c = [(b.x0 + b.x1) * 0.5, (b.y0 + b.y1) * 0.5, (b.z0 + b.z1) * 0.5];
+    // 近端放大倍数：用于轨道预览的固定取景框保守放大，避免透视把近角挤出画
+    let depthMax = -1e9;
+    for (let i = 0; i < 8; i++) {
+      const x = (i & 1 ? b.x1 : b.x0) - c[0];
+      const y = (i & 2 ? b.y1 : b.y0) - c[1];
+      const z = (i & 4 ? b.z1 : b.z0) - c[2];
+      const d = x * cam.view[0] + y * cam.view[1] + z * cam.view[2];
+      if (d > depthMax) depthMax = d;
+    }
+    const kMax = 1 + (D / Math.max(0.4, D - depthMax) - 1) * p;
+    return { c, D, p, kMax };
+  }
+
+  function perspK(ps, depth) {
+    if (!ps) return 1;
+    return 1 + (ps.D / Math.max(0.4, ps.D - depth) - 1) * ps.p;
+  }
+
   /* ----------------------------- 阴影贴图 ----------------------------- */
   function buildShadow(mesh, bounds, light, cell, skipSmall) {
     const kx = -light[0] / light[1];
@@ -290,6 +317,8 @@
 
     const b = mesh.bounds();
     if (!isFinite(b.x0)) return { w: 8, h: 8, rgba: new Uint8ClampedArray(8 * 8 * 4) };
+    const ps = makePersp(b, cam, o);
+    const cdepth = ps ? ps.c[0] * cam.view[0] + ps.c[1] * cam.view[1] + ps.c[2] * cam.view[2] : 0;
 
     // 顶点投影
     const n = mesh.triCount * 3;
@@ -297,9 +326,10 @@
     let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
     for (let i = 0; i < n; i++) {
       const vx = mesh.pos[i * 3], vy = mesh.pos[i * 3 + 1], vz = mesh.pos[i * 3 + 2];
-      const sx = vx * cam.right[0] + vz * cam.right[2];
-      const sy = vx * cam.up[0] + vy * cam.up[1] + vz * cam.up[2];
       const d = vx * cam.view[0] + vy * cam.view[1] + vz * cam.view[2];
+      const k = perspK(ps, d - cdepth);
+      const sx = (vx * cam.right[0] + vz * cam.right[2]) * k;
+      const sy = (vx * cam.up[0] + vy * cam.up[1] + vz * cam.up[2]) * k;
       px[i] = sx; py[i] = -sy; pz[i] = d;
       if (px[i] < minx) minx = px[i]; if (px[i] > maxx) maxx = px[i];
       if (py[i] < miny) miny = py[i]; if (py[i] > maxy) maxy = py[i];
@@ -670,11 +700,14 @@
     'layout(location=4) in float a_tid;',
     'layout(location=5) in float a_gk;',
     'uniform vec3 u_right; uniform vec3 u_up; uniform vec3 u_view;',
+    'uniform vec3 u_camC; uniform float u_camD, u_persp;',
     'uniform float u_ppm, u_ox, u_oy, u_W, u_H, u_zmin, u_zmax, u_dbg;',
     'out vec3 v_wpos;',
     'flat out vec3 v_nrm; flat out float v_mat; flat out float v_gnd; flat out float v_tid; flat out float v_gk;',
     'void main() {',
-    '  vec2 s = vec2(dot(a_pos, u_right), -dot(a_pos, u_up));',
+    '  float depth = dot(a_pos - u_camC, u_view);',
+    '  float pk = 1.0 + (u_camD / max(0.4, u_camD - depth) - 1.0) * u_persp;',
+    '  vec2 s = vec2(dot(a_pos, u_right), -dot(a_pos, u_up)) * pk;',
     '  vec2 pix = s * u_ppm + vec2(u_ox, u_oy);',
     '  float d = dot(a_pos, u_view);',
     '  gl_Position = vec4(pix.x / u_W * 2.0 - 1.0, 1.0 - pix.y / u_H * 2.0,',
@@ -793,7 +826,7 @@
       gl.linkProgram(prog);
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) || 'link');
       const u = {};
-      ['u_right', 'u_up', 'u_view', 'u_ppm', 'u_ox', 'u_oy', 'u_W', 'u_H', 'u_zmin', 'u_zmax', 'u_dbg',
+      ['u_right', 'u_up', 'u_view', 'u_camC', 'u_camD', 'u_persp', 'u_ppm', 'u_ox', 'u_oy', 'u_W', 'u_H', 'u_zmin', 'u_zmax', 'u_dbg',
         'u_light', 'u_ramps', 'u_pat', 'u_grain', 'u_shadow', 'u_shMeta', 'u_shSize', 'u_shTex', 'u_clipY']
         .forEach((k) => (u[k] = gl.getUniformLocation(prog, k)));
       const g = {
@@ -942,6 +975,7 @@
 
       const b = mesh.bounds();
       if (!isFinite(b.x0)) return null;
+      const ps = makePersp(b, cam, o);
 
       /* 取景：
        * 普通帧与 CPU 版完全同一套规则（先按顶点投影求范围，再按 focus 裁到建筑本体）。
@@ -949,28 +983,48 @@
        * 取景框（宽高比沿用当前画布）。这样每帧 W/H 不变，FBO 不会反复重建，也不用在
        * CPU 上投影 50 万个顶点。 */
       const view0 = cam.view, right0 = cam.right, up0 = cam.up;
+      const cdepth = ps ? ps.c[0] * view0[0] + ps.c[1] * view0[1] + ps.c[2] * view0[2] : 0;
       let bx0, bx1, by0, by1;
       if (o.orbit) {
-        const cx = (b.x0 + b.x1) * 0.5, cy = (b.y0 + b.y1) * 0.5, cz = (b.z0 + b.z1) * 0.5;
-        const radXZ = Math.sqrt((b.x1 - b.x0) * (b.x1 - b.x0) + (b.z1 - b.z0) * (b.z1 - b.z0)) * 0.5;
-        // 方形框要同时覆盖水平对角线、建筑高度和投影后的进深，留 6% 余量
-        const side = Math.max(12, (radXZ * 2 + (b.y1 - b.y0)) * 1.06);
-        // 轨道帧沿用当前画布的宽高比，避免拖拽时方形帧被 CSS 拉宽、城池变形
         const aspect = o.orbitAspect > 0 ? o.orbitAspect : 1;
-        const halfW = side * (aspect >= 1 ? aspect : 1) * 0.5;
-        const halfH = side * (aspect >= 1 ? 1 : 1 / aspect) * 0.5;
-        const sx = cx * right0[0] + cz * right0[2];
-        const sy = -(cx * up0[0] + cy * up0[1] + cz * up0[2]);
-        bx0 = sx - halfW; bx1 = sx + halfW;
-        by0 = sy - halfH; by1 = sy + halfH;
+        if (ps) {
+          // 透视轨道帧：用 8 个角点求当前角度的真实投影包围盒，再按画布宽高比留 5% 边
+          let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+          for (let i = 0; i < 8; i++) {
+            const x = i & 1 ? b.x1 : b.x0, y = i & 2 ? b.y1 : b.y0, z = i & 4 ? b.z1 : b.z0;
+            const k = perspK(ps, (x * view0[0] + y * view0[1] + z * view0[2]) - cdepth);
+            const qx = (x * right0[0] + z * right0[2]) * k;
+            const qy = -(x * up0[0] + y * up0[1] + z * up0[2]) * k;
+            if (qx < x0) x0 = qx; if (qx > x1) x1 = qx;
+            if (qy < y0) y0 = qy; if (qy > y1) y1 = qy;
+          }
+          let bw = Math.max(2, x1 - x0) * 1.05;
+          let bh = Math.max(2, y1 - y0) * 1.05;
+          if (bw / bh > aspect) bh = bw / aspect;
+          else bw = bh * aspect;
+          const ccx = (x0 + x1) * 0.5, ccy = (y0 + y1) * 0.5;
+          bx0 = ccx - bw * 0.5; bx1 = ccx + bw * 0.5;
+          by0 = ccy - bh * 0.5; by1 = ccy + bh * 0.5;
+        } else {
+          const cx = (b.x0 + b.x1) * 0.5, cy = (b.y0 + b.y1) * 0.5, cz = (b.z0 + b.z1) * 0.5;
+          const radXZ = Math.sqrt((b.x1 - b.x0) * (b.x1 - b.x0) + (b.z1 - b.z0) * (b.z1 - b.z0)) * 0.5;
+          const side = Math.max(12, (radXZ * 2 + (b.y1 - b.y0)) * 1.06);
+          const halfW = side * (aspect >= 1 ? aspect : 1) * 0.5;
+          const halfH = side * (aspect >= 1 ? 1 : 1 / aspect) * 0.5;
+          const sx = cx * right0[0] + cz * right0[2];
+          const sy = -(cx * up0[0] + cy * up0[1] + cz * up0[2]);
+          bx0 = sx - halfW; bx1 = sx + halfW;
+          by0 = sy - halfH; by1 = sy + halfH;
+        }
       } else {
         const n = mesh.triCount * 3;
         const px = new Float32Array(n), py = new Float32Array(n);
         let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
         for (let i = 0; i < n; i++) {
           const vx = mesh.pos[i * 3], vy = mesh.pos[i * 3 + 1], vz = mesh.pos[i * 3 + 2];
-          const sx = vx * right0[0] + vz * right0[2];
-          const sy = vx * up0[0] + vy * up0[1] + vz * up0[2];
+          const k = perspK(ps, (vx * view0[0] + vy * view0[1] + vz * view0[2]) - cdepth);
+          const sx = (vx * right0[0] + vz * right0[2]) * k;
+          const sy = (vx * up0[0] + vy * up0[1] + vz * up0[2]) * k;
           px[i] = sx; py[i] = -sy;
           if (px[i] < minx) minx = px[i]; if (px[i] > maxx) maxx = px[i];
           if (py[i] < miny) miny = py[i]; if (py[i] > maxy) maxy = py[i];
@@ -1008,6 +1062,15 @@
         W = Math.max(4, Math.ceil((bx1 - bx0) * ppm) + pad * 2);
         H = Math.max(4, Math.ceil((by1 - by0) * ppm) + pad * 2);
         ox = -bx0 * ppm + pad; oy = -by0 * ppm + pad;
+      }
+      // 交互轻量帧固定画布尺寸：俯角/转向连续拖动时不因 1px 的取景变化反复重建 FBO
+      if (o.orbit && o.orbitFrame && o.orbitFrame.length === 2) {
+        W = Math.max(16, Math.floor(o.orbitFrame[0]));
+        H = Math.max(16, Math.floor(o.orbitFrame[1]));
+        const bw = Math.max(1, bx1 - bx0), bh = Math.max(1, by1 - by0);
+        ppm = Math.max(1, Math.min((W - pad * 2) / bw, (H - pad * 2) / bh));
+        ox = (W - bw * ppm) * 0.5 - bx0 * ppm;
+        oy = (H - bh * ppm) * 0.5 - by0 * ppm;
       }
 
       /* 深度范围：用包围盒 8 个角点，保守覆盖全部几何 */
@@ -1087,6 +1150,9 @@
       gl.uniform3f(g.u.u_right, cam.right[0], cam.right[1], cam.right[2]);
       gl.uniform3f(g.u.u_up, cam.up[0], cam.up[1], cam.up[2]);
       gl.uniform3f(g.u.u_view, view0[0], view0[1], view0[2]);
+      gl.uniform3f(g.u.u_camC, ps ? ps.c[0] : 0, ps ? ps.c[1] : 0, ps ? ps.c[2] : 0);
+      gl.uniform1f(g.u.u_camD, ps ? ps.D : 1);
+      gl.uniform1f(g.u.u_persp, ps ? ps.p : 0);
       gl.uniform1f(g.u.u_ppm, ppm);
       gl.uniform1f(g.u.u_ox, ox);
       gl.uniform1f(g.u.u_oy, oy);

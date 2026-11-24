@@ -19,7 +19,7 @@
     render: {
       ppm: 14, pitch: 52, yaw: 35, palette: 'qingya',
       style: 'pixel', styleAmount: 0.7, outline: true, shadow: true,
-      sunAz: null, shadowAngle: 1.1, transparent: true
+      sunAz: null, shadowAngle: 1.1, transparent: true, persp: 1
     }
   };
 
@@ -36,6 +36,7 @@
     r.wengW = Math.max(8, Number(r.wengW) || DEF_CITY.wengW);
     r.lifeDensity = Math.max(0, Math.min(1, r.lifeDensity == null ? DEF_CITY.lifeDensity : Number(r.lifeDensity)));
     r.blockJit = Math.max(0, Math.min(1, r.blockJit == null ? DEF_CITY.blockJit : Number(r.blockJit)));
+    r.render.persp = Math.max(0, Math.min(1, r.render.persp == null ? DEF_CITY.render.persp : Number(r.render.persp)));
     // 古建配方入城：数组里每项 { recipe, name?, rot?, ... }，由城池统一找地块落位
     r.extras = Array.isArray(r.extras) ? r.extras.filter((x) => x && (x.recipe || x.type)) : [];
     return r;

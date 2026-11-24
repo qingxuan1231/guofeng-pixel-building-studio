@@ -130,6 +130,7 @@
     { title: '七 · 渲染与出图', items: [
       { path: 'render.ppm', label: '像素 / 米', type: 'range', min: 6, max: 44, step: 1 },
       { path: 'render.pitch', label: '俯角（Z 轴）', type: 'range', min: 15, max: 88, step: 1, unit: '°' },
+      { path: 'render.persp', label: '人眼透视（0=轴测）', type: 'range', min: 0, max: 1, step: 0.05 },
       { path: 'render.outline', label: '描边', type: 'toggle' },
       { path: 'render.shadow', label: '投影', type: 'toggle' },
       { path: 'render.sunAz', label: '光照方位', type: 'select', opts: SHADOW_DIRS },
@@ -143,7 +144,7 @@
   const CAMERA_KEYS = new Set([
     'render.yaw', 'render.pitch', 'render.ppm', 'render.palette', 'render.style',
     'render.styleAmount', 'render.outline', 'render.shadow', 'render.sunAz',
-    'render.shadowAngle', 'render.transparent'
+    'render.shadowAngle', 'render.transparent', 'render.persp'
   ]);
 
   function buildRow(it) {
@@ -191,12 +192,17 @@
     const val = row.querySelector('.val');
     const fmt = (v) => (it.step < 1 ? Number(v).toFixed(2) : Number(v)) + (it.unit || '');
     rg.addEventListener('input', () => {
+      if (it.path === 'render.pitch') {
+        val.textContent = fmt(rg.value);
+        setPitch(Number(rg.value));
+        return;
+      }
       setPath(state.city, it.path, Number(rg.value));
       val.textContent = fmt(rg.value);
       if (it.path === 'render.ppm') syncDens(Number(rg.value));
-      if (it.path === 'render.pitch') setCamInfo();
       onChange(it.path);
     });
+    if (it.path === 'render.pitch') bindPitchSlider(rg);
     registry.push({ el: rg, it, kind: 'range', valEl: val, fmt });
     return row;
   }
@@ -259,6 +265,17 @@
     return Math.min(PREVIEW_MAX_PIXELS, w * h * dpr * dpr * z * z);
   }
 
+  // 记录完整预览的画幅比例，并预先算好轻量帧的固定画布尺寸。
+  // 拖动俯角/转向时始终复用同一块 FBO，不会因为取景包围盒差 1px 反复重建。
+  function rememberViewFrame() {
+    if (!state.frame) return;
+    state.viewAspect = state.frame.w / state.frame.h;
+    const px = Math.min(previewBudget(), 1050000);
+    const fw = Math.max(4, Math.floor(Math.sqrt(px * state.viewAspect) / 4) * 4);
+    const fh = Math.max(4, Math.floor(px / fw / 4) * 4);
+    state.lightFrame = [fw, fh];
+  }
+
   function renderOpts(ppmOverride, pad, preview, extra) {
     const r = state.city.render;
     const o = {
@@ -267,6 +284,7 @@
       outline: r.outline !== false, shadow: r.shadow !== false,
       sunAz: r.sunAz == null ? null : Number(r.sunAz),
       shadowAngle: r.shadowAngle == null ? null : r.shadowAngle,
+      persp: r.persp == null ? 1 : Math.max(0, Math.min(1, Number(r.persp))),
       transparent: r.transparent !== false, focus: false, seed: state.city.seed,
       pad: pad, gpu: state.gpu
     };
@@ -322,27 +340,103 @@
   }
 
   /* 只重画，不重建几何：转视角、俯角、画风、像素密度都走这里 */
-  function renderPreview(orbit) {
+  function renderPreview(orbit, tag) {
     if (!state.mesh) return;
     if (state.busy) { state.pendingRender = true; return; }
     const t0 = performance.now();
     const o = orbit
-      ? renderOpts(null, null, true, {
-          orbit: true,
-          orbitAspect: (state.frame && state.frame.w) ? state.frame.w / state.frame.h : (wrap.clientWidth / wrap.clientHeight),
-          maxPixels: Math.min(previewBudget(), 1050000),
-          outline: false,
-          style: 'pixel'
-        })
+      ? (() => {
+          const aspect = state.viewAspect || ((state.frame && state.frame.w) ? state.frame.w / state.frame.h : (wrap.clientWidth / wrap.clientHeight));
+          let fw, fh;
+          if (state.lightFrame) { fw = state.lightFrame[0]; fh = state.lightFrame[1]; }
+          else {
+            const px = Math.min(previewBudget(), 1050000);
+            fw = Math.max(4, Math.floor(Math.sqrt(px * aspect) / 4) * 4);
+            fh = Math.max(4, Math.floor(px / fw / 4) * 4);
+          }
+          return renderOpts(null, null, true, {
+            orbit: true,
+            orbitAspect: fw / fh,
+            orbitFrame: [fw, fh],
+            maxPixels: Math.min(previewBudget(), 1050000),
+            outline: false,
+            style: 'pixel'
+          });
+        })()
       : renderOpts(null, null, true);
     state.frame = GF.render(state.mesh, o);
+    if (!orbit) rememberViewFrame();
     draw(!!orbit);
     if (!orbit) {
       $('#stat').textContent = `预览 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · ${Math.round(performance.now() - t0)}ms`;
     } else {
-      $('#stat').textContent = `旋转预览 ${state.frame.w}×${state.frame.h}px · 轻量帧 ${Math.round(performance.now() - t0)}ms`;
+      $('#stat').textContent = `${tag || '旋转'}预览 ${state.frame.w}×${state.frame.h}px · 轻量帧 ${Math.round(performance.now() - t0)}ms`;
     }
   }
+
+  /* 俯角滑块：按住拖动时只出轻量相机帧（不筑城、不叠描边/画风），
+   * 松手或停手后再补一张完整预览。俯角和转视角一样只动相机。 */
+  let pitchDirty = false, pitchRAF = 0, pitchIdle = 0, pitchHeld = false;
+
+  function pitchLightFrame() {
+    if (pitchRAF) return;
+    pitchRAF = requestAnimationFrame(() => {
+      pitchRAF = 0;
+      if (!pitchDirty) return;
+      renderPreview(true, '俯角');
+    });
+  }
+
+  function pitchCommit() {
+    if (!pitchDirty) return;
+    pitchDirty = false;
+    if (pitchRAF) { cancelAnimationFrame(pitchRAF); pitchRAF = 0; }
+    clearTimeout(pitchIdle); pitchIdle = 0;
+    renderPreview(false);
+  }
+
+  function syncPitchUI() {
+    const val = Math.round(state.city.render.pitch);
+    const top = $('#pitchRange');
+    if (top) top.value = val;
+    if ($('#pitchVal')) $('#pitchVal').textContent = val;
+    const rg = document.querySelector('input[data-k="render.pitch"]');
+    if (rg) {
+      rg.value = val;
+      const valEl = rg.parentElement.querySelector('.val');
+      if (valEl) valEl.textContent = val + '°';
+    }
+    setCamInfo();
+  }
+
+  function setPitch(v) {
+    const val = Math.max(15, Math.min(88, Math.round(Number(v))));
+    if (!isFinite(val)) return;
+    state.city.render.pitch = val;
+    syncPitchUI();
+    pitchDirty = true;
+    pitchLightFrame();
+    clearTimeout(pitchIdle);
+    pitchIdle = setTimeout(() => {
+      if (!pitchHeld) pitchCommit();
+    }, 260);
+  }
+
+  function bindPitchSlider(el) {
+    if (!el) return;
+    el.addEventListener('pointerdown', () => { pitchHeld = true; });
+    el.addEventListener('change', () => { pitchHeld = false; pitchCommit(); });
+  }
+  window.addEventListener('pointerup', () => {
+    if (!pitchHeld) return;
+    pitchHeld = false;
+    pitchCommit();
+  });
+  window.addEventListener('pointercancel', () => {
+    if (!pitchHeld) return;
+    pitchHeld = false;
+    pitchCommit();
+  });
 
   function rebuild(keepView) {
     if (state.busy) { state.pending = true; return; }
@@ -353,6 +447,7 @@
       state.mesh = GF.buildCity(state.city);
       state.frame = GF.render(state.mesh, renderOpts(null, null, true));
       state.pendingRender = false;
+      rememberViewFrame();
       draw();
       if (!keepView) { state.panX = state.panY = 0; state.zoom = 2; layout(); }
       $('#stat').textContent = `出图 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · ${Math.round(performance.now() - t0)}ms`;
@@ -398,13 +493,13 @@
     orbitRAF = requestAnimationFrame(() => {
       orbitRAF = 0;
       if (!dragging || dragging.pan) return;
-      renderPreview(true);
+      renderPreview(true, '视角');
     });
   }
 
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener('mousedown', (e) => {
-    dragging = { x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey, yaw: state.city.render.yaw, moved: false };
+    dragging = { x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey, yaw: state.city.render.yaw, pitch: state.city.render.pitch, moved: false, yawMoved: false };
     canvas.classList.add('dragging');
   });
   window.addEventListener('mousemove', (e) => {
@@ -417,8 +512,11 @@
       layout();
     } else {
       if (Math.abs(dx) + Math.abs(dy) > 0.5) dragging.moved = true;
+      if (Math.abs(dx) > 2) dragging.yawMoved = true;
       state.city.render.yaw = Math.round((dragging.yaw + dx * 0.4 + 360) % 360);
-      setCamInfo();
+      // 上下拖动 = Z 轴俯角；和 OrbitControls 同向：向下拖看屋面，向上拖看立面
+      state.city.render.pitch = Math.max(15, Math.min(88, Math.round(dragging.pitch + dy * 0.3)));
+      syncPitchUI();
       scheduleOrbit();
     }
   });
@@ -426,7 +524,12 @@
     if (!dragging) return;
     if (orbitRAF) { cancelAnimationFrame(orbitRAF); orbitRAF = 0; }
     const cameraMoved = dragging.moved && !dragging.pan;
-    if (cameraMoved) state.city.render.yaw = Math.round(state.city.render.yaw / 15) * 15 % 360;
+    const yawMoved = dragging.yawMoved;
+    if (cameraMoved) {
+      // 只上下拖俯角时不要把方位从 35° 硬吸到 30°
+      if (yawMoved) state.city.render.yaw = Math.round(state.city.render.yaw / 15) * 15 % 360;
+      state.city.render.pitch = Math.max(15, Math.min(88, Math.round(state.city.render.pitch)));
+    }
     dragging = null;
     canvas.classList.remove('dragging');
     syncControls();
@@ -830,14 +933,8 @@
       if (rg) { rg.value = state.city.render.ppm; const val = rg.parentElement.querySelector('.val'); if (val) val.textContent = state.city.render.ppm; }
       onChange('render.ppm');
     });
-    $('#pitchRange').addEventListener('input', (e) => {
-      state.city.render.pitch = Number(e.target.value);
-      $('#pitchVal').textContent = e.target.value;
-      setCamInfo();
-      const rg = document.querySelector('input[data-k="render.pitch"]');
-      if (rg) { rg.value = state.city.render.pitch; const val = rg.parentElement.querySelector('.val'); if (val) val.textContent = state.city.render.pitch + '°'; }
-      onChange('render.pitch');
-    });
+    $('#pitchRange').addEventListener('input', (e) => setPitch(Number(e.target.value)));
+    bindPitchSlider($('#pitchRange'));
 
     document.querySelectorAll('[data-view]').forEach((b) => {
       b.addEventListener('click', () => {
