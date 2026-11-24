@@ -15,6 +15,7 @@
   // 拖动俯角/转向时始终复用同一块 FBO，不会因为取景包围盒差 1px 反复重建。
   function rememberViewFrame() {
     if (!state.frame) return;
+    state.orbitK = 1;
     const f = state.frame;
     state.viewAspect = f.w / f.h;
     const cap = 1050000;
@@ -27,6 +28,17 @@
       const fh = Math.max(4, Math.floor(px / fw / 4) * 4);
       state.lightFrame = [fw, fh];
     }
+  }
+
+  function fitExtentForPreview() {
+    if (!state.mesh) return null;
+    const r = state.city.render;
+    const key = [r.pitch, r.persp == null ? 1 : r.persp, state.mesh.triCount].join('|');
+    if (state.fitKey !== key) {
+      state.fitExtent = GF.fitExtents(state.mesh, { pitch: r.pitch, persp: r.persp == null ? 1 : r.persp });
+      state.fitKey = key;
+    }
+    return state.fitExtent;
   }
 
   function renderOpts(ppmOverride, pad, preview, extra) {
@@ -44,6 +56,8 @@
     if (preview) {
       o.preview = true;
       o.maxPixels = previewBudget();
+      o.viewport = [wrap.clientWidth || 1200, wrap.clientHeight || 800];
+      o.fitExtent = fitExtentForPreview();
     }
     if (extra) Object.assign(o, extra);
     return o;
@@ -79,16 +93,15 @@
   function layout() {
     const f = state.frame;
     if (!f) return;
-    const availW = wrap.clientWidth * 0.86;
-    const availH = wrap.clientHeight * 0.86;
-    const fit = Math.min(availW / f.w, availH / f.h);
-    const scale = fit * (state.zoom / 2);
-    const overX = Math.max(0, (f.w * scale - wrap.clientWidth) / 2 + wrap.clientWidth * 0.18);
-    const overY = Math.max(0, (f.h * scale - wrap.clientHeight) / 2 + wrap.clientHeight * 0.18);
+    // 视口填充：渲染帧直接按舞台尺寸出图，画布固定铺满舞台，zoom 只做整体放大
+    const scale = state.zoom / 2;
+    // 平移限制：即使整城刚好铺满舞台，也留出可以左右/上下挪动的余量
+    const overX = Math.max(wrap.clientWidth * 0.3, (f.w * scale - wrap.clientWidth) / 2 + wrap.clientWidth * 0.18);
+    const overY = Math.max(wrap.clientHeight * 0.3, (f.h * scale - wrap.clientHeight) / 2 + wrap.clientHeight * 0.18);
     state.panX = GF.clamp(state.panX, -overX, overX);
     state.panY = GF.clamp(state.panY, -overY, overY);
-    canvas.style.width = (f.w * scale) + 'px';
-    canvas.style.height = (f.h * scale) + 'px';
+    canvas.style.width = (wrap.clientWidth * scale) + 'px';
+    canvas.style.height = (wrap.clientHeight * scale) + 'px';
     canvas.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
   }
 
@@ -101,38 +114,18 @@
     const t0 = performance.now();
     let o;
     if (orbit) {
-      if (dynamic) {
-        o = renderOpts(null, null, true, {
-          orbit: true,
-          orbitAspect: 0,
-          maxPixels: Math.min(previewBudget(), 1050000),
-          outline: false,
-          style: 'pixel'
-        });
-      } else {
-        const aspect = state.viewAspect || ((state.frame && state.frame.w) ? state.frame.w / state.frame.h : (wrap.clientWidth / wrap.clientHeight));
-        let fw, fh;
-        if (state.lightFrame) { fw = state.lightFrame[0]; fh = state.lightFrame[1]; }
-        else {
-          const px = Math.min(previewBudget(), 1050000);
-          fw = Math.max(4, Math.floor(Math.sqrt(px * aspect) / 4) * 4);
-          fh = Math.max(4, Math.floor(px / fw / 4) * 4);
-        }
-        o = renderOpts(null, null, true, {
-          orbit: true,
-          orbitAspect: fw / fh,
-          orbitFrame: [fw, fh],
-          maxPixels: Math.min(previewBudget(), 1050000),
-          outline: false,
-          style: 'pixel'
-        });
-      }
+      // 转向 / 俯角都走视口尺寸的轻量帧：画布始终铺满舞台，取景按全朝向最大范围锁定
+      o = renderOpts(null, null, true, {
+        orbit: true,
+        outline: false,
+        style: 'pixel'
+      });
     } else {
       o = renderOpts(null, null, true);
     }
     state.frame = GF.render(state.mesh, o);
     if (!orbit) rememberViewFrame();
-    draw(dynamic ? false : !!orbit);
+    draw(false);
     if (!orbit) {
       $('#stat').textContent = `预览 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · ${Math.round(performance.now() - t0)}ms`;
     } else {

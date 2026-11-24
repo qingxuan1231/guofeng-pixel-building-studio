@@ -29,14 +29,32 @@
     const z = Math.min(2.2, Math.max(1, (zoom == null ? state.zoom : zoom) / 2));
     return Math.min(PREVIEW_MAX_PIXELS, w * h * dpr * dpr * z * z);
   }
+  function fitExtentForPreview() {
+    if (!state.mesh) return null;
+    const r = state.recipe.render;
+    const key = [r.pitch, r.persp == null ? 0 : r.persp, state.mesh.triCount].join('|');
+    if (state.fitKey !== key) {
+      state.fitExtent = GF.fitExtents(state.mesh, { pitch: r.pitch, persp: r.persp == null ? 0 : r.persp });
+      state.fitKey = key;
+    }
+    return state.fitExtent;
+  }
   function previewOpts(extra) {
-    return renderOpts(Object.assign({ preview: true, maxPixels: previewBudget(), gpu: state.gpu, gridMask: !!state.grid }, extra || {}));
+    return renderOpts(Object.assign({
+      preview: true,
+      maxPixels: previewBudget(),
+      gpu: state.gpu,
+      gridMask: !!state.grid,
+      viewport: [wrap.clientWidth || 1200, wrap.clientHeight || 800],
+      fitExtent: fitExtentForPreview()
+    }, extra || {}));
   }
 
   // 记录完整预览的画幅比例，并预先算好交互轻量帧的固定画布尺寸。
   // 转动 / 调俯角时复用同一块 FBO，不会因取景包围盒差 1px 反复重建纹理。
   function rememberViewFrame() {
     if (!state.frame) return;
+    state.orbitK = 1;
     const f = state.frame;
     state.viewAspect = f.w / f.h;
     const cap = 1300000;
@@ -52,20 +70,8 @@
   }
 
   function orbitOpts() {
-    const aspect = state.viewAspect
-      || ((state.frame && state.frame.w) ? state.frame.w / state.frame.h : (wrap.clientWidth / wrap.clientHeight));
-    let fw, fh;
-    if (state.lightFrame) { fw = state.lightFrame[0]; fh = state.lightFrame[1]; }
-    else {
-      const px = Math.min(previewBudget(), 1300000);
-      fw = Math.max(4, Math.floor(Math.sqrt(px * aspect) / 4) * 4);
-      fh = Math.max(4, Math.floor(px / fw / 4) * 4);
-    }
     return previewOpts({
       orbit: true,
-      orbitAspect: fw / fh,
-      orbitFrame: [fw, fh],
-      maxPixels: Math.min(previewBudget(), 1300000),
       outline: false,
       style: 'pixel'
     });

@@ -18,6 +18,34 @@
       });
       chips.appendChild(c);
     });
+
+    // 配方芯片最多展示 7 行，其余收进“展开”里
+    const chipHead = chips.closest('.panel-head');
+    const chipMore = document.createElement('button');
+    chipMore.className = 'preset-more';
+    chipMore.type = 'button';
+    chipHead.appendChild(chipMore);
+    let chipsExpanded = false;
+    function fitPresetChips() {
+      const items = Array.prototype.slice.call(chips.querySelectorAll('.chip'));
+      if (!items.length) return;
+      items.forEach((c) => { c.style.display = ''; });
+      const tops = Array.from(new Set(items.map((c) => c.offsetTop))).sort((a, b) => a - b);
+      const cut = tops[7] == null ? Infinity : tops[7];
+      const hidden = items.filter((c) => c.offsetTop >= cut).length;
+      if (!chipsExpanded) {
+        items.forEach((c) => { if (c.offsetTop >= cut) c.style.display = 'none'; });
+      }
+      chipMore.style.display = (hidden || chipsExpanded) ? '' : 'none';
+      chipMore.textContent = chipsExpanded ? '收起' : ('展开 +' + hidden);
+    }
+    chipMore.addEventListener('click', () => {
+      chipsExpanded = !chipsExpanded;
+      fitPresetChips();
+    });
+    requestAnimationFrame(fitPresetChips);
+    window.addEventListener('resize', () => requestAnimationFrame(fitPresetChips));
+
     markChip('siheyuan');
 
     if ($('#pitchRange')) {

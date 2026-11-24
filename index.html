@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>国风古建 · 城池像素工坊</title>
-<link rel="stylesheet" href="css/app.css?v=20261125modular" />
+<link rel="stylesheet" href="css/app.css?v=20261125preset7" />
 </head>
 <body>
   <!-- 顶栏 -->
@@ -78,7 +78,7 @@
           <input type="range" id="perspRange" min="0" max="100" step="5" value="0">
           <b id="perspVal">0</b><span class="unit">%</span>
         </div>
-        <div class="cam-tip">拖动即时轻量预览 · 松手补全图 · 左键上下拖也能调俯角</div>
+        <div class="cam-tip">拖动即时轻量预览 · 松手补全图 · 右键调俯角，Shift+右键平移</div>
       </div>
 
       <div class="canvas-wrap" id="canvasWrap">
@@ -91,13 +91,13 @@
         <div class="comp-bar bld-bar" id="bldBar" title="建筑本体：点台基 / 每层 / 屋面，逐件调整；面板可拖动"></div>
         <div class="comp-panel" id="compPanel"></div>
         <div class="comp-panel bld-panel" id="bldPanel"></div>
-        <div class="canvas-hint" id="hint">左键左右拖动转旋向 / 上下拖动调俯视 · 右键 / Shift 拖动平移 · 滚轮以光标为锚点缩放 · 双击复位</div>
+        <div class="canvas-hint" id="hint">右键左右拖动转旋向 / 上下拖动调俯视 · Shift+右键拖动平移 · 按住 ← → ↑ ↓ 平移 · 滚轮以光标为锚点缩放 · 双击复位</div>
       </div>
 
       <div class="stage-bottom">
         <div class="stat" id="stat"></div>
         <div class="spacer"></div>
-        <div class="stat">左键旋转 / 俯视 · 右键平移 · 滚轮缩放</div>
+        <div class="stat">右键旋转 / 俯视 · Shift+右键 / 方向键平移 · 滚轮缩放</div>
       </div>
     </section>
   </div>
@@ -109,37 +109,41 @@
 
   <input type="file" id="fileInput" accept=".json" style="display:none" />
 
-  <script src="js/gf-core.js?v=20261125classic"></script>
-  <script src="js/gf-roof.js?v=20261125classic"></script>
-  <script src="js/gf-parts.js?v=20261125classic"></script>
-  <script src="src/ancient-build/00-common.js?v=20261125classic"></script>
-  <script src="src/ancient-build/10-dwellings.js?v=20261125classic"></script>
-  <script src="src/ancient-build/20-gates.js?v=20261125classic"></script>
-  <script src="src/ancient-build/30-courtyard.js?v=20261125classic"></script>
-  <script src="src/ancient-build/40-layout.js?v=20261125classic"></script>
-  <script src="src/ancient-build/50-compounds.js?v=20261125classic"></script>
-  <script src="src/ancient-build/60-garden.js?v=20261125classic"></script>
-  <script src="src/ancient-build/70-city.js?v=20261125classic"></script>
-  <script src="src/ancient-build/80-assembly.js?v=20261125classic"></script>
-  <script src="js/gf-render.js?v=20261125classic"></script>
-  <script src="js/gf-presets.js?v=20261125classic"></script>
-  <script src="js/gf-export.js?v=20261125classic"></script>
-  <script src="js/gf-help.js?v=20261125classic"></script>
-  <script src="src/ancient-ui/00-shell.js?v=20261125classic"></script>
-  <script src="src/ancient-ui/10-env-editor.js?v=20261125classic"></script>
-  <script src="src/ancient-ui/20-building-editor.js?v=20261125classic"></script>
-  <script src="src/ancient-ui/30-controls.js?v=20261125classic"></script>
-  <script src="src/ancient-ui/40-render.js?v=20261125classic"></script>
-  <script src="src/ancient-ui/50-camera.js?v=20261125classic"></script>
-  <script src="src/ancient-ui/60-demo.js?v=20261125classic"></script>
-  <script src="src/ancient-ui/70-grid.js?v=20261125classic"></script>
-  <script src="src/ancient-ui/80-drag.js?v=20261125classic"></script>
-  <script src="src/ancient-ui/90-interactions.js?v=20261125classic"></script>
-  <script src="src/ancient-ui/95-export.js?v=20261125classic"></script>
-  <script src="src/ancient-ui/97-events.js?v=20261125classic"></script>
-  <script src="src/ancient-ui/99-boot.js?v=20261125classic"></script>
+  <script src="js/gf-core.js?v=20261125preset7"></script>
+  <script src="js/gf-roof.js?v=20261125preset7"></script>
+  <script src="js/gf-parts.js?v=20261125preset7"></script>
+  <script src="src/ancient-build/00-common.js?v=20261125preset7"></script>
+  <script src="src/ancient-build/10-dwellings.js?v=20261125preset7"></script>
+  <script src="src/ancient-build/20-gates.js?v=20261125preset7"></script>
+  <script src="src/ancient-build/30-courtyard.js?v=20261125preset7"></script>
+  <script src="src/ancient-build/40-layout.js?v=20261125preset7"></script>
+  <script src="src/ancient-build/50-compounds.js?v=20261125preset7"></script>
+  <script src="src/ancient-build/60-garden.js?v=20261125preset7"></script>
+  <script src="src/ancient-build/70-city.js?v=20261125preset7"></script>
+  <script src="src/ancient-build/80-assembly.js?v=20261125preset7"></script>
+  <script src="js/gf-render.js?v=20261125preset7"></script>
+  <script src="js/gf-presets.js?v=20261125preset7"></script>
+  <script src="js/gf-export.js?v=20261125preset7"></script>
+  <script src="js/gf-help.js?v=20261125preset7"></script>
+  <script src="src/ancient-ui/00-shell.js?v=20261125preset7"></script>
+  <script src="src/ancient-ui/10-env-editor.js?v=20261125preset7"></script>
+  <script src="src/ancient-ui/20-building-editor.js?v=20261125preset7"></script>
+  <script src="src/ancient-ui/30-controls.js?v=20261125preset7"></script>
+  <script src="src/ancient-ui/40-render.js?v=20261125preset7"></script>
+  <script src="src/ancient-ui/50-camera.js?v=20261125preset7"></script>
+  <script src="src/ancient-ui/60-demo.js?v=20261125preset7"></script>
+  <script src="src/ancient-ui/70-grid.js?v=20261125preset7"></script>
+  <script src="src/ancient-ui/80-drag.js?v=20261125preset7"></script>
+  <script src="src/ancient-ui/90-interactions.js?v=20261125preset7"></script>
+  <script src="src/ancient-ui/95-export.js?v=20261125preset7"></script>
+  <script src="src/ancient-ui/97-events.js?v=20261125preset7"></script>
+  <script src="src/ancient-ui/99-boot.js?v=20261125preset7"></script>
 </body>
 </html>
+
+
+
+
 
 
 

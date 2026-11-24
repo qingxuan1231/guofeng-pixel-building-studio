@@ -16,7 +16,8 @@
 
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener('mousedown', (e) => {
-    dragging = { x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey, yaw: state.city.render.yaw, pitch: state.city.render.pitch, moved: false, yawMoved: false };
+    if (e.button !== 2) return;
+    dragging = { x: e.clientX, y: e.clientY, pan: e.shiftKey, yaw: state.city.render.yaw, pitch: state.city.render.pitch, moved: false, yawMoved: false };
     canvas.classList.add('dragging');
   });
   window.addEventListener('mousemove', (e) => {
@@ -27,15 +28,15 @@
       dragging.x = e.clientX; dragging.y = e.clientY;
       dragging.moved = true;
       layout();
-    } else {
-      if (Math.abs(dx) + Math.abs(dy) > 0.5) dragging.moved = true;
-      if (Math.abs(dx) > 2) dragging.yawMoved = true;
-      state.city.render.yaw = Math.round((dragging.yaw + dx * 0.4 + 360) % 360);
-      // 上下拖动 = Z 轴俯角；和 OrbitControls 同向：向下拖看屋面，向上拖看立面
-      state.city.render.pitch = Math.max(15, Math.min(88, Math.round(dragging.pitch + dy * 0.3)));
-      syncPitchUI();
-      scheduleOrbit();
+      return;
     }
+    if (Math.abs(dx) + Math.abs(dy) > 0.5) dragging.moved = true;
+    if (Math.abs(dx) > 2) dragging.yawMoved = true;
+    state.city.render.yaw = Math.round((dragging.yaw + dx * 0.4 + 360) % 360);
+    // 上下拖动 = Z 轴俯角；和 OrbitControls 同向：向下拖看屋面，向上拖看立面
+    state.city.render.pitch = Math.max(15, Math.min(88, Math.round(dragging.pitch + dy * 0.3)));
+    syncPitchUI();
+    scheduleOrbit();
   });
   window.addEventListener('mouseup', () => {
     if (!dragging) return;
@@ -52,6 +53,52 @@
     syncControls();
     if (cameraMoved) renderPreview(false);
   });
+  // 平移：方向键 / < > 左右上下都可；Shift+右键拖动也能平移
+  let panLeft = false, panRight = false, panUp = false, panDown = false, panTimer = 0;
+  function panNudge() {
+    const dx = (panRight ? 1 : 0) - (panLeft ? 1 : 0);
+    const dy = (panDown ? 1 : 0) - (panUp ? 1 : 0);
+    if (!dx && !dy) return;
+    state.panX += dx * 9;
+    state.panY += dy * 9;
+    layout();
+  }
+  function panStart() {
+    if (panTimer) return;
+    panNudge();
+    panTimer = setInterval(panNudge, 16);
+  }
+  function panStop() {
+    if (panLeft || panRight || panUp || panDown) return;
+    if (panTimer) { clearInterval(panTimer); panTimer = 0; }
+  }
+  function isTypingTarget(el) {
+    if (!el) return false;
+    if (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable) return true;
+    if (el.tagName === 'INPUT') {
+      const type = (el.type || 'text').toLowerCase();
+      return type !== 'range' && type !== 'button' && type !== 'checkbox' && type !== 'radio' && type !== 'file' && type !== 'color';
+    }
+    return false;
+  }
+  function panKey(e, down) {
+    if (isTypingTarget(e.target)) return;
+    const left = e.key === '<' || e.key === 'ArrowLeft' || e.code === 'Comma';
+    const right = e.key === '>' || e.key === 'ArrowRight' || e.code === 'Period';
+    const up = e.key === 'ArrowUp';
+    const dn = e.key === 'ArrowDown';
+    if (!left && !right && !up && !dn) return;
+    e.preventDefault();
+    if (left) panLeft = down;
+    if (right) panRight = down;
+    if (up) panUp = down;
+    if (dn) panDown = down;
+    if (down) panStart();
+    else panStop();
+  }
+  window.addEventListener('keydown', (e) => panKey(e, true));
+  window.addEventListener('keyup', (e) => panKey(e, false));
+  window.addEventListener('blur', () => { panLeft = panRight = panUp = panDown = false; panStop(); });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     const old = state.zoom;

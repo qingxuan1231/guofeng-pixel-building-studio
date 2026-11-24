@@ -161,12 +161,9 @@
     const bb = state.bbox || { x0: 0, y0: 0, x1: f.w, y1: f.h };
     const fx = bb.x0 + (bb.x1 - bb.x0) * v.nx;
     const fy = bb.y0 + (bb.y1 - bb.y0) * v.ny;
-    const availW = wrap.clientWidth * 0.86;
-    const availH = wrap.clientHeight * 0.86;
-    // 基准倍率永远按整帧算：任何模型在 1.0 都完整落在舞台内
-    const fit = Math.min(availW / f.w, availH / f.h);
-    const scale = fit * v.k;
-    state.zoom = GF.clamp(2 * scale / fit, 0.5, 8);
+    // 视口填充后，f 就是舞台本身；v.k=1 对应画布刚好铺满舞台
+    const scale = v.k;
+    state.zoom = GF.clamp(2 * v.k, 0.5, 8);
     state.panX = -(fx - f.w / 2) * scale;
     state.panY = -(fy - f.h / 2) * scale;
     // 全景：画布小于舞台时把平移夹在留白内，保证整幅画面不被舞台边缘切到
@@ -182,18 +179,15 @@
   function layout() {
     const f = state.frame;
     if (!f) return;
-    // 适配：让画面占舞台 ~86%
-    const availW = wrap.clientWidth * 0.86;
-    const availH = wrap.clientHeight * 0.86;
-    const fit = Math.min(availW / f.w, availH / f.h);
-    const scale = fit * (state.zoom / 2);
-    // 平移限制：可以移动到画面的任意部位，但不许把画面整块拖出视野
-    const overX = Math.max(0, (f.w * scale - wrap.clientWidth) / 2 + wrap.clientWidth * 0.18);
-    const overY = Math.max(0, (f.h * scale - wrap.clientHeight) / 2 + wrap.clientHeight * 0.18);
+    // 视口填充：渲染帧按舞台尺寸出图，CSS 直接铺满舞台，只留 zoom 做整体放大
+    const scale = state.zoom / 2;
+    // 平移限制：即使整幅画面刚好铺满舞台，也留出可以左右/上下挪动的余量
+    const overX = Math.max(wrap.clientWidth * 0.3, (f.w * scale - wrap.clientWidth) / 2 + wrap.clientWidth * 0.18);
+    const overY = Math.max(wrap.clientHeight * 0.3, (f.h * scale - wrap.clientHeight) / 2 + wrap.clientHeight * 0.18);
     state.panX = GF.clamp(state.panX, -overX, overX);
     state.panY = GF.clamp(state.panY, -overY, overY);
-    canvas.style.width = (f.w * scale) + 'px';
-    canvas.style.height = (f.h * scale) + 'px';
+    canvas.style.width = (wrap.clientWidth * scale) + 'px';
+    canvas.style.height = (wrap.clientHeight * scale) + 'px';
     // 绝对居中 + 平移：画面再大也围绕舞台中心缩放，不会只往右下角长
     canvas.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
   }

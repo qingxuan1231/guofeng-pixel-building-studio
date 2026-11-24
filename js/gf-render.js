@@ -371,6 +371,39 @@
       H = Math.max(4, Math.ceil((by1 - by0) * ppm) + pad * 2);
       ox = -bx0 * ppm + pad; oy = -by0 * ppm + pad;
     }
+    // CPU 轨道帧与 GPU 轨道帧同一套取景锁：画布尺寸、像素密度都不再逐帧适配
+    if (o.orbit && o.orbitFrame && o.orbitFrame.length === 2) {
+      W = Math.max(16, Math.floor(o.orbitFrame[0]));
+      H = Math.max(16, Math.floor(o.orbitFrame[1]));
+      const bw = Math.max(1, bx1 - bx0), bh = Math.max(1, by1 - by0);
+      ppm = o.orbitPPM > 0 ? o.orbitPPM : Math.max(1, Math.min((W - pad * 2) / bw, (H - pad * 2) / bh));
+      ox = (W - bw * ppm) * 0.5 - bx0 * ppm;
+      oy = (H - bh * ppm) * 0.5 - by0 * ppm;
+    }
+    // 画布铺满视口：外框尺寸固定，但内部仍按用户设的像素密度出图
+    if (o.viewport && o.viewport.length === 2) {
+      const VW = Math.max(16, Math.floor(o.viewport[0]));
+      const VH = Math.max(16, Math.floor(o.viewport[1]));
+      const A = VW / VH;
+      const ext = o.fitExtent && o.fitExtent.length === 2 ? o.fitExtent : [bx1 - bx0, by1 - by0];
+      const fw = Math.max(1, ext[0]), fh = Math.max(1, ext[1]);
+      let target = o.ppm > 0 ? o.ppm : ppm;
+      let tw = Math.ceil(fw * target) + pad * 2;
+      let th = Math.ceil(fh * target) + pad * 2;
+      if (tw / th < A) tw = Math.ceil(th * A); else th = Math.ceil(tw / A);
+      if (o.maxPixels && tw * th > o.maxPixels) {
+        const k = Math.sqrt(o.maxPixels / (tw * th));
+        target = Math.max(1, target * k);
+        tw = Math.ceil(fw * target) + pad * 2;
+        th = Math.ceil(fh * target) + pad * 2;
+        if (tw / th < A) tw = Math.ceil(th * A); else th = Math.ceil(tw / A);
+      }
+      ppm = target;
+      W = tw; H = th;
+      const ccx = (bx0 + bx1) * 0.5, ccy = (by0 + by1) * 0.5;
+      ox = W * 0.5 - ccx * ppm;
+      oy = H * 0.5 - ccy * ppm;
+    }
 
     const depth = new Float32Array(W * H).fill(-1e9);
     const rgba = new Uint8ClampedArray(W * H * 4);
@@ -1064,9 +1097,34 @@
         W = Math.max(16, Math.floor(o.orbitFrame[0]));
         H = Math.max(16, Math.floor(o.orbitFrame[1]));
         const bw = Math.max(1, bx1 - bx0), bh = Math.max(1, by1 - by0);
-        ppm = Math.max(1, Math.min((W - pad * 2) / bw, (H - pad * 2) / bh));
+        // 转动过程中的像素密度取“上一次完整预览”的 ppm 并锁死；只让建筑自身转向，
+        // 不再按当前包围盒重新适配缩放，否则画面会一圈一圈地忽大忽小。
+        ppm = o.orbitPPM > 0 ? o.orbitPPM : Math.max(1, Math.min((W - pad * 2) / bw, (H - pad * 2) / bh));
         ox = (W - bw * ppm) * 0.5 - bx0 * ppm;
         oy = (H - bh * ppm) * 0.5 - by0 * ppm;
+      }
+      if (o.viewport && o.viewport.length === 2) {
+        const VW = Math.max(16, Math.floor(o.viewport[0]));
+        const VH = Math.max(16, Math.floor(o.viewport[1]));
+        const A = VW / VH;
+        const ext = o.fitExtent && o.fitExtent.length === 2 ? o.fitExtent : [bx1 - bx0, by1 - by0];
+        const fw = Math.max(1, ext[0]), fh = Math.max(1, ext[1]);
+        let target = o.ppm > 0 ? o.ppm : ppm;
+        let tw = Math.ceil(fw * target) + pad * 2;
+        let th = Math.ceil(fh * target) + pad * 2;
+        if (tw / th < A) tw = Math.ceil(th * A); else th = Math.ceil(tw / A);
+        if (o.maxPixels && tw * th > o.maxPixels) {
+          const k = Math.sqrt(o.maxPixels / (tw * th));
+          target = Math.max(1, target * k);
+          tw = Math.ceil(fw * target) + pad * 2;
+          th = Math.ceil(fh * target) + pad * 2;
+          if (tw / th < A) tw = Math.ceil(th * A); else th = Math.ceil(tw / A);
+        }
+        ppm = target;
+        W = tw; H = th;
+        const ccx = (bx0 + bx1) * 0.5, ccy = (by0 + by1) * 0.5;
+        ox = W * 0.5 - ccx * ppm;
+        oy = H * 0.5 - ccy * ppm;
       }
 
       /* 深度范围：用包围盒 8 个角点，保守覆盖全部几何 */
@@ -1317,6 +1375,35 @@
       if (typeof console !== 'undefined') console.warn('[gpu] 渲染失败，回落 CPU：' + e.message);
       return null;
     }
+  };
+
+  /* 轨道取景用的保守尺寸：把世界包围盒绕一圈，取各朝向投影的宽高最大值。
+   * 页面按这个尺寸锁定 ppm，转动时只改朝向，不再重新适配缩放。 */
+  GF.fitExtents = function (mesh, o) {
+    o = o || {};
+    const b = mesh.bounds();
+    if (!isFinite(b.x0)) return [20, 20];
+    const pitch = o.pitch == null ? 30 : o.pitch;
+    const psOpts = { persp: o.persp == null ? 0 : o.persp };
+    let maxW = 2, maxH = 2;
+    for (let yaw = 0; yaw < 360; yaw += 15) {
+      const cam = camera(yaw, pitch);
+      const ps = makePersp(b, cam, psOpts);
+      const cdepth = ps ? ps.c[0] * cam.view[0] + ps.c[1] * cam.view[1] + ps.c[2] * cam.view[2] : 0;
+      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+      for (let i = 0; i < 8; i++) {
+        const x = i & 1 ? b.x1 : b.x0, y = i & 2 ? b.y1 : b.y0, z = i & 4 ? b.z1 : b.z0;
+        const k = ps ? perspK(ps, (x * cam.view[0] + y * cam.view[1] + z * cam.view[2]) - cdepth) : 1;
+        const qx = (x * cam.right[0] + z * cam.right[2]) * k;
+        const qy = -(x * cam.up[0] + y * cam.up[1] + z * cam.up[2]) * k;
+        if (qx < x0) x0 = qx; if (qx > x1) x1 = qx;
+        if (qy < y0) y0 = qy; if (qy > y1) y1 = qy;
+      }
+      maxW = Math.max(maxW, x1 - x0);
+      maxH = Math.max(maxH, y1 - y0);
+    }
+    // 留出足够远观余量：画布仍铺满舞台，模型缩到约 55~60%，转到任何朝向都不会顶边
+    return [maxW * 1.6, maxH * 1.6];
   };
 
   /* --------------------------- 多方向与精灵表 --------------------------- */

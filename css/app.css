@@ -88,11 +88,18 @@ html, body {
   overflow: hidden;
 }
 .panel-head {
+  position: relative;
   padding: 12px 14px 8px;
   border-bottom: 1px solid var(--line);
   background: var(--panel-2);
 }
 .panel-head span { font-size: 12px; color: var(--ink-2); letter-spacing: 1px; }
+.preset-more {
+  position: absolute; right: 12px; top: 7px;
+  padding: 2px 4px; border: 0; background: none;
+  font-size: 11px; color: #8a6a32; cursor: pointer;
+}
+.preset-more:hover { text-decoration: underline; }
 .preset-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .chip {
   padding: 4px 9px; border-radius: 999px;
@@ -197,7 +204,6 @@ canvas#view {
   image-rendering: pixelated;
   cursor: grab;
   transform-origin: center center;
-  filter: drop-shadow(0 10px 18px rgba(60,45,25,.16));
 }
 canvas#view.dragging { cursor: grabbing; }
 .mini.on { background: #2b2722 !important; color: #f1e6ce !important; border-color: #2b2722 !important; }
