@@ -990,36 +990,28 @@
       const cdepth = ps ? ps.c[0] * view0[0] + ps.c[1] * view0[1] + ps.c[2] * view0[2] : 0;
       let bx0, bx1, by0, by1;
       if (o.orbit) {
-        const aspect = o.orbitAspect > 0 ? o.orbitAspect : 1;
-        if (ps) {
-          // 透视轨道帧：用 8 个角点求当前角度的真实投影包围盒，再按画布宽高比留 5% 边
-          let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
-          for (let i = 0; i < 8; i++) {
-            const x = i & 1 ? b.x1 : b.x0, y = i & 2 ? b.y1 : b.y0, z = i & 4 ? b.z1 : b.z0;
-            const k = perspK(ps, (x * view0[0] + y * view0[1] + z * view0[2]) - cdepth);
-            const qx = (x * right0[0] + z * right0[2]) * k;
-            const qy = -(x * up0[0] + y * up0[1] + z * up0[2]) * k;
-            if (qx < x0) x0 = qx; if (qx > x1) x1 = qx;
-            if (qy < y0) y0 = qy; if (qy > y1) y1 = qy;
-          }
-          let bw = Math.max(2, x1 - x0) * 1.05;
-          let bh = Math.max(2, y1 - y0) * 1.05;
+        const aspect = o.orbitAspect > 0 ? o.orbitAspect : 0;
+        // 轨道帧统一用 8 个角点投影取景。persp=0 时 k 恒为 1，
+        // 与 persp>0 的透视路径连续衔接，不会在拉到 0 的瞬间换一套取景框。
+        let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+        for (let i = 0; i < 8; i++) {
+          const x = i & 1 ? b.x1 : b.x0, y = i & 2 ? b.y1 : b.y0, z = i & 4 ? b.z1 : b.z0;
+          const k = ps ? perspK(ps, (x * view0[0] + y * view0[1] + z * view0[2]) - cdepth) : 1;
+          const qx = (x * right0[0] + z * right0[2]) * k;
+          const qy = -(x * up0[0] + y * up0[1] + z * up0[2]) * k;
+          if (qx < x0) x0 = qx; if (qx > x1) x1 = qx;
+          if (qy < y0) y0 = qy; if (qy > y1) y1 = qy;
+        }
+        let bw = Math.max(2, x1 - x0) * 1.05;
+        let bh = Math.max(2, y1 - y0) * 1.05;
+        // orbitAspect<=0 表示按当前投影内容的真实宽高比取景（城池动态轻量帧用）。
+        if (aspect > 0) {
           if (bw / bh > aspect) bh = bw / aspect;
           else bw = bh * aspect;
-          const ccx = (x0 + x1) * 0.5, ccy = (y0 + y1) * 0.5;
-          bx0 = ccx - bw * 0.5; bx1 = ccx + bw * 0.5;
-          by0 = ccy - bh * 0.5; by1 = ccy + bh * 0.5;
-        } else {
-          const cx = (b.x0 + b.x1) * 0.5, cy = (b.y0 + b.y1) * 0.5, cz = (b.z0 + b.z1) * 0.5;
-          const radXZ = Math.sqrt((b.x1 - b.x0) * (b.x1 - b.x0) + (b.z1 - b.z0) * (b.z1 - b.z0)) * 0.5;
-          const side = Math.max(12, (radXZ * 2 + (b.y1 - b.y0)) * 1.06);
-          const halfW = side * (aspect >= 1 ? aspect : 1) * 0.5;
-          const halfH = side * (aspect >= 1 ? 1 : 1 / aspect) * 0.5;
-          const sx = cx * right0[0] + cz * right0[2];
-          const sy = -(cx * up0[0] + cy * up0[1] + cz * up0[2]);
-          bx0 = sx - halfW; bx1 = sx + halfW;
-          by0 = sy - halfH; by1 = sy + halfH;
         }
+        const ccx = (x0 + x1) * 0.5, ccy = (y0 + y1) * 0.5;
+        bx0 = ccx - bw * 0.5; bx1 = ccx + bw * 0.5;
+        by0 = ccy - bh * 0.5; by1 = ccy + bh * 0.5;
       } else {
         const n = mesh.triCount * 3;
         const px = new Float32Array(n), py = new Float32Array(n);

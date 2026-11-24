@@ -354,34 +354,47 @@
     canvas.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
   }
 
-  /* 只重画，不重建几何：转视角、俯角、画风、像素密度都走这里 */
-  function renderPreview(orbit, tag) {
+  /* 只重画，不重建几何：转视角、俯角、画风、像素密度都走这里
+   * dynamic=true：俯角/透视滑条用当前投影内容的真实宽高比出轻量帧，
+   * 避免固定 FBO 的画幅和当前角度不匹配，拖动时整座城缩成一小块。 */
+  function renderPreview(orbit, tag, dynamic) {
     if (!state.mesh) return;
     if (state.busy) { state.pendingRender = true; return; }
     const t0 = performance.now();
-    const o = orbit
-      ? (() => {
-          const aspect = state.viewAspect || ((state.frame && state.frame.w) ? state.frame.w / state.frame.h : (wrap.clientWidth / wrap.clientHeight));
-          let fw, fh;
-          if (state.lightFrame) { fw = state.lightFrame[0]; fh = state.lightFrame[1]; }
-          else {
-            const px = Math.min(previewBudget(), 1050000);
-            fw = Math.max(4, Math.floor(Math.sqrt(px * aspect) / 4) * 4);
-            fh = Math.max(4, Math.floor(px / fw / 4) * 4);
-          }
-          return renderOpts(null, null, true, {
-            orbit: true,
-            orbitAspect: fw / fh,
-            orbitFrame: [fw, fh],
-            maxPixels: Math.min(previewBudget(), 1050000),
-            outline: false,
-            style: 'pixel'
-          });
-        })()
-      : renderOpts(null, null, true);
+    let o;
+    if (orbit) {
+      if (dynamic) {
+        o = renderOpts(null, null, true, {
+          orbit: true,
+          orbitAspect: 0,
+          maxPixels: Math.min(previewBudget(), 1050000),
+          outline: false,
+          style: 'pixel'
+        });
+      } else {
+        const aspect = state.viewAspect || ((state.frame && state.frame.w) ? state.frame.w / state.frame.h : (wrap.clientWidth / wrap.clientHeight));
+        let fw, fh;
+        if (state.lightFrame) { fw = state.lightFrame[0]; fh = state.lightFrame[1]; }
+        else {
+          const px = Math.min(previewBudget(), 1050000);
+          fw = Math.max(4, Math.floor(Math.sqrt(px * aspect) / 4) * 4);
+          fh = Math.max(4, Math.floor(px / fw / 4) * 4);
+        }
+        o = renderOpts(null, null, true, {
+          orbit: true,
+          orbitAspect: fw / fh,
+          orbitFrame: [fw, fh],
+          maxPixels: Math.min(previewBudget(), 1050000),
+          outline: false,
+          style: 'pixel'
+        });
+      }
+    } else {
+      o = renderOpts(null, null, true);
+    }
     state.frame = GF.render(state.mesh, o);
     if (!orbit) rememberViewFrame();
-    draw(!!orbit);
+    draw(dynamic ? false : !!orbit);
     if (!orbit) {
       $('#stat').textContent = `预览 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · ${Math.round(performance.now() - t0)}ms`;
     } else {
@@ -398,7 +411,7 @@
     pitchRAF = requestAnimationFrame(() => {
       pitchRAF = 0;
       if (!pitchDirty) return;
-      renderPreview(true, '俯角');
+      renderPreview(true, '俯角', true);
     });
   }
 
@@ -473,7 +486,7 @@
     perspRAF = requestAnimationFrame(() => {
       perspRAF = 0;
       if (!perspDirty) return;
-      renderPreview(true, '透视');
+      renderPreview(true, '透视', true);
     });
   }
   function perspCommit() {

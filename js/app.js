@@ -1396,10 +1396,16 @@
   }
   function pitchLightFrame() {
     if (pitchRaf) return;
+    // 与透视滑条一致：先用同取景规则的轻量预览，避免轨道固定帧和完整帧之间跳一下。
+    if (camRaf) { cancelAnimationFrame(camRaf); camRaf = 0; }
     pitchRaf = requestAnimationFrame(() => {
       pitchRaf = 0;
       if (!pitchDirty) return;
-      renderOrbit('俯角');
+      if (!state.mesh || state.playing) return;
+      const t0 = performance.now();
+      state.frame = GF.render(state.mesh, previewOpts({ outline: false, style: 'pixel' }));
+      draw();
+      $('#stat').textContent = `俯角预览 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · 轻量帧 ${Math.round(performance.now() - t0)}ms`;
     });
   }
   function pitchCommit() {
@@ -1452,10 +1458,17 @@
   }
   function perspLightFrame() {
     if (perspRaf) return;
+    // 透视滑条不复用轨道固定帧：轨道帧的取景框和当前完整预览不同，
+    // 拉到 0 时容易在“轻量帧 → 完整帧”之间跳一下；这里直接走同取景规则的轻量预览。
+    if (camRaf) { cancelAnimationFrame(camRaf); camRaf = 0; }
     perspRaf = requestAnimationFrame(() => {
       perspRaf = 0;
       if (!perspDirty) return;
-      renderOrbit('透视');
+      if (!state.mesh || state.playing) return;
+      const t0 = performance.now();
+      state.frame = GF.render(state.mesh, previewOpts({ outline: false, style: 'pixel' }));
+      draw();
+      $('#stat').textContent = `透视预览 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · 轻量帧 ${Math.round(performance.now() - t0)}ms`;
     });
   }
   function perspCommit() {
@@ -1618,7 +1631,7 @@
       z0 = (bb ? Math.min(bb.z0, 0) : -sceneSpan / 2) - cover;
       z1 = (bb ? Math.max(bb.z1, 0) : sceneSpan / 2) + cover;
     } else {
-      const ext = 0.04 + (m.persp ? 0.25 : 0);
+      const ext = 0.04 + 0.25 * (m.persp || 0);
       const spanX = x1 - x0, spanZ = z1 - z0;
       x0 = Math.min(x0 - spanX * ext, (bb ? Math.min(bb.x0, 0) : 0) - cover);
       x1 = Math.max(x1 + spanX * ext, (bb ? Math.max(bb.x1, 0) : 0) + cover);
@@ -1630,7 +1643,7 @@
     let step = 1;
     for (const s of GRID_STEPS) { if (span / s <= 100) { step = s; break; } }
     const cx = f.w / 2, cy = f.h / 2;
-    const reach = Math.max(f.w, f.h) * (0.68 + (m.persp ? 0.55 * m.persp : 0));
+    const reach = Math.max(f.w, f.h) * (0.68 + 0.55 * (m.persp || 0));
     const fade = (ax, ay, bx, by) => {
       const d = Math.hypot((ax + bx) / 2 - cx, (ay + by) / 2 - cy);
       return GF.clamp(1 - d / reach, 0.07, 1);
