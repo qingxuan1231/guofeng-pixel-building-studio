@@ -3183,16 +3183,19 @@
     const doMerlon = !opt || opt.merlon !== false;
     const doParapet = !opt || opt.parapet !== false;
     if (doMerlon) {
-      const step = 2.2;
+      const step = (opt && opt.merlonStep) || r.merlonStep || 2.2;
+      const mw = (opt && opt.merlonW) || r.merlonW || 0.55;
+      const mh = opt && opt.merlonH != null ? opt.merlonH : (r.merlonH == null ? 0.66 : r.merlonH);
       const n = Math.max(1, Math.floor(L / step));
       for (let i = 0; i <= n; i++) {
         const x = (L * i) / n;
-        sub.boxC(x, tw / 2 + 0.14, 0.55, 0.7, H + 0.06, H + 0.72, 'brick', '垛口·雉堞');
-        sub.boxC(x, tw / 2 + 0.5, 0.14, 0.06, H + 0.36, H + 0.6, 'dark', '望孔');
+        sub.boxC(x, tw / 2 + 0.14, mw, 0.7, H + 0.06, H + 0.06 + mh, 'brick', '垛口·雉堞');
+        if (mh > 0.5) sub.boxC(x, tw / 2 + 0.5, Math.min(0.16, mw * 0.3), 0.06, H + 0.06 + mh * 0.42, H + 0.06 + mh * 0.78, 'dark', '望孔');
       }
     }
     if (doParapet) {
-      sub.box(0, L, H, H + 0.42, -tw / 2 - 0.12, -tw / 2 + 0.1, 'brickB', '内侧女墙');
+      const ph = opt && opt.parapetH != null ? opt.parapetH : (r.parapetH == null ? 0.42 : r.parapetH);
+      sub.box(0, L, H, H + ph, -tw / 2 - 0.12, -tw / 2 + 0.1, 'brickB', '内侧女墙');
     }
     placeRun(mb, sub, a, b);
   }
@@ -3298,14 +3301,20 @@
     }
   }
 
-  // 马面（敌台）：突出墙外，台上铺舍 / 橹顶
+  // 马面（敌台）：突出墙外，台上铺舍 / 橹顶；可关敌楼，只留平台
   function cityBastion(mb, r, p, n, H) {
-    const w = r.wallTopW + 1.2, proj = r.bastionProj;
+    const w = r.bastionW > 0 ? r.bastionW : r.wallTopW + 1.2;
+    const proj = r.bastionProj;
     const cx = p[0] + n[0] * (proj / 2 + r.wallTopW / 2);
     const cz = p[1] + n[1] * (proj / 2 + r.wallTopW / 2);
-    mb.boxC(cx, cz, w, proj + r.wallTopW, 0, 0.9, 'stone', '马面·石脚');
-    mb.boxC(cx, cz, w * 0.94, proj + r.wallTopW * 0.9, 0.9, H - 0.22, 'brick', '马面·台身');
-    mb.boxC(cx, cz, w + 0.1, proj + r.wallTopW * 0.9 + 0.1, H - 0.22, H, 'stoneB', '马面·压顶');
+    const d = proj + r.wallTopW;
+    const nx = n[0] !== 0;
+    const w0 = nx ? d : w, d0 = nx ? w : d;
+    const w1 = nx ? d * 0.94 : w * 0.94, d1 = nx ? w * 0.94 : d * 0.94;
+    mb.boxC(cx, cz, w0, d0, 0, 0.9, 'stone', '马面·石脚');
+    mb.taper(cx, cz, w0, d0, w1, d1, 0.9, H - 0.22, 'brick', '马面·台身');
+    mb.boxC(cx, cz, nx ? d + 0.1 : w + 0.1, nx ? w + 0.1 : d + 0.1, H - 0.22, H, 'stoneB', '马面·压顶');
+    if (r.bastionTower === false) return;
     const hw = w * 0.5;
     mb.boxC(cx, cz, hw, hw * 0.8, H, H + 0.5, 'wood', '马面·铺舍');
     cityCheapRoof(mb, cx, cz, hw + 0.4, hw * 0.8 + 0.4, H + 0.5, 0.5, r.tile, r.tileB, '马面·橹顶');
@@ -3337,16 +3346,162 @@
     mb.box(cx - ridge / 2 - 0.1, cx + ridge / 2 + 0.1, ry - 0.05, ry + 0.12, cz - 0.12, cz + 0.12, tileB, tag + '·脊');
   }
 
-  // 里坊（狠 LOD）：四面坊墙 + 一片屋面体量 + 低模顶；不套院落装配器，不铺坊内街
+  // 里坊（狠 LOD）：四面坊墙 + 南面坊门 + 一片屋面体量 + 低模顶；不套院落装配器，不铺坊内街
+  // 里坊（狠 LOD）：四面坊墙 + 一座坊门 + 一片屋面体量 + 低模顶；
+  // 每坊用坐标派生随机数：墙框收放 12%–16%，门位不居中，开门方向在南/东/西之间轮换。
   function cityBlock(mb, r, cx, cz, bw, bd) {
+    const rng = new GF.RNG((((Number(r.seed) || 1) ^ Math.round((cx + 500) * 131 + (cz + 500) * 17)) >>> 0));
+    bw *= 0.84 + rng.next() * 0.16;
+    bd *= 0.84 + rng.next() * 0.16;
     const wh = r.blockWallH, t = 0.22;
-    mb.box(cx - bw / 2, cx + bw / 2, 0.05, wh, cz - bd / 2, cz - bd / 2 + t, 'plaster', '坊墙');
-    mb.box(cx - bw / 2, cx + bw / 2, 0.05, wh, cz + bd / 2 - t, cz + bd / 2, 'plaster', '坊墙');
+    const gw = Math.min(3.4, Math.max(2.2, bw * 0.24));
+    const side = rng.next() < 0.32 ? (rng.next() < 0.5 ? 'east' : 'west') : 'south';
+    let gx = cx, gz = cz + bd / 2;
+    let axis = 'x', ox = 0, oz = 1;
+    if (side === 'south') {
+      gx = Math.max(cx - bw / 2 + gw / 2 + 0.7, Math.min(cx + bw / 2 - gw / 2 - 0.7, cx + rng.range(-bw * 0.24, bw * 0.24)));
+      gz = cz + bd / 2;
+    } else {
+      const sx = cx + (side === 'east' ? bw / 2 : -bw / 2);
+      gx = sx;
+      gz = Math.max(cz - bd / 2 + gw / 2 + 0.7, Math.min(cz + bd / 2 - gw / 2 - 0.7, cz + rng.range(-bd * 0.24, bd * 0.24)));
+      axis = 'z'; ox = side === 'east' ? 1 : -1; oz = 0;
+    }
     mb.box(cx - bw / 2, cx - bw / 2 + t, 0.05, wh, cz - bd / 2, cz + bd / 2, 'plaster', '坊墙');
     mb.box(cx + bw / 2 - t, cx + bw / 2, 0.05, wh, cz - bd / 2, cz + bd / 2, 'plaster', '坊墙');
-    const bodyH = wh * 1.1;
-    mb.boxC(cx, cz - bd * 0.15, bw * 0.4, bd * 0.24, wh, wh + bodyH, 'plaster', '坊内屋面体量');
-    cityCheapRoof(mb, cx, cz - bd * 0.15, bw * 0.4 + 0.5, bd * 0.24 + 0.5, wh + bodyH, 0.55, r.tile, r.tileB, '坊内屋顶');
+    mb.box(cx - bw / 2, cx + bw / 2, 0.05, wh, cz - bd / 2, cz - bd / 2 + t, 'plaster', '坊墙');
+    if (side === 'south') {
+      mb.box(cx - bw / 2, gx - gw / 2, 0.05, wh, cz + bd / 2 - t, cz + bd / 2, 'plaster', '坊墙');
+      mb.box(gx + gw / 2, cx + bw / 2, 0.05, wh, cz + bd / 2 - t, cz + bd / 2, 'plaster', '坊墙');
+    } else {
+      mb.box(cx - bw / 2, cx + bw / 2, 0.05, wh, cz + bd / 2 - t, cz + bd / 2, 'plaster', '坊墙');
+      const wx = cx + (side === 'east' ? bw / 2 - t : -bw / 2);
+      mb.box(wx, wx + t, 0.05, wh, cz - bd / 2, gz - gw / 2, 'plaster', '坊墙');
+      mb.box(wx, wx + t, 0.05, wh, gz + gw / 2, cz + bd / 2, 'plaster', '坊墙');
+    }
+    // 坊门：两根门柱 + 横枋 + 门额 + 小瓦顶，门口留 2.2~3.4m 宽
+    if (axis === 'x') {
+      for (const s of [-1, 1]) {
+        mb.box(gx + s * gw / 2 - 0.11, gx + s * gw / 2 + 0.11, 0.05, wh + 1.15, gz - 0.5, gz + 0.08, 'wood', '坊门·门柱');
+      }
+      mb.box(gx - gw / 2, gx + gw / 2, wh + 0.72, wh + 0.95, gz - 0.14, gz + 0.1, 'woodDark', '坊门·横枋');
+      mb.box(gx - 0.55, gx + 0.55, wh + 0.3, wh + 0.68, gz + 0.02, gz + 0.1, 'gold', '坊门·门额');
+      cityCheapRoof(mb, gx, gz, gw + 1.4, 1.7, wh + 1.0, 0.42, r.tile, r.tileB, '坊门·瓦顶');
+    } else {
+      for (const s of [-1, 1]) {
+        mb.box(gx - 0.5, gx + 0.08, 0.05, wh + 1.15, gz + s * gw / 2 - 0.11, gz + s * gw / 2 + 0.11, 'wood', '坊门·门柱');
+      }
+      mb.box(gx - 0.14, gx + 0.1, wh + 0.72, wh + 0.95, gz - gw / 2, gz + gw / 2, 'woodDark', '坊门·横枋');
+      mb.box(gx + 0.02, gx + 0.1, wh + 0.3, wh + 0.68, gz - 0.55, gz + 0.55, 'gold', '坊门·门额');
+      cityCheapRoof(mb, gx, gz, 1.7, gw + 1.4, wh + 1.0, 0.42, r.tile, r.tileB, '坊门·瓦顶');
+    }
+    const bodyH = wh * (1.0 + rng.next() * 0.25);
+    const bz = cz - bd * (0.1 + rng.next() * 0.1);
+    mb.boxC(cx, bz, bw * 0.4, bd * 0.24, wh, wh + bodyH, 'plaster', '坊内屋面体量');
+    cityCheapRoof(mb, cx, bz, bw * 0.4 + 0.5, bd * 0.24 + 0.5, wh + bodyH, 0.55, r.tile, r.tileB, '坊内屋顶');
+    return { x: gx, z: gz, axis, ox, oz, w: gw };
+  }
+
+  // 街边摊：细案台 + 四腿 + 蓝白条纹布棚 + 三色货；轴 x 时摊面沿 x 展开
+  function cityStall(mb, x, z, axis, s, night) {
+    s = s || 1;
+    const w = 2.6 * s, d = 1.4 * s;
+    const box = (a0, a1, y0, y1, b0, b1, mat, tag) => {
+      if (axis === 'x') mb.box(x + a0, x + a1, y0, y1, z + b0, z + b1, mat, tag);
+      else mb.box(x + b0, x + b1, y0, y1, z + a0, z + a1, mat, tag);
+    };
+    box(-w / 2, w / 2, 0.78, 0.86, -d / 2, d / 2, 'wood', '摊·案台');
+    for (const a of [-w / 2 + 0.14, w / 2 - 0.14]) for (const b of [-d / 2 + 0.14, d / 2 - 0.14]) {
+      box(a - 0.06, a + 0.06, 0, 0.78, b - 0.06, b + 0.06, 'woodDark', '摊·案腿');
+    }
+    box(-w / 2, w / 2, 0, 0.16, -d / 2, d / 2, 'woodDark', '摊·底架');
+    const stripes = 5, sw = (w + 0.4) / stripes;
+    for (let i = 0; i < stripes; i++) {
+      const a0 = -w / 2 - 0.2 + sw * i;
+      box(a0, a0 + sw, 2.1, 2.18, -d / 2 - 0.24, d / 2 + 0.24, i % 2 ? 'paintBlue' : 'paper', '摊·布棚');
+    }
+    box(-w / 2 - 0.25, w / 2 + 0.25, 2.2, 2.26, -0.03, 0.03, 'woodDark', '摊·棚脊');
+    box(-w / 2 - 0.2, w / 2 + 0.2, 1.96, 2.1, d / 2 + 0.16, d / 2 + 0.26, 'paintBlue', '摊·前檐');
+    const goods = [['gold', -0.62], ['paintGreen', 0], ['cloth', 0.62]];
+    for (const [mat, a] of goods) box(a - 0.28, a + 0.28, 0.86, 1.08, -d / 2 + 0.18, -d / 2 + 0.62, mat, '摊·货物');
+    if (night) P.lantern(mb, x, 1.8, z + (axis === 'x' ? d / 2 - 0.1 : 0), 0.36, '摊·灯笼');
+  }
+
+  // 幌子：木杆挑一块竖板，板面横跨街面方向
+  function citySign(mb, x, z, axis, mat, w, h) {
+    mb.boxC(x, z, 0.08, 0.08, 0, 3.3, 'wood', '幌杆');
+    mb.boxC(x, z, 0.2, 0.2, 3.3, 3.42, 'gold', '幌杆·顶');
+    if (axis === 'x') mb.box(x - w / 2, x + w / 2, 1.7, 1.7 + h, z - 0.03, z + 0.03, mat, '幌子');
+    else mb.box(x - 0.03, x + 0.03, 1.7, 1.7 + h, z - w / 2, z + w / 2, mat, '幌子');
+  }
+
+  // 街灯：木杆 + 横担 + 灯笼
+  function cityLamp(mb, x, z, night) {
+    mb.boxC(x, z, 0.08, 0.08, 0, 2.6, 'wood', '灯杆');
+    mb.boxC(x, z, 0.5, 0.5, 2.56, 2.64, 'woodDark', '灯杆·横担');
+    P.lantern(mb, x, 2.0, z, night ? 0.5 : 0.38, '街灯');
+  }
+
+  // 街巷生活层：主街两侧摊、幌、灯；横竖街按密度点缀，坊门口成小市
+  function cityLife(mb, r, o) {
+    if (r.life === false) return 0;
+    const rng = new GF.RNG((Number(r.seed) || 1) ^ 0x9e3779b9);
+    const dens = GF.clamp ? GF.clamp(r.lifeDensity == null ? 0.55 : r.lifeDensity, 0, 1) : 0.55;
+    const night = !!r.night;
+    const step = 9 + (1 - dens) * 8;
+    let n = 0;
+    const place = (x, z, axis, prob) => {
+      if (rng.next() > prob) return;
+      const pick = rng.next();
+      if (pick < (night ? 0.36 : 0.46)) cityStall(mb, x, z, axis, 0.9 + rng.next() * 0.2, night);
+      else if (pick < (night ? 0.52 : 0.74)) citySign(mb, x, z, axis, rng.next() < 0.5 ? 'paintBlue' : 'cloth', 0.9 + rng.next() * 0.4, 1.4 + rng.next() * 0.6);
+      else cityLamp(mb, x, z, night);
+      n++;
+    };
+    const edge = Math.max(0.8, o.aveW / 2 - 0.5);
+    // 中轴主街：两侧成行
+    for (let z = -o.Di / 2 + 8; z < o.Di / 2 - 8; z += step) {
+      if (Math.abs(z) < r.gateW * 1.4) continue;
+      for (const s of [-1, 1]) {
+        if (o.inCompound(s * edge, z)) continue;
+        place(s * edge, z, 'z', 0.2 + 0.55 * dens);
+      }
+    }
+    // 横街 / 竖街：沿街隔一段一摊，避免整条街铺满
+    for (let j = 1; j < o.nz; j++) {
+      const cz = -o.Di / 2 + o.cellD * j;
+      if (o.inCompound(0, cz)) continue;
+      for (let i = 0; i < o.nx; i++) {
+        if (rng.next() > 0.35 + 0.35 * dens) continue;
+        const x = -o.Wi / 2 + o.cellW * (i + (rng.next() < 0.5 ? 0.28 : 0.72));
+        if (o.inCompound(x, cz)) continue;
+        if (Math.abs(x) < o.aveW / 2 + 0.8) continue;
+        place(x, cz - o.sw / 2 - 0.5, 'x', 0.85);
+      }
+    }
+    for (let i = 1; i < o.nx; i++) {
+      const cx = -o.Wi / 2 + o.cellW * i;
+      if (o.inCompound(cx, 0)) continue;
+      for (let j = 0; j < o.nz; j++) {
+        if (rng.next() > 0.3 + 0.35 * dens) continue;
+        const z = -o.Di / 2 + o.cellD * (j + (rng.next() < 0.5 ? 0.28 : 0.72));
+        if (o.inCompound(cx, z)) continue;
+        if (Math.abs(z) < o.cellD * 0.5) continue;
+        place(cx - o.sw / 2 - 0.5, z, 'z', 0.8);
+      }
+    }
+    // 坊门口的小市：按每坊实际门位与朝向摆，不再假设“南门正中”
+    for (const g of (o.gates || [])) {
+      if (rng.next() > 0.4 + 0.4 * dens) continue;
+      const bx = g.x + g.ox * 1.7, bz = g.z + g.oz * 1.7;
+      if (Math.abs(bx) > o.Wi / 2 - 2 || Math.abs(bz) > o.Di / 2 - 2) continue;
+      if (o.inCompound(bx, bz)) continue;
+      const ax = g.axis === 'x';
+      place(bx - (ax ? 2.3 : 0), bz - (ax ? 0 : 2.3), g.axis, 0.9);
+      if (rng.next() < 0.6) place(bx + (ax ? 2.3 : 0), bz + (ax ? 0 : 2.3), g.axis, 0.8);
+      if (night || rng.next() < 0.45) { cityLamp(mb, bx - (ax ? 3.9 : 0), bz - (ax ? 0 : 3.9), night); n++; }
+    }
+    return n;
   }
 
   // 中轴宫殿单体：三层汉白玉台基 + 殿身 + 殿前广场 + 两侧配殿（递减）；cheap 时低模屋顶
@@ -3390,6 +3545,141 @@
       }
     }
     return sub;
+  }
+
+  // 箭楼：砖砌墩台式高楼，正面与两山密排箭窗，顶作简化歇山
+  function cityArrowTower(mb, r, Wg, Dg, H) {
+    const W2 = Wg * 0.78, D2 = Dg * 0.66;
+    const y0 = H + 0.06, hgt = 5.6;
+    mb.box(-W2 / 2, W2 / 2, y0, y0 + hgt, -D2 / 2, D2 / 2, 'brick', '箭楼·楼身');
+    mb.box(-W2 / 2 - 0.12, W2 / 2 + 0.12, y0 + hgt - 0.22, y0 + hgt, -D2 / 2 - 0.1, D2 / 2 + 0.1, 'stoneB', '箭楼·压顶');
+    mb.box(-W2 / 2 - 0.1, W2 / 2 + 0.1, y0 + 1.9, y0 + 2.02, -D2 / 2 - 0.08, D2 / 2 + 0.08, 'woodDark', '箭楼·腰枋');
+    for (let row = 0; row < 4; row++) {
+      const yy = y0 + 0.75 + row * 1.15;
+      const n = Math.max(4, Math.round(W2 / 0.75));
+      for (let i = 0; i < n; i++) {
+        const x = -W2 / 2 + (W2 * (i + 0.5)) / n;
+        mb.boxC(x, D2 / 2 + 0.02, 0.2, 0.1, yy, yy + 0.46, 'dark', '箭窗');
+        mb.boxC(x, -D2 / 2 - 0.02, 0.2, 0.1, yy, yy + 0.46, 'dark', '箭窗');
+      }
+      const m = Math.max(2, Math.round(D2 / 1.1));
+      for (let i = 0; i < m; i++) {
+        const z = -D2 / 2 + (D2 * (i + 0.5)) / m;
+        mb.boxC(W2 / 2 + 0.02, z, 0.1, 0.2, yy, yy + 0.46, 'dark', '箭窗');
+        mb.boxC(-W2 / 2 - 0.02, z, 0.1, 0.2, yy, yy + 0.46, 'dark', '箭窗');
+      }
+    }
+    cityCheapRoof(mb, 0, 0, W2 + r.eave * 1.4, D2 + r.eave * 1.4, y0 + hgt, 1.1, r.tile, r.tileB, '箭楼顶');
+  }
+
+  // 瓮城：城门外再套一圈小城，正面开门并与主门错开（屈曲开门），门上可起箭楼
+  function cityBarbican(mb, r, g, H) {
+    const bw = r.wallBaseW, tw = r.wallTopW;
+    const Ww = Math.max(8, r.wengW || 18);
+    const wd = Math.max(4, r.wengD || 10);
+    const th = bw * 0.78, tth = tw * 0.78;
+    const frontZ = bw / 2 + wd;
+    const off = (r.wengOffset == null ? 0.35 : r.wengOffset) * (Ww / 2);
+    const gw = Math.max(1.6, (g.main ? r.gateW : r.gateW * 0.8) * 0.9);
+    const gh = Math.max(2.0, r.gateH * 0.9);
+    const WH = H * 0.96;
+    const sub = new GF.Mesh();
+
+    // 跨濠台基：瓮城落在一条石台上，河面从台下穿过
+    sub.box(-Ww / 2 - 0.25, Ww / 2 + 0.25, -0.55, 0.06, bw / 2 - 0.1, frontZ + th / 2 + 0.25, 'stoneB', '瓮城台基');
+
+    // 两侧墙（顺城墙法线向外）
+    for (const s of [-1, 1]) {
+      const sx = s * (Ww / 2);
+      sub.taper(sx, (bw / 2 + frontZ) / 2, th, wd, tth, wd, 0.06, WH - 0.12, 'brick', '瓮城侧墙');
+      sub.box(sx - tth / 2 - 0.12, sx + tth / 2 + 0.12, WH - 0.12, WH, bw / 2, frontZ, 'stoneB', '瓮城侧墙·压顶');
+      const step = Math.max(1.0, r.merlonStep || 2.2);
+      const mw = Math.max(0.3, r.merlonW || 0.55);
+      const mh = r.merlonH == null ? 0.66 : r.merlonH;
+      const n2 = Math.max(1, Math.floor(wd / step));
+      for (let i = 0; i <= n2; i++) {
+        const z = bw / 2 + (wd * i) / n2;
+        sub.boxC(sx + s * (tth / 2 + 0.14), z, 0.7, mw, WH, WH + mh, 'brick', '瓮城垛口');
+      }
+    }
+
+    // 正面墙，留出屈曲门洞；门洞左右各一段
+    const gap = gw + 2.2;
+    const segs = [[-Ww / 2 - th / 2, off - gap / 2], [off + gap / 2, Ww / 2 + th / 2]];
+    for (const [x0, x1] of segs) {
+      const L2 = x1 - x0;
+      if (L2 < 1.2) continue;
+      sub.taper((x0 + x1) / 2, frontZ, L2, th, L2, tth, 0.06, WH - 0.12, 'brick', '瓮城正面墙');
+      sub.box(x0, x1, WH - 0.12, WH, frontZ - tth / 2 - 0.12, frontZ + tth / 2 + 0.12, 'stoneB', '瓮城正面墙·压顶');
+      const step = Math.max(1.0, r.merlonStep || 2.2);
+      const mw = Math.max(0.3, r.merlonW || 0.55);
+      const mh = r.merlonH == null ? 0.66 : r.merlonH;
+      const n2 = Math.max(1, Math.floor(L2 / step));
+      for (let i = 0; i <= n2; i++) {
+        const x = x0 + (L2 * i) / n2;
+        sub.boxC(x, frontZ + tth / 2 + 0.14, mw, 0.7, WH, WH + mh, 'brick', '瓮城垛口');
+      }
+    }
+
+    // 瓮城正门 + 箭楼
+    const gt = new GF.Mesh();
+    cityGateTerrace(gt, r, gap, th + 1.8, [{ u: 0, w: gw, h: gh }], WH);
+    gt.translate(off, 0, frontZ);
+    sub.merge(gt);
+    if (r.arrowTower !== false) {
+      const at = new GF.Mesh();
+      cityArrowTower(at, r, gap, th + 1.8, WH);
+      at.translate(off, 0, frontZ);
+      sub.merge(at);
+    }
+
+    const gateAng = -Math.atan2(g.dir[1], g.dir[0]) * 180 / Math.PI;
+    sub.rotateY(gateAng, 0, 0);
+    sub.translate(g.cx, 0, g.cz);
+    mb.merge(sub);
+  }
+
+  // 门桥：石桥 / 吊桥（可收起），带栏杆；有瓮城时从瓮城正门跨到濠外
+  function cityGateBridge(mb, r, g, mw) {
+    const bw = r.wallBaseW;
+    const hasW = !!r.wengcheng;
+    const wd = hasW ? Math.max(4, r.wengD || 10) : 0;
+    const start = bw / 2 + (hasW ? wd + (bw * 0.78 + 1.8) / 2 : -0.2);
+    const end = bw / 2 + mw + 1.0;
+    const len = end - start;
+    if (len < 0.8) return;
+    const u = hasW ? (r.wengOffset == null ? 0.35 : r.wengOffset) * (Math.max(8, r.wengW || 18) / 2) : 0;
+    const half = Math.max(1.0, (g.Wg * 0.42) / 2);
+    const sub = new GF.Mesh();
+
+    if (r.drawbridge && r.bridgeUp) {
+      // 收起的桥面：立在门洞外的一整块木板，高度取河宽
+      const stand = start + (hasW ? 0.2 : (bw + 2.6) / 2 + 0.1);
+      sub.box(u - half, u + half, 0, Math.min(len, 11), stand, stand + 0.22, 'woodDark', '吊桥·收起');
+      for (const s of [-1, 1]) {
+        sub.box(u + s * half - 0.1, u + s * half + 0.1, 0.2, 1.4, stand - 0.2, stand + 0.3, 'wood', '吊桥·立柱');
+      }
+    } else {
+      const mat = r.drawbridge ? 'wood' : 'stone';
+      sub.box(u - half, u + half, 0, 0.2, start, end, mat, r.drawbridge ? '吊桥' : '护城河石桥');
+      if (r.drawbridge) {
+        for (let i = 1; i < 6; i++) {
+          const z = start + (len * i) / 6;
+          sub.box(u - half, u + half, 0.2, 0.205, z - 0.035, z + 0.035, 'woodDark', '吊桥板缝');
+        }
+        for (const s of [-1, 1]) {
+          const x = u + s * (half - 0.12);
+          for (const z of [start + 0.25, end - 0.25]) {
+            sub.boxC(x, z, 0.16, 0.16, 0.2, 1.3, 'wood', '吊桥栏杆');
+          }
+          sub.box(x - 0.06, x + 0.06, 1.2, 1.32, start, end, 'wood', '吊桥寻杖');
+        }
+      }
+    }
+    const gateAng = -Math.atan2(g.dir[1], g.dir[0]) * 180 / Math.PI;
+    sub.rotateY(gateAng, 0, 0);
+    sub.translate(g.cx, 0, g.cz);
+    mb.merge(sub);
   }
 
   function buildCity(mb, r) {
@@ -3502,7 +3792,8 @@
       }
     }
 
-    // 城门：城台券洞 + 城楼
+    // 城门：城台券洞 + 城楼；再加瓮城（屈曲开门 + 箭楼）
+    let wengCount = 0;
     for (const g of gates) {
       const sub = new GF.Mesh();
       cityGateTerrace(sub, r, g.Wg, g.Dg, g.doors, H);
@@ -3511,6 +3802,7 @@
       sub.rotateY(gateAng, 0, 0);
       sub.translate(g.cx, 0, g.cz);
       mb.merge(sub);
+      if (r.wengcheng) { cityBarbican(mb, r, g, H); wengCount++; }
     }
 
     // 四角角楼
@@ -3527,16 +3819,7 @@
         cityStrip(mb, s.a, s.b, s.n, bw / 2 - 0.15, bw / 2 + 0.22, -0.06, 0.18, 'stone', '护城河驳岸', bw);
       }
       if (r.moatBridge) {
-        for (const g of gates) {
-          const bw2 = g.Wg * 0.5;
-          if (g.n[0] !== 0) {
-            const bx = g.cx + g.n[0] * (mw / 2 + 0.2);
-            mb.box(bx - mw / 2 - 0.2, bx + mw / 2 + 0.2, 0, 0.18, g.cz - bw2 / 2, g.cz + bw2 / 2, 'stone', '护城河石桥');
-          } else {
-            const bz = g.cz + g.n[1] * (mw / 2 + 0.2);
-            mb.box(g.cx - bw2 / 2, g.cx + bw2 / 2, 0, 0.18, bz - mw / 2 - 0.2, bz + mw / 2 + 0.2, 'stone', '护城河石桥');
-          }
-        }
+        for (const g of gates) cityGateBridge(mb, r, g, mw);
       }
     }
 
@@ -3555,15 +3838,22 @@
     }
 
     // 里坊方格网（宫城 / 皇城范围内的坊跳过）
+    const wardGates = [];
     for (let i = 0; i < nx; i++) {
       for (let j = 0; j < nz; j++) {
         const cx = -Wi / 2 + cellW * (i + 0.5);
         const cz = -Di / 2 + cellD * (j + 0.5);
         if (inCompound(cx, cz)) continue;
         const b2w = Math.max(2, cellW - sw), b2d = Math.max(2, cellD - sw);
-        cityBlock(mb, r, cx, cz, b2w, b2d);
+        const g = cityBlock(mb, r, cx, cz, b2w, b2d);
+        if (g) wardGates.push(g);
       }
     }
+
+    // 街巷生活层：沿主街与横竖街摆摊挂幌点灯
+    const lifeN = cityLife(mb, r, {
+      Wi, Di, nx, nz, cellW, cellD, aveW, sw, inCompound, gates: wardGates
+    });
 
     // 中轴宫殿群：殿宇面阔按城宽百分比递减；三层台基 + 广场 + 配殿；整轴收在宫城内
     if (r.axisHalls > 0) {
@@ -3596,7 +3886,7 @@
     }
 
     // 供报告探针读取的计数
-    mb.cityStats = { bastionCount, bastionSpacings, wards: (function () {
+    mb.cityStats = { bastionCount, bastionSpacings, wengcheng: wengCount, life: lifeN, wards: (function () {
       let n = 0;
       for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
         const cx = -Wi / 2 + cellW * (i + 0.5), cz = -Di / 2 + cellD * (j + 0.5);

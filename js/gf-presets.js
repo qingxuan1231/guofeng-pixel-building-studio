@@ -33,12 +33,16 @@
     jin: 1, axisRaise: true, fangStyle: 'classic',
     /* ---- 阶段③ 城制（city）---- */
     cityW: 200, cityD: 180, wallBaseW: 2.5, wallTopW: 1.25,
-    merlon: true, parapet: true,
+    merlon: true, parapet: true, merlonStep: 2.2, merlonW: 0.55, merlonH: 0.66,
+    parapetH: 0.42,
     gateCount: 3, gateTower: true, gateSide: 'four',
-    bastionSpacing: 22, bastionN: 0, bastionProj: 1.6, cornerTower: true,
+    bastionSpacing: 22, bastionN: 0, bastionProj: 1.6, bastionW: 0, bastionTower: true, cornerTower: true,
     blockW: 18, blockD: 16, streetW: 3, blocksX: 5, blocksZ: 4, blockWallH: 1.2,
     axisHalls: 3, axisPalace: true, palaceCorner: 'center',
     moatW: 6, moatD: 1.2, moatBridge: true, cityShape: 'rect',
+    wengcheng: false, wengD: 10, wengW: 18, wengOffset: 0.35, arrowTower: true,
+    drawbridge: false, bridgeUp: false,
+    life: true, lifeDensity: 0.55, night: false,
     northW: 0,
     innerW: 0, innerD: 0, palaceW: 0, palaceD: 0,
     realW: 0, realD: 0, scale: 1,
@@ -92,6 +96,10 @@
     cityNum('wallBaseW', DEF.wallBaseW); cityNum('wallTopW', DEF.wallTopW);
     cityNum('gateW', DEF.gateW); cityNum('gateH', DEF.gateH);
     cityNum('bastionSpacing', DEF.bastionSpacing, true); cityNum('bastionN', DEF.bastionN, true); cityNum('bastionProj', DEF.bastionProj);
+    cityNum('bastionW', DEF.bastionW, true);
+    cityNum('merlonStep', DEF.merlonStep); cityNum('merlonW', DEF.merlonW); cityNum('merlonH', DEF.merlonH, true);
+    cityNum('parapetH', DEF.parapetH, true);
+    cityNum('wengD', DEF.wengD); cityNum('wengW', DEF.wengW); cityNum('wengOffset', DEF.wengOffset, true);
     cityNum('blockW', DEF.blockW, true); cityNum('blockD', DEF.blockD, true); cityNum('streetW', DEF.streetW);
     cityNum('blocksX', DEF.blocksX); cityNum('blocksZ', DEF.blocksZ); cityNum('blockWallH', DEF.blockWallH);
     cityNum('axisHalls', DEF.axisHalls, true); cityNum('moatW', DEF.moatW, true); cityNum('moatD', DEF.moatD);
@@ -99,6 +107,9 @@
     cityNum('palaceW', DEF.palaceW, true); cityNum('palaceD', DEF.palaceD, true);
     cityNum('northW', DEF.northW, true);
     cityNum('realW', DEF.realW, true); cityNum('realD', DEF.realD, true); cityNum('scale', DEF.scale);
+    r.life = r.life !== false;
+    r.lifeDensity = Math.max(0.1, Math.min(1, Number(r.lifeDensity) || DEF.lifeDensity));
+    r.night = r.night === true;
     // 阶段④ 布局字段：旧配方缺省 / 非法值回落默认档
     r.jin = Math.max(1, Math.min(5, Math.round(Number(r.jin) || 1)));
     r.axisRaise = r.axisRaise !== false;
@@ -692,6 +703,8 @@
       axisHalls: 3, axisPalace: true, palaceCorner: 'center',
       palaceW: 70, palaceD: 84, innerW: 0, innerD: 0,
       moatW: 2.6, moatD: 1.0, moatBridge: true, cityShape: 'rect',
+      wengcheng: true, wengD: 13, wengW: 22, wengOffset: 0.35, arrowTower: true,
+      drawbridge: true, bridgeUp: false,
       colMat: 'timber', wallMat: 'brick', tileColor: 'grey', eave: 1.0, slope: 0.55, upturn: 0.35,
       env: { showGround: false, ground: 'soil', groundSize: 13, trees: [], rocks: 0, pond: null, banners: 0, props: [], path: false },
       render: { ppm: 12, pitch: 48 }

@@ -448,6 +448,14 @@
   // 选中段的包围盒（世界坐标），用于画线框
   function bldBox(k) {
     const r = state.recipe;
+    // 整栋拖动写的是 moveX / moveZ；单栋建筑的段线框必须先把这层位移补上，
+    // 否则房子挪走了、台基 / 屋身 / 屋面的框还留在原点。
+    const ox = +r.moveX || 0, oz = +r.moveZ || 0;
+    const mv = (b) => ({ x0: b.x0 + ox, x1: b.x1 + ox, z0: b.z0 + oz, z1: b.z1 + oz, y0: b.y0, y1: b.y1 });
+    if (k === 'bld') {
+      const bb = state.mesh && state.mesh.bldBox;
+      return bb ? { x0: bb.x0, x1: bb.x1, z0: bb.z0, z1: bb.z1, y0: 0, y1: bb.y1 } : null;
+    }
     if (k && k.slice(0, 2) === 'u:') {
       const us = bldUnits() || [];
       const u = us.filter((x) => 'u:' + x.id === k)[0];
@@ -462,17 +470,17 @@
     const D = (r.depth || ((r.bays || 3) * (r.bayW || 3.0) * 0.72)) + 2 * eave0 + 0.4;
     const hs = bldH();
     const y0b = 0, y1b = Math.max(0.3, r.baseH || 0.8);
-    if (k === 'base') return { x0: -W / 2, x1: W / 2, z0: -D / 2, z1: D / 2, y0: y0b, y1: y1b };
+    if (k === 'base') return mv({ x0: -W / 2, x1: W / 2, z0: -D / 2, z1: D / 2, y0: y0b, y1: y1b });
     let y = y1b;
     for (let i = 0; i < hs.length; i++) {
       const top = y + hs[i];
-      if (k === 'f' + i) return { x0: -W / 2, x1: W / 2, z0: -D / 2, z1: D / 2, y0: y, y1: top };
+      if (k === 'f' + i) return mv({ x0: -W / 2, x1: W / 2, z0: -D / 2, z1: D / 2, y0: y, y1: top });
       y = top;
     }
     const slope = r.slope == null ? 0.5 : r.slope;
     const eave = (Array.isArray(r.eaveList) && r.eaveList[hs.length - 1]) || (r.eave == null ? 1.0 : r.eave);
     // 屋面框贴着屋脊收：按举折算出脊高，别再框到半空里
-    return { x0: -W / 2 - eave, x1: W / 2 + eave, z0: -D / 2 - eave, z1: D / 2 + eave, y0: y, y1: y + (D / 2 + eave) * slope * 0.92 + 0.5 };
+    return mv({ x0: -W / 2 - eave, x1: W / 2 + eave, z0: -D / 2 - eave, z1: D / 2 + eave, y0: y, y1: y + (D / 2 + eave) * slope * 0.92 + 0.5 });
   }
   function paintPartSelection() {
     const f = state.frame;
@@ -975,7 +983,11 @@
         { path: 'wallBaseW', label: '墙底宽', type: 'range', min: 1.0, max: 4.0, step: 0.1, unit: 'm', only: ['city'] },
         { path: 'wallTopW', label: '墙顶宽', type: 'range', min: 0.6, max: 3.0, step: 0.1, unit: 'm', only: ['city'] },
         { path: 'merlon', label: '外侧垛口（雉堞）', type: 'toggle', only: ['city'] },
+        { path: 'merlonStep', label: '垛口间距', type: 'range', min: 0.8, max: 4.0, step: 0.1, unit: 'm', only: ['city'], dep: { path: 'merlon', equals: true } },
+        { path: 'merlonW', label: '垛口宽', type: 'range', min: 0.3, max: 1.2, step: 0.05, unit: 'm', only: ['city'], dep: { path: 'merlon', equals: true } },
+        { path: 'merlonH', label: '垛口高', type: 'range', min: 0.3, max: 1.4, step: 0.05, unit: 'm', only: ['city'], dep: { path: 'merlon', equals: true } },
         { path: 'parapet', label: '内侧女墙', type: 'toggle', only: ['city'] },
+        { path: 'parapetH', label: '内侧女墙高', type: 'range', min: 0.2, max: 1.0, step: 0.05, unit: 'm', only: ['city'], dep: { path: 'parapet', equals: true } },
         { path: 'gateCount', label: '正门门道数', type: 'select', opts: [{ v: 1, t: '1 门道' }, { v: 3, t: '3 门道' }, { v: 5, t: '5 门道' }], only: ['city'] },
         { path: 'gateW', label: '门道宽', type: 'range', min: 1.5, max: 3.5, step: 0.1, unit: 'm', only: ['city'] },
         { path: 'gateH', label: '门洞高', type: 'range', min: 2.5, max: 4.5, step: 0.1, unit: 'm', only: ['city'] },
@@ -983,17 +995,29 @@
         { path: 'gateSide', label: '开门面', type: 'select', opts: [{ v: 'front', t: '仅正门' }, { v: 'two', t: '南北两面' }, { v: 'four', t: '四面' }], only: ['city'] },
         { path: 'bastionN', label: '每面马面数（0 为不设）', type: 'range', min: 0, max: 12, step: 1, only: ['city'] },
         { path: 'bastionProj', label: '马面突出量', type: 'range', min: 0.8, max: 2.5, step: 0.1, unit: 'm', only: ['city'], dep: { path: 'bastionN', notEquals: 0 } },
+        { path: 'bastionW', label: '马面宽（0 随墙顶）', type: 'range', min: 0, max: 6, step: 0.1, unit: 'm', only: ['city'], dep: { path: 'bastionN', notEquals: 0 } },
+        { path: 'bastionTower', label: '马面敌楼', type: 'toggle', only: ['city'], dep: { path: 'bastionN', notEquals: 0 } },
         { path: 'cornerTower', label: '四角角楼', type: 'toggle', only: ['city'] },
+        { path: 'wengcheng', label: '瓮城（屈曲开门）', type: 'toggle', only: ['city'] },
+        { path: 'wengD', label: '瓮城进深', type: 'range', min: 5, max: 24, step: 0.5, unit: 'm', only: ['city'], dep: { path: 'wengcheng', equals: true } },
+        { path: 'wengW', label: '瓮城面宽', type: 'range', min: 10, max: 40, step: 0.5, unit: 'm', only: ['city'], dep: { path: 'wengcheng', equals: true } },
+        { path: 'wengOffset', label: '瓮城门偏移', type: 'range', min: 0, max: 0.5, step: 0.05, only: ['city'], dep: { path: 'wengcheng', equals: true } },
+        { path: 'arrowTower', label: '瓮城箭楼', type: 'toggle', only: ['city'], dep: { path: 'wengcheng', equals: true } },
         { path: 'blocksX', label: '坊格·东西列数', type: 'range', min: 1, max: 14, step: 1, only: ['city'] },
         { path: 'blocksZ', label: '坊格·南北行数', type: 'range', min: 1, max: 14, step: 1, only: ['city'] },
         { path: 'streetW', label: '街宽', type: 'range', min: 1.0, max: 4.0, step: 0.2, unit: 'm', only: ['city'] },
+        { path: 'life', label: '生活层（摊/幌/灯）', type: 'toggle', only: ['city'] },
+        { path: 'lifeDensity', label: '生活层密度', type: 'range', min: 0.1, max: 1, step: 0.05, only: ['city'], dep: { path: 'life', equals: true } },
+        { path: 'night', label: '夜市模式（灯更多）', type: 'toggle', only: ['city'], dep: { path: 'life', equals: true } },
         { path: 'blockWallH', label: '坊墙高', type: 'range', min: 0.6, max: 1.8, step: 0.1, unit: 'm', only: ['city'] },
         { path: 'axisHalls', label: '中轴殿数', type: 'range', min: 0, max: 3, step: 1, only: ['city'] },
         { path: 'axisPalace', label: '内廷后宫', type: 'toggle', only: ['city'] },
         { path: 'palaceCorner', label: '宫城方位', type: 'select', opts: [{ v: 'center', t: '居中' }, { v: 'north', t: '北部居中' }, { v: 'corner', t: '偏隅（西北）' }], only: ['city'] },
         { path: 'moatW', label: '护城河宽', type: 'range', min: 0, max: 10, step: 0.2, unit: 'm', only: ['city'] },
         { path: 'moatD', label: '护城河深', type: 'range', min: 0.4, max: 2.0, step: 0.1, unit: 'm', only: ['city'], dep: { path: 'moatW', notEquals: 0 } },
-        { path: 'moatBridge', label: '城门石桥', type: 'toggle', only: ['city'], dep: { path: 'moatW', notEquals: 0 } }
+        { path: 'moatBridge', label: '城门石桥', type: 'toggle', only: ['city'], dep: { path: 'moatW', notEquals: 0 } },
+        { path: 'drawbridge', label: '吊桥（木桥）', type: 'toggle', only: ['city'], dep: { path: 'moatW', notEquals: 0 } },
+        { path: 'bridgeUp', label: '吊桥收起', type: 'toggle', only: ['city'], dep: { path: 'drawbridge', equals: true } }
       ]
     },
     {

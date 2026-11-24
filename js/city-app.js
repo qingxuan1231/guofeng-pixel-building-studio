@@ -75,27 +75,49 @@
       { path: 'w', label: '城宽', type: 'range', min: 60, max: 200, step: 2, unit: 'm' },
       { path: 'd', label: '城深', type: 'range', min: 50, max: 180, step: 2, unit: 'm' },
       { path: 'wallH', label: '城墙高', type: 'range', min: 6, max: 14, step: 0.5, unit: 'm' },
-      { path: 'wallT', label: '城墙厚', type: 'range', min: 3, max: 8, step: 0.2, unit: 'm' },
+      { path: 'wallT', label: '墙底厚', type: 'range', min: 3, max: 8, step: 0.2, unit: 'm' },
+      { path: 'wallTaper', label: '收分（顶厚比）', type: 'range', min: 0, max: 0.4, step: 0.02 },
       { path: 'gateW', label: '城门洞宽', type: 'range', min: 8, max: 16, step: 0.5, unit: 'm' }
     ] },
     { title: '二 · 街网与地块', items: [
       { path: 'cols', label: '街网·东西列', type: 'range', min: 2, max: 6, step: 1, unit: '坊' },
       { path: 'rows', label: '街网·南北行', type: 'range', min: 2, max: 6, step: 1, unit: '坊' },
       { path: 'roadW', label: '主街宽', type: 'range', min: 6, max: 16, step: 0.5, unit: 'm' },
+      { path: 'alleyW', label: '坊内巷宽', type: 'range', min: 0, max: 3.2, step: 0.1, unit: 'm' },
       { path: 'density', label: '建筑密度', type: 'range', min: 0.2, max: 1, step: 0.05 },
+      { path: 'life', label: '生活层（摊/幌/灯）', type: 'toggle' },
+      { path: 'lifeDensity', label: '生活层密度', type: 'range', min: 0.1, max: 1, step: 0.05 },
+      { path: 'night', label: '夜市模式（灯更多）', type: 'toggle' },
       { path: 'seed', label: '种子', type: 'number', min: 1, max: 1e9, step: 1 }
     ] },
     { title: '三 · 坊墙与里坊', items: [
       { path: 'blockWallH', label: '坊墙高', type: 'range', min: 1.0, max: 3.2, step: 0.1, unit: 'm' },
-      { path: 'blockGateW', label: '坊门宽', type: 'range', min: 2.4, max: 6.0, step: 0.2, unit: 'm' }
+      { path: 'blockGateW', label: '坊门宽', type: 'range', min: 2.4, max: 6.0, step: 0.2, unit: 'm' },
+      { path: 'blockJit', label: '坊墙自由度', type: 'range', min: 0, max: 1, step: 0.05 }
     ] },
-    { title: '四 · 城防', items: [
+    { title: '四 · 城墙与城防', items: [
+      { path: 'merlon', label: '外侧垛口', type: 'toggle' },
+      { path: 'merlonStep', label: '垛口间距', type: 'range', min: 0.8, max: 3.6, step: 0.1, unit: 'm' },
+      { path: 'merlonW', label: '垛口宽', type: 'range', min: 0.3, max: 1.6, step: 0.05, unit: 'm' },
+      { path: 'merlonH', label: '垛口高', type: 'range', min: 0.3, max: 1.8, step: 0.05, unit: 'm' },
+      { path: 'parapet', label: '内侧女墙', type: 'toggle' },
+      { path: 'parapetH', label: '内侧女墙高', type: 'range', min: 0.2, max: 1.4, step: 0.05, unit: 'm' },
       { path: 'moat', label: '护城河', type: 'toggle' },
       { path: 'moatW', label: '护城河宽', type: 'range', min: 4, max: 20, step: 0.5, unit: 'm' },
       { path: 'matta', label: '马面（墩台）', type: 'toggle' },
       { path: 'bastionGap', label: '马面间距', type: 'range', min: 12, max: 60, step: 2, unit: 'm' },
+      { path: 'mattaW', label: '马面面宽', type: 'range', min: 4, max: 14, step: 0.5, unit: 'm' },
+      { path: 'mattaOut', label: '马面突出', type: 'range', min: 1, max: 8, step: 0.2, unit: 'm' },
+      { path: 'mattaTower', label: '马面敌楼', type: 'toggle' },
       { path: 'tower', label: '四角角楼', type: 'toggle' },
-      { path: 'gateTowerOn', label: '城门楼', type: 'toggle' }
+      { path: 'gateTowerOn', label: '城门楼', type: 'toggle' },
+      { path: 'wengcheng', label: '瓮城（屈曲开门）', type: 'toggle' },
+      { path: 'wengD', label: '瓮城进深', type: 'range', min: 5, max: 24, step: 0.5, unit: 'm' },
+      { path: 'wengW', label: '瓮城面宽', type: 'range', min: 10, max: 36, step: 0.5, unit: 'm' },
+      { path: 'wengOffset', label: '瓮城门偏移', type: 'range', min: 0, max: 0.5, step: 0.05 },
+      { path: 'arrowTower', label: '瓮城箭楼', type: 'toggle' },
+      { path: 'drawbridge', label: '吊桥（木桥）', type: 'toggle' },
+      { path: 'bridgeUp', label: '吊桥收起', type: 'toggle' }
     ] },
     { title: '五 · 中轴与宫城', items: [
       { path: 'palace', label: '中轴宫殿', type: 'toggle' },
@@ -296,7 +318,9 @@
       draw();
       if (!keepView) { state.panX = state.panY = 0; state.zoom = 2; layout(); }
       $('#stat').textContent = `出图 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · ${Math.round(performance.now() - t0)}ms`;
-      $('#cityStat').textContent = `${state.city.cols * state.city.rows} 坊 · 城墙 ${state.city.wallH}m · 种子 ${state.city.seed}`;
+      const info = state.mesh.cityInfo || {};
+      const gateN = info.gates ? Object.values(info.gates).reduce((a, b) => a + b, 0) : 0;
+      $('#cityStat').textContent = `${state.city.cols * state.city.rows} 坊 · 城墙 ${state.city.wallH}m · ${gateN ? `坊门 ${gateN} 座 · ` : ''}${info.life ? `生活 ${info.life} 件 · ` : ''}种子 ${state.city.seed}`;
       setBusy(false, '');
       state.busy = false;
       if (state.pending) { state.pending = false; rebuild(keepView); }

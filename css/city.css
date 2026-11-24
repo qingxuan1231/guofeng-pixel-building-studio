@@ -5,9 +5,10 @@
   position: absolute; left: 50%; top: 16px; transform: translateX(-50%);
   padding: 6px 14px; border-radius: 999px;
   background: rgba(43,39,34,.82); color: #f4ead4; font-size: 12px;
-  opacity: 0; pointer-events: none; transition: .18s; z-index: 10;
+  opacity: 0; pointer-events: none; z-index: 10;
+  display: none;
 }
-.busy.on { opacity: 1; }
+.busy.on { opacity: 1; display: block; }
 
 /* 城池专属：配方 chip 选中态（与古建 .chip.active 同色） */
 .chip.active { background: var(--ink); color: #f6ecd6; border-color: var(--ink); }
