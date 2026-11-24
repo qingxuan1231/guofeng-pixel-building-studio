@@ -41,19 +41,44 @@ node cli/render.js --all --outdir out/presets
 ```
 guofeng-pixel-building-studio/
 ├─ index.html            界面
-├─ css/app.css           宣纸墨色样式
-├─ js/gf-core.js         向量 / 网格 / 调色板 / 配色
-├─ js/gf-roof.js         屋面（庑殿·歇山·悬山·攒尖·卷棚·盝顶·十字歇山·腰檐）
-├─ js/gf-parts.js        构件库（斗拱·台基·栏杆·门窗·楹联·藻井·陈设……）
-├─ js/gf-build.js        各类建筑的装配器 + 院落造景
-├─ js/gf-render.js       软件光栅化 + 阴影贴图 + 手绘风格化
-├─ js/gf-presets.js      预设 / 随机 / 配方归一化
-├─ js/gf-export.js       PNG / ZIP 编码
-├─ js/app.js             界面逻辑
+├─ city.html             城池页
+├─ css/                  宣纸墨色样式 / 城池样式
+├─ src/
+│  ├─ ancient-ui/        古建页界面：壳 / 陈设编辑 / 建筑段编辑 / 控件 / 渲染 / 相机 / 网格 / 拖拽 / 导出 / 事件
+│  ├─ city-ui/           城池页界面：壳 / 控件 / 渲染 / 交互 / 导出 / 古建入城 / 事件
+│  └─ ancient-build/    建筑装配：公共、民居、门楼、院落、布局、院落群、园林建筑、城池、总装
+├─ js/
+│  ├─ gf-core.js         向量 / 网格 / 调色板 / 配色
+│  ├─ gf-roof.js         屋面（庑殿·歇山·悬山·攒尖·卷棚·盝顶·十字歇山·腰檐）
+│  ├─ gf-parts.js        构件库（斗拱·台基·栏杆·门窗·楹联·藻井·陈设……）
+│  ├─ gf-render.js       软件光栅化 + 阴影贴图 + 手绘风格化
+│  ├─ gf-presets.js      预设 / 随机 / 配方归一化
+│  ├─ gf-export.js       PNG / ZIP 编码
+│  ├─ app.js             古建页运行包（由 src/ancient-ui 构建）
+│  ├─ city-app.js        城池页运行包（由 src/city-ui 构建）
+│  └─ gf-build.js        建筑装配运行包（由 src/build 构建）
+├─ tools/build.js        源码模块 → 运行包（保持 file:// 直开）
 ├─ cli/render.js         命令行渲染器
 ├─ docs/                 形制基准表 + 各阶段实测证据（md / json）
 └─ out/                  出图目录
 ```
+
+### 源码模块与构建
+
+为了继续支持 `file://` 双击直开，界面源码按业务边界拆在 `src/`，由 `tools/build.js` 按顺序合回一个 IIFE 运行包。**不要直接改 `js/app.js`、`js/city-app.js`、`js/gf-build.js`**（文件头有 AUTO-GENERATED 标记）。
+
+```bat
+node tools/build.js
+```
+
+| 源码目录 | 运行包 | 边界 |
+| --- | --- | --- |
+| `src/ancient-ui/` | `js/app.js` | 古建页：壳、环境陈设编辑器、建筑段编辑器、控件、渲染、相机、落成演示、地面网格、拖拽、导出、事件、启动 |
+| `src/city-ui/` | `js/city-app.js` | 城池页：壳、城制控件、渲染与视图、交互、导出、古建配方入城、事件、启动 |
+| `src/ancient-build/` | `js/gf-build.js` | 古建装配：公共结构、民居、门楼、院落、布局、院落群、园林建筑、城池、总装 |
+
+新增/修改界面逻辑时改对应 `src/` 模块，再跑构建；`node cli/audit.js` 仍用于控件有效性回归。
+
 
 ## 建筑类型（16 种）
 
@@ -174,7 +199,7 @@ guofeng-pixel-building-studio/
 - 「保存配方 / 载入配方」导出/导入 JSON，全部参数都在里面
 - 「导出 ZIP」＝ 4 向 PNG + 拼版 + `recipe.json`
 - 加新构件：在 `js/gf-parts.js` 写函数 → 挂到 `GF.parts`；加新屋面：`js/gf-roof.js` 里写 builder → 在 `GF.roofs` 里派发
-- 加新建筑类型：`js/gf-build.js` 写 `buildXxx()` → `GF.build` 的 switch 里加 case → `js/app.js` 的 `TYPES` 加一项
+- 加新建筑类型：在 `src/ancient-build/` 对应装配模块写 `buildXxx()` → `GF.build` 的 switch 里加 case → `src/ancient-ui/30-controls.js` 的 `TYPES` 加一项 → 跑 `node tools/build.js`
 - 控件有效性自检：`node cli/audit.js`，逐类型逐参数换值比对网格签名，列出“换了值也不变”的项，用来排查新增控件是否真的接上了
 
 ## 参考与素材来源
