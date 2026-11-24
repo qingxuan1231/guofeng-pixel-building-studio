@@ -1,3 +1,4 @@
+'use strict';
   function bind() {
     const chips = $('#presetChips');
     GF.cityList.forEach((p) => {

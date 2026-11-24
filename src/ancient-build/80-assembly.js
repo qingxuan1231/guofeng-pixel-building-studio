@@ -1,3 +1,4 @@
+'use strict';
   /* ------------------------------ 总装 ------------------------------ */
   GF.build = function (recipe, opts) {
     const r = GF.normalize ? GF.normalize(recipe) : recipe;
@@ -75,6 +76,6 @@
   };
 
   GF.builders = { ground, body, base, interior, environment };
-})(typeof window !== 'undefined' ? window : globalThis);
+
 
 

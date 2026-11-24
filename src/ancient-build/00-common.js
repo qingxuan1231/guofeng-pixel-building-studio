@@ -2,9 +2,8 @@
  * 国风古建像素工坊 · 建筑装配
  * 殿 / 堂 / 民居 / 宫殿（重檐）/ 亭 / 塔 / 牌坊 / 城门楼 / 四合院 / 廊桥
  * ==========================================================================*/
-(function (global) {
-  'use strict';
-  const GF = (global.GF = global.GF || {});
+'use strict';
+  var GF = (window.GF = window.GF || {});
   const V = GF.V;
   const P = GF.parts;
 

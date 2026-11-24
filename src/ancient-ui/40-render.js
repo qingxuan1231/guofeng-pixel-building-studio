@@ -1,3 +1,4 @@
+'use strict';
   /* ------------------------------ 渲染 ------------------------------ */
   function renderOpts(extra) {
     const r = state.recipe;

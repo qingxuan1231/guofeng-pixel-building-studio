@@ -1,7 +1,5 @@
 /* 城池工坊 · 页面逻辑：与古建工坊的控件体系、视图、导出保持一致 */
-(function () {
-  'use strict';
-  const GF = window.GF;
+'use strict';
   const $ = (s) => document.querySelector(s);
   const wrap = $('#canvasWrap');
   const canvas = $('#view');

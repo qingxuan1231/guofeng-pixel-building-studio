@@ -1,3 +1,4 @@
+'use strict';
   /* ------------------------------ 事件绑定 ------------------------------ */
   function bindUI() {
     const chips = $('#presetChips');

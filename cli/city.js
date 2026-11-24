@@ -7,8 +7,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const FILES = ['js/gf-core.js', 'js/gf-roof.js', 'js/gf-parts.js', 'js/gf-build.js',
-  'js/gf-render.js', 'js/gf-presets.js', 'js/gf-export.js', 'js/gf-city.js'];
+const { CITY } = require('./modules');
+const FILES = CITY;
 
 function loadGF() {
   const ctx = { console };

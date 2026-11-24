@@ -1,3 +1,4 @@
+'use strict';
   /* ------------------------------ 廊桥 ------------------------------ */
   function buildBridge(mb, r) {
     const span = r.span || 12, w = r.bridgeW || 3.0;

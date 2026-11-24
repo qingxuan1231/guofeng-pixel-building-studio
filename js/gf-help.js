@@ -4,7 +4,7 @@
  *   <div class="modal" id="helpModal" data-mode="build|city">
  *     <div class="modal-card" id="helpBody"></div>
  *   </div>
- * 本文件在 app.js / city-app.js 之前引入，会立即把内容塞进 #helpBody。
+ * 本文件在界面模块之前引入，会立即把内容塞进 #helpBody。
  * 古建页 = 原有说明全文（一字不改）；城池页 = 全文 + 末尾追加“城池工坊专属”。
  * 维护原则：正文只留这一份，不要再往 HTML 里贴第二份。
  */

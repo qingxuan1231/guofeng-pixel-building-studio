@@ -1,3 +1,4 @@
+'use strict';
   /* ----------------------------- 路径读写 ----------------------------- */
   function getPath(o, p) {
     return p.split('.').reduce((a, k) => (a == null ? a : a[k]), o);

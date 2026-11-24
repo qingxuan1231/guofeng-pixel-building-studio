@@ -1,3 +1,4 @@
+'use strict';
   /* ------------------------------ 启动 ------------------------------ */
   buildCompBar();
   buildBldBar();
@@ -9,7 +10,7 @@
   updateCamInfo();
   rebuild();
   window.addEventListener('resize', () => setTimeout(layout, 60));
-})();
+
 
 
 

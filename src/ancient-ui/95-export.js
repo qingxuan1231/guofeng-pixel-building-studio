@@ -1,3 +1,4 @@
+'use strict';
   /* ------------------------------ 导出 ------------------------------ */
   function download(bytes, filename, mime) {
     const blob = new Blob([bytes], { type: mime || 'application/octet-stream' });

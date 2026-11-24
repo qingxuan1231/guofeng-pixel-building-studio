@@ -1,3 +1,4 @@
+'use strict';
   /* ------------------------------ 宅院（院落） ------------------------------ */
   function buildCourtyard(mb, r) {
     const jin = Math.max(1, Math.min(5, Math.round(r.jin || 1)));

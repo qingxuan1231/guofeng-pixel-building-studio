@@ -1,3 +1,4 @@
+'use strict';
   /* ---------------- 阶段④-1 寺·五进中轴（temple5） ---------------- */
   function courtyardTemple5(mb, r, ctx) {
     const { CW, CD } = ctx;

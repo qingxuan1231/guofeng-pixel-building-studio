@@ -54,30 +54,27 @@ guofeng-pixel-building-studio/
 │  ├─ gf-render.js       软件光栅化 + 阴影贴图 + 手绘风格化
 │  ├─ gf-presets.js      预设 / 随机 / 配方归一化
 │  ├─ gf-export.js       PNG / ZIP 编码
-│  ├─ app.js             古建页运行包（由 src/ancient-ui 构建）
-│  ├─ city-app.js        城池页运行包（由 src/city-ui 构建）
-│  └─ gf-build.js        建筑装配运行包（由 src/build 构建）
-├─ tools/build.js        源码模块 → 运行包（保持 file:// 直开）
-├─ cli/render.js         命令行渲染器
+│  └─ gf-city.js         城池生成（仅城池页加载）
+├─ cli/                  命令行渲染与控件审计
 ├─ docs/                 形制基准表 + 各阶段实测证据（md / json）
 └─ out/                  出图目录
 ```
 
-### 源码模块与构建
+### 源码模块与加载顺序
 
-为了继续支持 `file://` 双击直开，界面源码按业务边界拆在 `src/`，由 `tools/build.js` 按顺序合回一个 IIFE 运行包。**不要直接改 `js/app.js`、`js/city-app.js`、`js/gf-build.js`**（文件头有 AUTO-GENERATED 标记）。
+项目不使用打包器。为了支持 `file://` 双击直开，`src/` 下每个业务模块都是一个独立的 classic script，由 HTML 按依赖顺序直接 `<script src>` 加载；不使用 ES Modules，也不需要本地服务。
 
-```bat
-node tools/build.js
-```
+- 古建页：3 个核心脚本 + 9 个装配模块 + 4 个渲染/配方/导出/帮助脚本 + 13 个界面模块，共 29 个 `<script>`。
+- 城池页：3 个核心脚本 + 9 个装配模块 + 4 个渲染/配方/导出/城池脚本 + 1 个帮助脚本 + 8 个界面模块，共 25 个 `<script>`。
+- 当前没有运行包、没有构建步骤；HTML 直接按顺序加载 `src/` 模块。每个页面加载的脚本数量见下。
 
-| 源码目录 | 运行包 | 边界 |
-| --- | --- | --- |
-| `src/ancient-ui/` | `js/app.js` | 古建页：壳、环境陈设编辑器、建筑段编辑器、控件、渲染、相机、落成演示、地面网格、拖拽、导出、事件、启动 |
-| `src/city-ui/` | `js/city-app.js` | 城池页：壳、城制控件、渲染与视图、交互、导出、古建配方入城、事件、启动 |
-| `src/ancient-build/` | `js/gf-build.js` | 古建装配：公共结构、民居、门楼、院落、布局、院落群、园林建筑、城池、总装 |
+| 源码目录 | 边界 |
+| --- | --- |
+| `src/ancient-ui/` | 古建页：壳、环境陈设编辑器、建筑段编辑器、控件、渲染、相机、落成演示、地面网格、拖拽、导出、事件、启动 |
+| `src/city-ui/` | 城池页：壳、城制控件、渲染与视图、交互、导出、古建配方入城、事件、启动 |
+| `src/ancient-build/` | 古建装配：公共结构、民居、门楼、院落、布局、院落群、园林建筑、城池、总装 |
 
-新增/修改界面逻辑时改对应 `src/` 模块，再跑构建；`node cli/audit.js` 仍用于控件有效性回归。
+新增/修改界面逻辑时直接改对应 `src/` 模块；新增模块时同步加入 `index.html` / `city.html` 的 `<script>` 顺序，以及命令行用的 `cli/modules.js`。`node cli/audit.js` 仍用于控件有效性回归。
 
 
 ## 建筑类型（16 种）
@@ -199,7 +196,7 @@ node tools/build.js
 - 「保存配方 / 载入配方」导出/导入 JSON，全部参数都在里面
 - 「导出 ZIP」＝ 4 向 PNG + 拼版 + `recipe.json`
 - 加新构件：在 `js/gf-parts.js` 写函数 → 挂到 `GF.parts`；加新屋面：`js/gf-roof.js` 里写 builder → 在 `GF.roofs` 里派发
-- 加新建筑类型：在 `src/ancient-build/` 对应装配模块写 `buildXxx()` → `GF.build` 的 switch 里加 case → `src/ancient-ui/30-controls.js` 的 `TYPES` 加一项 → 跑 `node tools/build.js`
+- 加新建筑类型：在 `src/ancient-build/` 对应装配模块写 `buildXxx()` → `GF.build` 的 switch 里加 case → `src/ancient-ui/30-controls.js` 的 `TYPES` 加一项
 - 控件有效性自检：`node cli/audit.js`，逐类型逐参数换值比对网格签名，列出“换了值也不变”的项，用来排查新增控件是否真的接上了
 
 ## 参考与素材来源

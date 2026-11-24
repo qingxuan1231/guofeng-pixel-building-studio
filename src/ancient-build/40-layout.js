@@ -1,3 +1,4 @@
+'use strict';
   /* ============================ 阶段④ 布局共用 ============================ */
   function layStats(mb) {
     if (!mb.layoutStats) mb.layoutStats = { axis: [], flanks: [], walls: [], corners: [], segs: [] };

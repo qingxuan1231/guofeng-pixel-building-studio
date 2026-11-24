@@ -1,3 +1,4 @@
+'use strict';
   buildControls();
   tagRows();
   paintMode();
@@ -5,4 +6,4 @@
   bind();
   bindAncient();
   rebuild();
-})();
+

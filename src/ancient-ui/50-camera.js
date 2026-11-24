@@ -1,3 +1,4 @@
+'use strict';
   /* ----------------------- 相机轻量帧（不重建几何） ----------------------- */
   let camRaf = 0;
   function renderOrbit(tag) {

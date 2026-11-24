@@ -1,11 +1,19 @@
 /* 控件有效性审计：对每种建筑类型，逐个参数换值，比较网格（顶点+材质）是否真的变化。
    每一项可带 need（前置配方），避免“开关没开所以看不出”的误判。 */
-global.window = global;
+const fs = require('fs');
 const path = require('path');
-const root = path.join(__dirname, '..', 'js');
-['gf-core', 'gf-roof', 'gf-parts', 'gf-build', 'gf-render', 'gf-presets'].forEach((m) => require(path.join(root, m + '.js')));
+const vm = require('vm');
+const { ANCIENT } = require('./modules');
+const ROOT = path.join(__dirname, '..');
 
-const GP = global.GF;
+const ctx = { console };
+ctx.window = ctx;
+ctx.globalThis = ctx;
+vm.createContext(ctx);
+for (const f of ANCIENT.concat(['js/gf-render.js', 'js/gf-presets.js'])) {
+  vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
+}
+const GP = ctx.GF;
 
 function sig(mesh) {
   let h = 2166136261;

@@ -1,3 +1,4 @@
+'use strict';
   /* ------------------------------ 牌坊 ------------------------------ */
   function buildArchway(mb, r) {
     const bw = r.bayW, bays = 3;
