@@ -153,6 +153,9 @@
       let yb = base;
       for (let k = 0; k < f; k++) yb += (Array.isArray(o.floorHList) && o.floorHList[k] != null) ? o.floorHList[k] : fh;
       const yt = yb + fhF;
+      // 二层墙底压进下层墙顶 3 cm：原来 f=1 的墙底与 f=0 的墙顶同标高，
+      // 两层墙的顶/底面在 3.39 处严格齐平（厅堂 16 对 0.176 m² = 3.70 m²）
+      const wy0 = f === 0 ? yb : yb - 0.03;
 
       // 柱
       for (let i = 0; i <= bays; i++) {
@@ -180,7 +183,7 @@
         const u0 = side === 'front' ? x0 : -x1;
         const u1 = side === 'front' ? x1 : -x0;
         P.wallWithHoles(mb, {
-          dir: side, at, u0, u1, y0: yb, y1: yt,
+          dir: side, at, u0, u1, y0: wy0, y1: yt,
           holes: holes.map((h) => side === 'front' ? h : ({ u0: -h.u1, u1: -h.u0, v0: h.v0, v1: h.v1 })),
           thickness: wallT, mat: o.wallMat, tag: '墙体·' + (side === 'front' ? '前' : '后')
         });
@@ -189,11 +192,11 @@
           const bx = x0 + bayW * (i + 0.5);
           const uu = side === 'front' ? bx : -bx;
           if (f === 0 && i === Math.floor(bays / 2)) {
-            P.doorAt(mb, { dir: side, at, uc: uu, w: o.doorW, h: o.doorH, y0: yb, style: o.doorStyle, pattern: o.winPattern, leaves: o.doorLeaves, plain: o.cheap, tag: '门·' + side });
+            P.doorAt(mb, { dir: side, at, uc: uu, w: o.doorW, h: o.doorH, y0: yb, style: o.doorStyle, pattern: o.winPattern, leaves: o.doorLeaves, plain: o.cheap, wt: wallT / 2, tag: '门·' + side });
           } else {
             P.windowAt(mb, {
               dir: side, at, uc: uu, vc: yb + fhF * 0.36 + o.winH / 2,
-              w: o.winW, h: o.winH, pattern: o.winPattern, plain: o.cheap, tag: '窗·' + side
+              w: o.winW, h: o.winH, pattern: o.winPattern, plain: o.cheap, wt: wallT / 2, tag: '窗·' + side
             });
           }
         }
@@ -208,28 +211,33 @@
         const u0 = side === 'right' ? z0 : -z1;
         const u1 = side === 'right' ? z1 : -z0;
         P.wallWithHoles(mb, {
-          dir: side, at, u0, u1, y0: yb, y1: yt,
+          dir: side, at, u0, u1, y0: wy0, y1: yt,
           holes: holes.map((h) => side === 'right' ? h : ({ u0: -h.u1, u1: -h.u0, v0: h.v0, v1: h.v1 })),
           thickness: wallT, mat: o.wallMat, tag: '墙体·山面'
         });
         if (holes.length) {
           P.windowAt(mb, {
             dir: side, at, uc: 0, vc: holes[0].v0 + o.winH * 0.4,
-            w: holes[0].u1 - holes[0].u0, h: o.winH * 0.8, pattern: 'straight', tag: '窗·山面'
+            w: holes[0].u1 - holes[0].u0, h: o.winH * 0.8, pattern: 'straight', wt: wallT / 2, tag: '窗·山面'
           });
         }
       }
 
       // 阶条石（勒脚）：首层墙脚压一道条石，二层以上做腰线，避免“墙直接插进台基”
-      // 石面比墙面外挑 5 mm：原来的石面与墙皮严格同面，转视角时整圈勒脚都在闪。
+      // 环形做法：前后两条包到两山以外（转角一次成型），左右两条只走到前后条的里侧、
+      // 咬进去 11 mm。原来四条盒各占满整条边，四个转角处两两顶面严格齐平
+      // （前×右 1.15、后×左 1.15、前×左 1.08、右×后 1.01 m² 的同面），转视角整圈闪。
       {
-        const b0 = f === 0 ? yb - 0.006 : yb - 0.02;   // 底面压进台基 6 mm：原来石底与墙底同面
+        const b0 = f === 0 ? yb - 0.006 : yb - 0.02;   // 底面压进台基 6 mm
         const b1 = f === 0 ? yb + 0.2 : yb + 0.12;
-        const out = 0.045;   // 外挑量（原 0.04 与墙皮同面）
-        if (!cut.front) mb.box(x0, x1, b0, b1, z1 - 0.26, z1 + out, 'stone', f === 0 ? '墙脚石·前' : '腰线·前');
-        if (!cut.back) mb.box(x0, x1, b0, b1, z0 - out, z0 + 0.26, 'stone', f === 0 ? '墙脚石·后' : '腰线·后');
-        if (!cut.left) mb.box(x0 - out, x0 + 0.26, b0, b1, z0, z1, 'stone', f === 0 ? '墙脚石·左' : '腰线·左');
-        if (!cut.right) mb.box(x1 - 0.26, x1 + out, b0, b1, z0, z1, 'stone', f === 0 ? '墙脚石·右' : '腰线·右');
+        const out = 0.045;      // 外挑量
+        const bite = 0.011;     // 左右条咬进前后条的深度（转角齐平改为咬边）
+        const t0 = f === 0 ? '墙脚石' : '腰线';
+        if (!cut.front) mb.box(x0 - out, x1 + out, b0, b1, z1 - 0.26, z1 + out, 'stone', t0 + '·前');
+        if (!cut.back) mb.box(x0 - out, x1 + out, b0, b1, z0 - out, z0 + 0.26, 'stone', t0 + '·后');
+        // 左右两条顶面压低 2 mm：转角处与前后条的顶面不再同平面
+        if (!cut.left) mb.box(x0 - out, x0 + 0.26, b0, b1 - 0.002, z0 + 0.26 - bite, z1 - 0.26 + bite, 'stone', t0 + '·左');
+        if (!cut.right) mb.box(x1 - 0.26, x1 + out, b0, b1 - 0.002, z0 + 0.26 - bite, z1 - 0.26 + bite, 'stone', t0 + '·右');
       }
 
       // 朝代做法：阑额断面、普拍枋有无与断面、斗栱密度与大小都按朝代定
@@ -245,7 +253,7 @@
         const ly = yt - 0.1 - pbH - lanH;
         if (plainLintel) {
           const zc = side === 'front' ? z1 - 0.05 : z0 + 0.05;
-          mb.box(x0 - 0.06, x1 + 0.06, ly, ly + lanH, zc - lanT / 2, zc + lanT / 2, 'timber', '额枋·' + side);
+          mb.box(x0 - 0.06, x1 + 0.06, ly, ly + lanH, zc - lanT / 2 + 0.012, zc + lanT / 2 + 0.012, 'timber', '额枋·' + side);
           if (o.era === 'yuan') {
             // 月梁：两端下缘收进，中段略鼓（梁思成记阳和楼“阑额刻作假月梁形”）
             for (const ex of [x0 + 0.5, x1 - 0.5]) {
@@ -296,12 +304,12 @@
         // 320 档转视角时这圈檐下会闪成一片。
         const lap = 0.004;
         if (!cut.front) {
-          mb.box(x0 - 0.02, x1 + 0.02, y0g - lap, b2, z1 - 0.15, z1 - 0.05, 'woodDark', '栱眼壁·前垫板');
+          mb.box(x0 - 0.02, x1 + 0.02, y0g - lap, b2, z1 - 0.146, z1 - 0.054, 'woodDark', '栱眼壁·前垫板');   // 比栱眼壁收 4 mm：原来两者前后脸同一张平面
           mb.box(x0 - 0.02, x1 + 0.02, b2 - lap, b1, z1 - 0.15, z1 - 0.05, gmat, '栱眼壁·前');
           mb.box(x0 - 0.02, x1 + 0.02, b1 - lap, y1g, z1 - 0.18, z1 - 0.02, 'paintGreen', '柱头枋·前');
         }
         if (!cut.back) {
-          mb.box(x0 - 0.02, x1 + 0.02, y0g - lap, b2, z0 + 0.05, z0 + 0.15, 'woodDark', '栱眼壁·后垫板');
+          mb.box(x0 - 0.02, x1 + 0.02, y0g - lap, b2, z0 + 0.054, z0 + 0.146, 'woodDark', '栱眼壁·后垫板');
           mb.box(x0 - 0.02, x1 + 0.02, b2 - lap, b1, z0 + 0.05, z0 + 0.15, gmat, '栱眼壁·后');
           mb.box(x0 - 0.02, x1 + 0.02, b1 - lap, y1g, z0 + 0.02, z0 + 0.18, 'paintGreen', '柱头枋·后');
         }
@@ -339,7 +347,7 @@
         }
       }
       // 室内地板（首层；城制等大群组可用 noFloor 关闭以控三角面）
-      if (f === 0 && !o.noFloor) interiorFloor(mb, W - 0.4, D - 0.4, yb + 0.02, '地板');
+      if (f === 0 && !o.noFloor) interiorFloor(mb, W - 0.408, D - 0.408, yb + 0.022, '地板');
 
       // 腰檐（非顶层）：只做一层短披檐——檐口压柱头、内侧收到上层墙外 6cm，
       // 坡高必须小于上层楼板厚，否则瓦会顺着墙往上爬，看着像“瓦从屋里盖下来”

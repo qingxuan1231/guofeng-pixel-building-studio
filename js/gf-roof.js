@@ -28,7 +28,7 @@
   // 320 px/m 时垄距 0.33 m ≈ 105 px、垄高 0.024 m ≈ 8 px，圆垄在像素上才读得出“瓦”。
   let RIB = 0.024;
   // 半圆断面：5 点一垄，两端落在垄沟、中点为瓦顶，避免出现“平顶亮带”
-  const RIB5 = [0, 0.6, 1, 0.6, 0];
+  const RIB5 = [-0.5, 0.55, 1, 0.55, -0.5];   // 垄沟由 −0.3 加深到 −0.5：RIB 0.024 时凹曲 12 mm（原 7 mm 在 320 档只够一条浅线）
   const PROF2 = [1, -0.6];
 
   /** 参数化曲面片：fn(u,v) -> [x,y,z] */
@@ -85,6 +85,40 @@
   }
 
 
+  /* 连续檐口带：把一串折线点做成一节完整的矩形断面带（上/下/外/内四张面，相邻段共用顶点）。
+   * 原来连檐、瓦口、博风都是“逐段各一根梁”，相邻两段首尾端面严格同面，
+   * 檐口细分一密就是几十对共面，320 档整条檐口与山面博风各闪一道。
+   * dyC 断面中心相对折线的高差，w/h 断面宽高，ox 沿外法线的水平推移。 */
+  function ribbon(mb, pts, dyC, w, h, mat, tag, ox) {
+    const n = pts.length;
+    if (n < 2) return;
+    let cx = 0, cz = 0;
+    for (const p of pts) { cx += p[0]; cz += p[2]; }
+    cx /= n; cz /= n;
+    ox = ox || 0;
+    const LT = [], RT = [], LB = [], RB = [];
+    for (let i = 0; i < n; i++) {
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+      const dx = b[0] - a[0], dz = b[2] - a[2];
+      const nl = Math.hypot(dx, dz) || 1;
+      let nx = dz / nl, nz = -dx / nl;
+      if ((nx * (pts[i][0] - cx) + nz * (pts[i][2] - cz)) < 0) { nx = -nx; nz = -nz; }
+      const yt = pts[i][1] + dyC + h / 2, yb = yt - h, hw = w / 2;
+      LT.push([pts[i][0] + nx * (ox - hw), yt, pts[i][2] + nz * (ox - hw)]);
+      RT.push([pts[i][0] + nx * (ox + hw), yt, pts[i][2] + nz * (ox + hw)]);
+      LB.push([pts[i][0] + nx * (ox - hw), yb, pts[i][2] + nz * (ox - hw)]);
+      RB.push([pts[i][0] + nx * (ox + hw), yb, pts[i][2] + nz * (ox + hw)]);
+    }
+    for (let i = 0; i < n - 1; i++) {
+      mb.quad(LT[i], RT[i], RT[i + 1], LT[i + 1], mat, tag);
+      mb.quad(LB[i], RB[i], RB[i + 1], LB[i + 1], mat, tag);
+      mb.quad(RT[i], RB[i], RB[i + 1], RT[i + 1], mat, tag);
+      mb.quad(LT[i], LB[i], LB[i + 1], LT[i + 1], mat, tag);
+    }
+    mb.quad(LT[0], LB[0], RB[0], RT[0], mat, tag);
+    mb.quad(LT[n - 1], RT[n - 1], RB[n - 1], LB[n - 1], mat, tag);
+  }
+
   function bands(width) {
     return GF.clamp(Math.round(width / 0.2), 8, 96);
   }
@@ -101,21 +135,26 @@
     if (det >= 2) {
       // 三道线脚的正脊断面：脊座（出檐小挑）→ 脊筒（收分）→ 脊帽（出唇）
       mb.box(cx - xr - 0.14, cx + xr + 0.14, y - rh * 0.62, y - rh * 0.34, cz - (rw + 0.14) / 2, cz + (rw + 0.14) / 2, RD, o.tag + '·脊座');
-      mb.taper(cx, cz, rw + 0.02, rw + 0.02, rw - 0.04, rw - 0.04, y - rh * 0.5, y + rh * 0.32, RD, o.tag + '·脊筒');
+      // 脊筒拆成三段收分：原来一整段只有上下两个断面，中段在 320 档看是一块平板。
+      // 三段按 rh 的 0.50/0.44/0.32 分段，每段底比上段顶压进 4 mm，接缝处不会出现同尺寸盖面。
+      mb.taper(cx, cz, rw + 0.020, rw + 0.020, rw + 0.002, rw + 0.002, y - rh * 0.500, y - rh * 0.060, RD, o.tag + '·脊筒下');
+      mb.taper(cx, cz, rw + 0.002, rw + 0.002, rw - 0.018, rw - 0.018, y - rh * 0.064, y + rh * 0.140, RD, o.tag + '·脊筒中');
+      mb.taper(cx, cz, rw - 0.018, rw - 0.018, rw - 0.040, rw - 0.040, y + rh * 0.136, y + rh * 0.324, RD, o.tag + '·脊筒上');
       mb.taper(cx, cz, rw - 0.02, rw - 0.02, rw + 0.06, rw + 0.06, y + rh * 0.3, y + rh * 0.52, RD, o.tag + '·脊帽');
       // 瓦条：脊筒上压两道细线，近看才有“叠瓦”的层次。
       // 上一条的顶面正好落在下一条的底面上（rh*0.06+0.022 恰好 = rh*0.16，严丝合缝），
       // 两条细线贴成一张同面孔，转视角时整条脊闪一道——下面那条压进上一条 5 mm。
       for (const dy of [0.06, 0.16]) {
-        const y0 = y + rh * dy - (dy > 0.1 ? 0.005 : 0);
-        mb.box(cx - xr - 0.02, cx + xr + 0.02, y0, y0 + 0.022, cz - rw / 2 - 0.014, cz + rw / 2 + 0.014, RD, o.tag + '·瓦条');
+        const y0 = y + rh * dy - (dy > 0.1 ? 0.005 : 0) + 0.003;   // 整体抬 3 mm：原来瓦条某一面正落在脊筒上的盖面高度上
+        const wz = rw / 2 + (dy > 0.1 ? 0.006 : 0.010);   // 两道瓦条进深错开 4 mm：原来两者 cz 两侧面完全同面
+        mb.box(cx - xr - 0.02, cx + xr + 0.02, y0, y0 + 0.022, cz - wz, cz + wz, RD, o.tag + '·瓦条');
       }
     } else {
       mb.box(cx - xr - 0.1, cx + xr + 0.1, y - rh * 0.5, y + rh, cz - rw / 2, cz + rw / 2, RD, o.tag + '·正脊');
     }
     // 脊上线条（金/白）
     if (style === 'ornate') {
-      mb.box(cx - xr - 0.06, cx + xr + 0.06, y + rh * 0.52, y + rh * 0.52 + 0.08, cz - rw * 0.28, cz + rw * 0.28, 'gold', o.tag + '·脊线');
+      mb.box(cx - xr - 0.06, cx + xr + 0.06, y + rh * 0.514, y + rh * 0.52 + 0.08, cz - rw * 0.28, cz + rw * 0.28, 'gold', o.tag + '·脊线');
     }
     // 两端鸱吻（吞口朝内、卷尾朝外挑）：四段叠出剪影，而不是两个方盒子
     const beastN = o.beasts || 0;
@@ -234,12 +273,15 @@
 
     // 连檐 + 瓦口板：逐段贴合檐口（做薄一点，太粗会把整条檐口读成一圈木箍）
     for (const s of segs) {
-      GF.beamBetween(mb, [s.a[0], s.a[1] - 0.08, s.a[2]], [s.b[0], s.b[1] - 0.08, s.b[2]], 0.08, 0.1, o.tileEnd || 'woodDark', o.tag + '·连檐');
+      // 连檐整条改由下方 ribbon() 一次成型（逐段梁首尾端面同面，320 档整条檐口闪一道）
       if (det >= 2 && o.woodEdge !== false) {
-        GF.beamBetween(mb, [s.a[0] + s.nx * 0.03, s.a[1] - 0.15, s.a[2] + s.nz * 0.03],
-          [s.b[0] + s.nx * 0.03, s.b[1] - 0.15, s.b[2] + s.nz * 0.03], 0.035, 0.06, 'wood', o.tag + '·瓦口');
+        // 瓦口同样交给 ribbon()
       }
     }
+
+    const eavePtsX = segs.map((q) => q.a).concat([segs[segs.length - 1].b]);
+    ribbon(mb, eavePtsX, -0.090, -0.052, 0.1, o.tileEnd || 'woodDark', o.tag + '·连檐', 0);
+    if (det >= 2 && o.woodEdge !== false) ribbon(mb, eavePtsX, -0.048, -0.016, 0.06, 'wood', o.tag + '·瓦口', -0.006);
 
     const at = (dist) => {
       let s = segs[segs.length - 1];
@@ -255,11 +297,11 @@
     for (let k = 0; k < n; k++) {
       const p = at((k + 0.5) * total / n);
       // 瓦当：短圆柱 + 圆帽，从上方看是一枚圆鼓
-      mb.cyl(p.x + p.nx * 0.015, p.z + p.nz * 0.015, rw, p.y - 0.06, p.y + 0.01, det >= 2 ? 10 : 8, TM, o.tag + '·瓦当');
-      if (det >= 2) mb.lathe(p.x + p.nx * 0.015, p.z + p.nz * 0.015, [[0.001, 0], [rw * 0.9, 0.004], [rw, 0.016], [0.001, 0.026]], 8, TM, o.tag + '·瓦当心');
+      mb.cyl(p.x + p.nx * 0.016, p.z + p.nz * 0.016, rw, p.y - 0.050, p.y - 0.004, det >= 2 ? 10 : 8, TM, o.tag + '·瓦当');
+      if (det >= 2) mb.lathe(p.x + p.nx * 0.016, p.z + p.nz * 0.016, [[0.001, p.y - 0.004], [rw * 0.9, p.y + 0.000], [rw * 0.012, p.y + 0.012], [0.001, p.y + 0.022]], 8, TM, o.tag + '·瓦当心');
       // 滴水：瓦当之间一片舌尖瓦
       const q = at(k * total / n);
-      mb.taper(q.x + q.nx * 0.035, q.z + q.nz * 0.035, 0.1, 0.1, 0.07, 0.07, q.y - 0.19, q.y - 0.07, TM, o.tag + '·滴水');
+      mb.taper(q.x + q.nx * 0.030, q.z + q.nz * 0.030, 0.1, 0.1, 0.07, 0.07, q.y - 0.180, q.y - 0.054, TM, o.tag + '·滴水');
     }
   }
 
@@ -318,7 +360,7 @@
       GF.beamRound(mb, at(headA, dyA), at(tailA, dyA), rad, fine ? 5 : 4, matA, tag + '·檐椽');
       // 飞椽：方料，压在檐椽外段，出头在瓦口下面；端面单独用暗木色，椽头才分得清
       GF.beamBetween(mb, at(-outB, dyB), at(-outB + 0.06, dyB), sec, sec, matB, tag + '·飞椽头');
-      GF.beamBetween(mb, at(-outB + 0.06, dyB), at(lenB, dyB), sec, sec, matA, tag + '·飞椽');
+      GF.beamBetween(mb, at(-outB + 0.056, dyB), at(lenB, dyB), sec - 0.004, sec - 0.004, matA, tag + '·飞椽');
     }
   }
 
@@ -468,7 +510,7 @@
         GF.beamBetween(mb, [x, yb, cz + ze], T, 0.12, 0.2, 'wood', o.tag + '·博风');
       } else {
         for (let i = 0; i < outline.length - 1; i++) {
-          GF.beamBetween(mb, outline[i], outline[i + 1], 0.12, 0.2, 'wood', o.tag + '·博风');
+          if (i === 0) ribbon(mb, outline, 0, 0.12, 0.2, 'wood', o.tag + '·博风', 0);   // 整条一次成型，不再逐段各一根梁
         }
       }
     }

@@ -1,7 +1,15 @@
 'use strict';
   /* ----------------------- 相机轻量帧（不重建几何） ----------------------- */
   let camRaf = 0;
+  let orbitIdleT = 0;
   function renderOrbit(tag) {
+    // 轻量帧只服务交互过程：停手 200 ms 必须补一次完整预览，
+    // 否则旋向/中轴按钮走完 renderOrbit 就再没人还原像素密度，画布一直停在轻量档。
+    clearTimeout(orbitIdleT);
+    orbitIdleT = setTimeout(() => {
+      if (camRaf || !state.mesh || state.playing) return;
+      renderFullPreview();
+    }, 200);
     if (!state.mesh || state.playing || camRaf) return;
     camRaf = requestAnimationFrame(() => {
       camRaf = 0;

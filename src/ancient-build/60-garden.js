@@ -433,21 +433,23 @@
     const bays = Math.max(1, r.bays);
     const W = bays * r.bayW * 0.94, D = r.depth * 0.66;
     const h = Math.max(0.6, r.baseH) + 0.22;
-    // 临水石台（柱插入水中）
-    mb.box(-W / 2 - 0.45, W / 2 + 0.45, 0, h - 0.1, -D / 2 - 0.45, D / 2 + 0.45, 'stoneDark', '水榭·石台');
+    // 临水石台（柱插入水中）：石台顶收在台面下 2 cm、石柱顶再收到 h−0.04，
+    // 原来 石台顶 = 榭台面底（45.03 m²）、石柱顶 = 榭台面顶（0.52 m²）两处严格齐平，
+    // 一个水榭就把 45 m² 的同面顶在台面底下，转视角整片台面在闪。
+    mb.box(-W / 2 - 0.45, W / 2 + 0.45, 0, h - 0.02, -D / 2 - 0.45, D / 2 + 0.45, 'stoneDark', '水榭·石台');
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
-        mb.boxC(sx * (W / 2 + 0.16), sz * (D / 2 + 0.16), 0.36, 0.36, 0, h, 'stone', '水榭·石柱');
+        mb.boxC(sx * (W / 2 + 0.16), sz * (D / 2 + 0.16), 0.36, 0.36, 0.02, h - 0.04, 'stone', '水榭·石柱');
       }
     }
-    mb.box(-W / 2 - 0.47, W / 2 + 0.47, h - 0.1, h, -D / 2 - 0.47, D / 2 + 0.47, 'slab', '榭台面');
+    mb.box(-W / 2 - 0.47, W / 2 + 0.47, h - 0.08, h, -D / 2 - 0.47, D / 2 + 0.47, 'slab', '榭台面');
 
     const colH = r.floorH;
     for (let i = 0; i <= bays; i++) {
       const x = -W / 2 + (W * i) / bays;
       for (const sz of [-1, 1]) {
         mb.cyl(x, sz * (D / 2 - 0.16), 0.16, h, h + colH, 8, r.colMat, '榭柱');
-        mb.boxC(x, sz * (D / 2 - 0.16), 0.26, 0.26, h, h + 0.12, 'stone', '柱础');
+        mb.boxC(x, sz * (D / 2 - 0.16), 0.26, 0.26, h - 0.06, h + 0.12, 'stone', '柱础');
       }
     }
     for (const sz of [-1, 1]) {
@@ -627,10 +629,13 @@
         holes: [], thickness: t, mat: 'brick', tag: '阙台'
       });
     }
-    // 券洞内壁（暗）+ 券石
-    for (const b of bands) {
-      mb.box(b.u0 + 0.02, b.u1 - 0.02, b.v0, b.v1, -D / 2 + 0.05, D / 2 - 0.05, 'dark', '门洞');
-    }
+    // 券洞内壁（暗）：五条横带互相咬进 3 mm。原来的带与带上下两条大面严格齐平
+    // （每张 3.4×3.5 m，四条接缝合 37.31 m²），是阙身上最大的一处同面。
+    bands.forEach((b, bi) => {
+      const v0 = bi > 0 ? b.v0 - 0.003 : b.v0;
+      const v1 = bi < bands.length - 1 ? b.v1 + 0.003 : b.v1;
+      mb.box(b.u0 + 0.02, b.u1 - 0.02, v0, v1, -D / 2 + 0.05, D / 2 - 0.05, 'dark', '门洞');
+    });
     for (let k = 0; k <= 10; k++) {
       const a = Math.PI * (k / 10);
       const ux = Math.cos(a) * (gr + 0.08), vy = springY + Math.sin(a) * (gr * 0.9 + 0.08);
@@ -638,19 +643,21 @@
         mb.box(ux - 0.18, ux + 0.18, vy - 0.14, vy + 0.14, sz * D / 2 - 0.1, sz * D / 2 + 0.1, 'slab', '券石');
       }
     }
-    // 台面 + 城垛
-    mb.box(-W / 2, W / 2, wallH - 0.2, wallH, -D / 2, D / 2, 'brick', '阙台面');
+    // 台面 + 城垛：台面顶抬到墙顶以上 2 cm（墙顶原来与台面顶同平面，整圈 7.7 m² 在闪），
+    // 城垛再坐进台面 2 cm（原来 城垛底 = 台面顶 5.98 m²、城垛侧面 = 阙台立面 5.25 m²）
+    mb.box(-W / 2, W / 2, wallH - 0.2, wallH + 0.02, -D / 2, D / 2, 'brick', '阙台面');
     const nb = Math.round(W / 1.1);
     for (let i = 0; i <= nb; i++) {
       const x = -W / 2 + (W * i) / nb;
-      for (const sz of [-1, 1]) mb.boxC(x, sz * (D / 2 - 0.2), 0.5, 0.7, wallH, wallH + 0.7, 'brick', '城垛');
+      for (const sz of [-1, 1]) mb.boxC(x, sz * (D / 2 - 0.36), 0.5, 0.62, wallH - 0.02, wallH + 0.7, 'brick', '城垛');
     }
     // 两侧子阙（高台 + 小屋顶）
     for (const sx of [-1, 1]) {
       const tx = sx * (W / 2 - 1.0);
       const tw = 2.0, td = 2.6, th = wallH + 2.2;
-      mb.box(tx - tw / 2, tx + tw / 2, 0, th, -td / 2, td / 2, 'brick', '子阙');
-      mb.box(tx - tw / 2 - 0.3, tx + tw / 2 + 0.3, th, th + 0.16, -td / 2 - 0.3, td / 2 + 0.3, 'slab', '子阙·台面');
+      // 子阙右/左侧面原来与阙台山墙内皮严格同面（1.82 m²）：向外多咬 6 cm 进墙
+      mb.box(tx - tw / 2, tx + tw / 2 + sx * 0.06, -0.03, th, -td / 2, td / 2, 'brick', '子阙');
+      mb.box(tx - tw / 2 - 0.3, tx + tw / 2 + sx * 0.06 + 0.3 * sx, th - 0.02, th + 0.16, -td / 2 - 0.3, td / 2 + 0.3, 'slab', '子阙·台面');
       if (!r.cut.roof) {
         GF.roofs.build(mb, {
           cx: tx, cz: 0, x0: tx - tw / 2 - 0.5, x1: tx + tw / 2 + 0.5,

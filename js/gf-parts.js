@@ -34,6 +34,41 @@
   }
   GF.localBox = localBox;
 
+  /* --------------------- 深度槽位表（相对墙面，mm，正 = 出皮） --------------------- */
+  // 门窗族唯一的“占位法”：每件只许一个槽，槽的前脸（第二个数）两两不相等，
+  // 相邻槽的带子必须相交（你咬我 3 mm、我咬你 4 mm），禁止端面齐平。
+  // 前脸集合：24 10 -32 -78 -22 -28 -12 -44 -26 -32 -16 14 26 100 130 84 28 40 18 -6
+  // 门窗族之外（墙脚石/台基/屋面/栏杆/斗拱/道具）的槽位见 docs/阶段9_部件生成总表.md 第 3 节。
+  const SLOT_MM = {
+    frame:    [-44,  24],   // 门窗框（含抱框竖框）
+    mull:     [-44,  10],   // 抹头（框内的横档）
+    leaf:     [-76, -32],   // 门扇 / 隔扇边梃（退进洞口 3.2–7.6 cm）
+    glass:    [-108, -78],  // 窗纸 / 纱（洞口最深一档）
+    lattice:  [-40, -22],   // 格心棂条
+    panel:    [-74, -28],   // 裙板
+    panelEdge:[-30, -12],   // 裙板四周仔边
+    panelLine:[-16,  -6],   // 裙板金线
+    taohuan:  [-60, -44],   // 绦环板
+    kazi:     [-44, -26],   // 卡子花
+    zibian:   [-42, -32],   // 格心仔边
+    nail:     [-34, -16],   // 门钉
+    thresh:   [-40,  14],   // 门槛
+    zhen:     [-60,  26],   // 门枕石（抱鼓）
+    lintel:   [-36,  40],   // 门楣
+    bracket:  [-44,  18],   // 抱框
+    hood:     [ 26, 100],   // 窗楣（第一级枭混）
+    hood2:    [ 96, 130],   // 窗楣线（第二级）
+    sill:     [  8,  84],   // 窗台
+    boss:     [-34,  -8]    // 铺首（贴门扇前脸，后缘压进门扇 2 mm）
+  };
+  GF.SLOT_MM = SLOT_MM;
+  // 槽位 → 局部深度（F = 墙半厚，墙面在 d = F 处）
+  function slotZ(F, k) {
+    const s = SLOT_MM[k];
+    return [F + s[0] / 1000, F + s[1] / 1000];
+  }
+  GF.slotZ = slotZ;
+
   /* ------------------------------ 墙体 ------------------------------ */
   // 带洞口的墙：按洞口边界切栅格，但只生成“壳”——内外两张墙面 + 洞口/墙端/墙顶的
   // 侧壁。原来的做法是每个格子都出一个完整六面盒，格与格之间的切缝上就留下两张
@@ -158,36 +193,50 @@
   }
 
   function windowAt(mb, o) {
-    // o: dir, at, uc（中心u）, vc（中心v）, w, h, pattern, hole? 由墙体先行开洞
+    // o: dir, at（墙中轴）, uc, vc, w, h, wt（墙半厚）, pattern；洞口由墙体先行开出
     const mp = mapper(o.dir, o.at);
+    const F = o.wt || 0.11;
+    const W = (k) => slotZ(F, k);
     const w = o.w, h = o.h, uc = o.uc, vc = o.vc;
     const u0 = uc - w / 2, u1 = uc + w / 2, v0 = vc - h / 2, v1 = vc + h / 2;
     const tag = o.tag || '窗';
-    // 窗内暗面（窗纸）
-    localBox(mb, mp, u0, u1, v0, v1, -0.06, -0.04, o.paperMat || 'paper', tag + '·纸');
-    // 外框：内缘咬进洞口 2 mm，避开“框内立面 == 洞口侧壁”那张完全同面的面
-    // （32 处同面叠加，正是窗框四周转视角时闪的原因）
-    const fw = 0.1;
-    const gn = 0.002;
-    localBox(mb, mp, u0 - fw, u1 + fw, v0 - fw, v0 + gn, -0.03, 0.08, o.frameMat || 'wood', tag + '·框');
-    localBox(mb, mp, u0 - fw, u1 + fw, v1 - gn, v1 + fw, -0.03, 0.08, o.frameMat || 'wood', tag + '·框');
-    localBox(mb, mp, u0 - fw, u0 + gn, v0, v1, -0.03, 0.08, o.frameMat || 'wood', tag + '·框');
-    localBox(mb, mp, u1 - gn, u1 + fw, v0, v1, -0.03, 0.08, o.frameMat || 'wood', tag + '·框');
-    // 格心（LOD plain：省格心棂条）
+    const fw = 0.1;        // 框外面的挑出宽
+    const gn = 0.002;      // 框内缘咬进洞边 2 mm（避开“框内立面 == 洞口侧壁”那张同面）
+    const FM = o.frameMat || 'wood';
+    // ① 窗纸：退到洞口最深一档（glass −108..−78 mm），两侧各咬进洞边 6 mm，
+    //    纸的侧立面原来与洞口侧壁严格同面（清式殿 0.17 m²、厅堂 0.20 m² 的同面）
+    localBox(mb, mp, u0 - 0.006, u1 + 0.006, v0 + 0.003, v1 - 0.003, ...W('glass'), o.paperMat || 'paper', tag + '·纸');   // 纸上下各缩 3 mm：原来纸顶面正落在洞顶那张墙面上
+    // ② 框：四边框，前脸 +24 mm（相对墙面），比纸/格心都靠外
+    const fzj = ((Math.abs(Math.round((u0 + u1 + 100) * 7919)) % 3) - 1) * 0.0015;   // 并排窗的框同处一槽，前后脸严格同面：按窗位散列 ±1.5 mm
+    const FZ = W('frame').map((v) => v + fzj);
+    localBox(mb, mp, u0 - fw, u1 + fw, v0 - fw, v0 + gn, FZ[0], FZ[1], FM, tag + '·框');
+    localBox(mb, mp, u0 - fw, u1 + fw, v1 - gn, v1 + fw, FZ[0], FZ[1], FM, tag + '·框');
+    localBox(mb, mp, u0 - fw, u0 + gn, v0, v1, FZ[0], FZ[1], FM, tag + '·框');
+    localBox(mb, mp, u1 - gn, u1 + fw, v0, v1, FZ[0], FZ[1], FM, tag + '·框');
     if (!o.plain) {
-      const bars = latticeBars(w, h, o.pattern || 'step');
+      // ③ 格心（lattice −40..−22）与抹头（mull −44..+10）：抹头把窗分成上樘/中樘/下樘，
+      //    320 档才看得出“这是一扇窗，不是一块板”
       const barMat = o.barMat || 'wood';
+      const bars = latticeBars(w, h, o.pattern || 'step');
+      const LZ = W('lattice');
       for (const b of bars) {
-        localBox(mb, mp, uc + b[0], uc + b[1], vc + b[2], vc + b[3], 0.02, 0.09, barMat, tag + '·格心');
+        localBox(mb, mp, uc + b[0], uc + b[1], vc + b[2], vc + b[3], LZ[0], LZ[1], barMat, tag + '·格心');
+      }
+      if (GF.detail(2) && h > 0.9) {
+        const MZ = W('mull');
+        for (const [fr, hh] of [[0.34, 0.030], [0.68, 0.024]]) {
+          const mv = v0 + h * fr;
+          localBox(mb, mp, u0 - gn, u1 + gn, mv - hh, mv + hh, MZ[0], MZ[1], FM, tag + '·抹头');
+        }
       }
     }
-    // 窗楣与窗台：上挑石楣 + 下石台，让窗洞有“框住”的层次（民居、厅堂通用）
+    // ④ 窗楣两级枭混（hood 26..100 / hood2 96..130）与窗台（sill 8..84）：出皮不再等于墙皮
     if (o.hood !== false && !o.plain) {
-      // 上挑石楣 + 下石台：石楣底面压进框 4 mm、线脚再压进石楣 4 mm（原来两两严格同面）
       const hm = o.hoodMat || 'stone';
-      localBox(mb, mp, u0 - 0.18, u1 + 0.18, v1 + fw - 0.004, v1 + fw + 0.12, -0.05, 0.13, hm, tag + '·窗楣');
-      localBox(mb, mp, u0 - 0.16, u1 + 0.16, v1 + fw + 0.12 - 0.004, v1 + fw + 0.16, -0.03, 0.11, hm, tag + '·窗楣线');
-      localBox(mb, mp, u0 - 0.16, u1 + 0.16, v0 - fw - 0.1, v0 - fw, -0.05, 0.12, hm, tag + '·窗台');
+      const HZ = W('hood'), H2 = W('hood2'), SZ = W('sill');
+      localBox(mb, mp, u0 - 0.18, u1 + 0.18, v1 + fw - 0.004, v1 + fw + 0.12, HZ[0], HZ[1], hm, tag + '·窗楣');
+      localBox(mb, mp, u0 - 0.20, u1 + 0.20, v1 + fw + 0.10, v1 + fw + 0.15, H2[0], H2[1], hm, tag + '·窗楣线');
+      localBox(mb, mp, u0 - 0.16, u1 + 0.16, v0 - fw - 0.1, v0 - fw, SZ[0], SZ[1], hm, tag + '·窗台');
     }
   }
 
@@ -195,105 +244,113 @@
   function doorAt(mb, o) {
     // 隔扇门：四扇，上部格心、下部裙板
     const mp = mapper(o.dir, o.at);
+    const F = o.wt || 0.11;
+    const W = (k) => slotZ(F, k);
     const uc = o.uc, w = o.w, h = o.h, y0 = o.y0;
     const tag = o.tag || '门';
+    const half = w / 2;
+    const LA = W('leaf'), TH = W('thresh');
     if (o.plain) {
       // LOD plain：板门两扇平板，省门钉 / 门环细分
-      const half = w / 2;
       for (const s of [-1, 1]) {
-        localBox(mb, mp, uc + s * 0.03, uc + s * half, y0, y0 + h, -0.08, 0.06, 'wood', tag + '·板门');
+        localBox(mb, mp, uc + s * 0.03, uc + s * (half + 0.004), y0, y0 + h, LA[0], LA[1], 'wood', tag + '·板门');
       }
-      localBox(mb, mp, uc - w / 2, uc + w / 2, y0 - 0.12, y0, -0.1, 0.1, 'stone', tag + '·门槛');
+      localBox(mb, mp, uc - w / 2, uc + w / 2, y0 - 0.12, y0, TH[0], TH[1], 'stone', tag + '·门槛');
       return;
     }
     if (o.style === 'panel') {
-      // 板门：两扇实木门 + 门钉 + 铺首 + 抱框 + 门枕石
-      const half = w / 2;
+      // 板门：两扇实木门 + 门钉 + 铺首衔环 + 抱框 + 门楣 + 门枕石
       const fine = GF.detail(3);
       const rows = fine ? 9 : 4;
       const cols = fine ? 5 : 3;
+      const NZ = W('nail'), BZ = W('boss');
       for (const s of [-1, 1]) {
-        localBox(mb, mp, uc + s * 0.03, uc + s * half, y0, y0 + h, -0.08, 0.06, 'wood', tag + '·板门');
+        localBox(mb, mp, uc + s * 0.03, uc + s * (half + 0.004), y0, y0 + h, LA[0], LA[1], 'wood', tag + '·板门');
         for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
             const uu = uc + s * (0.16 + c * ((half - 0.26) / Math.max(1, cols - 1) * 0.82));
             const vv = y0 + h * (0.26 + r * (0.48 / Math.max(1, rows - 1)));
-            if (fine) {
-              // 门钉：圆钉帽（小棱台），九路五列，间距 0.26 m
-              mb.taper(mp(uu, vv, 0.1)[0], mp(uu, vv, 0.1)[2], 0.07, 0.07, 0.045, 0.045, vv - 0.035, vv + 0.035, 'gold', tag + '·门钉');
-            } else {
-              localBox(mb, mp, uu - 0.035, uu + 0.035, vv - 0.035, vv + 0.035, 0.06, 0.1, 'gold', tag + '·门钉');
-            }
+            // 门钉：钉帽压在门扇前脸上（nail −34..−16），不再像原来那样整根钉浮在墙皮外 6 cm
+            localBox(mb, mp, uu - 0.035, uu + 0.035, vv - 0.035, vv + 0.035, NZ[0], NZ[1], 'gold', tag + '·门钉');
           }
         }
-        // 铺首衔环：贴着门扇、按门扇位置摆放（原来写在世界原点，是漏摆的 bug）
+        // 铺首衔环：门平面内的圆盘 + 8 段环。原来用竖轴 lathe，等于把门环做成了立在门口的花瓶
         const pu = uc + s * 0.22, pv = y0 + h * 0.5;
-        const wp = mp(pu, pv, 0.08);
-        mb.lathe(wp[0], wp[2], [[0.001, 0], [0.12, 0.02], [0.12, 0.06], [0.05, 0.09], [0.001, 0.1]], 10, 'gold', tag + '·铺首');
-        if (fine) {
-          // 门环：一个略下坠的扁圆，挂在铺首下方
-          mb.lathe(wp[0], wp[2], [[0.001, 0.09], [0.1, 0.1], [0.11, 0.14], [0.001, 0.15]], 10, 'gold', tag + '·门环');
-        }
+        const disc = (cu, cv, r0, r1, d0, d1, mat, tg) => {
+          for (let k = 0; k < 8; k++) {
+            const a = (k / 8) * Math.PI * 2, b = ((k + 1) / 8) * Math.PI * 2;
+            const pt = (r, ang, dd) => mp(cu + Math.cos(ang) * r, cv + Math.sin(ang) * r, dd);
+            mb.quad(pt(r0, a, d1), pt(r0, b, d1), pt(r1, b, d1), pt(r1, a, d1), mat, tg);
+            mb.quad(pt(r1, a, d0), pt(r1, b, d0), pt(r1, b, d1), pt(r1, a, d1), mat, tg);
+          }
+        };
+        disc(pu, pv, 0.001, 0.075, BZ[0], BZ[1], 'gold', tag + '·铺首');
+        disc(pu, pv, 0.082, 0.115, BZ[0] + 0.006, BZ[1], 'gold', tag + '·铺首');
+        if (fine) disc(pu, pv - 0.20, 0.10, 0.135, BZ[0], BZ[1] - 0.01, 'gold', tag + '·门环');
       }
-      // 抱框（门洞两侧立柱）与 门槛石
-      localBox(mb, mp, uc - w / 2 - 0.14, uc - w / 2, y0, y0 + h, -0.06, 0.12, 'woodDark', tag + '·抱框');
-      localBox(mb, mp, uc + w / 2, uc + w / 2 + 0.14, y0, y0 + h, -0.06, 0.12, 'woodDark', tag + '·抱框');
-      localBox(mb, mp, uc - w / 2 - 0.18, uc + w / 2 + 0.18, y0, y0 + h + 0.1, 0.12, 0.16, 'woodDark', tag + '·门楣');
-      localBox(mb, mp, uc - w / 2, uc + w / 2, y0 - 0.12, y0, -0.1, 0.1, 'stone', tag + '·门槛');
+      // 抱框（门洞两侧立柱）、门楣、门槛石、门枕石，各占自己的槽
+      const BR = W('bracket'), LI = W('lintel'), ZE = W('zhen');
+      localBox(mb, mp, uc - w / 2 - 0.14, uc - w / 2, y0, y0 + h, BR[0], BR[1], 'woodDark', tag + '·抱框');
+      localBox(mb, mp, uc + w / 2, uc + w / 2 + 0.14, y0, y0 + h, BR[0], BR[1], 'woodDark', tag + '·抱框');
+      // 门楣：只在门顶以上（原来 v 从 y0 一直到 y0+h+0.1，等于在门洞前立了一整块大板）
+      localBox(mb, mp, uc - w / 2 - 0.18, uc + w / 2 + 0.18, y0 + h + 0.02, y0 + h + 0.14, LI[0], LI[1], 'woodDark', tag + '·门楣');
+      localBox(mb, mp, uc - w / 2, uc + w / 2, y0 - 0.12, y0, TH[0], TH[1], 'stone', tag + '·门槛');
       if (fine) {
         // 门枕石：门槛两端各一块抱鼓石
         for (const s of [-1, 1]) {
-          localBox(mb, mp, uc + s * (w / 2 + 0.02), uc + s * (w / 2 + 0.3), y0 - 0.14, y0 + 0.16, -0.16, 0.18, 'marble', tag + '·门枕石');
+          localBox(mb, mp, uc + s * (w / 2 + 0.02), uc + s * (w / 2 + 0.3), y0 - 0.14, y0 + 0.16, ZE[0], ZE[1], 'marble', tag + '·门枕石');
         }
       }
       return;
     }
-    // 隔扇（默认）
-    // 相邻门扇的边梃/抹头原来是两个盒子面对面，交界处整条立面严格同面（12 处，转视角一条竖线在闪）。
-    // 现在每扇左右各外扩 2 mm，交界处互相咬进去，同面消失；门洞两侧顺带咬进墙 2 mm。
+    // 隔扇（默认）：边梃/抹头 leaf −76..−32、格心 lattice −40..−22、裙板 panel −74..−28、
+    // 裙板仔边 panelEdge −30..−12、板心金线 panelLine −16..−6、绦环板 taohuan −60..−44。
+    // 相邻门扇的边梃原来是两个盒子面对面，交界处整条立面严格同面（12 处竖线在闪）；
+    // 现在每扇左右各外扩 2 mm 互相咬进去，同面消失；门洞两侧顺带咬进墙 2 mm。
     const leaves = o.leaves || 4;
     const lw = w / leaves;
     const gn = 0.002;
+    const LA2 = W('leaf'), GL = W('glass'), LZ = W('lattice'), PN = W('panel');
+    const PE = W('panelEdge'), PLT = W('panelLine'), TZ = W('taohuan'), KZ = W('kazi'), ZB = W('zibian');
     for (let i = 0; i < leaves; i++) {
       const a = uc - w / 2 + i * lw, b = a + lw;
       const L = a - gn, R = b + gn;
       // 边框
-      localBox(mb, mp, L, R, y0, y0 + 0.12, -0.1, 0.06, 'wood', tag + '·隔扇');
-      localBox(mb, mp, L, R, y0 + h - 0.1, y0 + h, -0.1, 0.06, 'wood', tag + '·隔扇');
-      localBox(mb, mp, L, a + 0.07, y0, y0 + h, -0.1, 0.06, 'wood', tag + '·隔扇');
-      localBox(mb, mp, b - 0.07, R, y0, y0 + h, -0.1, 0.06, 'wood', tag + '·隔扇');
-      // 上部格心
+      localBox(mb, mp, L, R, y0, y0 + 0.12, LA2[0], LA2[1], 'wood', tag + '·隔扇');
+      localBox(mb, mp, L, R, y0 + h - 0.1, y0 + h, LA2[0], LA2[1], 'wood', tag + '·隔扇');
+      localBox(mb, mp, L, a + 0.07, y0, y0 + h, LA2[0], LA2[1], 'wood', tag + '·隔扇');
+      localBox(mb, mp, b - 0.07, R, y0, y0 + h, LA2[0], LA2[1], 'wood', tag + '·隔扇');
+      // 上部格心：纸退到洞口最深一档
       const gy0 = y0 + h * 0.42, gy1 = y0 + h - 0.12;
-      localBox(mb, mp, a + 0.07, b - 0.07, gy0, gy1, -0.06, -0.04, 'paper', tag + '·窗纸');
+      localBox(mb, mp, a + 0.07, b - 0.07, gy0, gy1, GL[0] + 0.004, GL[1] + 0.004, 'paper', tag + '·窗纸');   // 前移 4 mm：原与窗纸同处玻璃槽，两层纸同面
       const cw = (b - a) - 0.14, ch = gy1 - gy0;
-      const bars = latticeBars(cw, ch, o.pattern || 'step');
       const cu = (a + b) / 2, cv = (gy0 + gy1) / 2;
-      for (const bb of bars) {
-        localBox(mb, mp, cu + bb[0], cu + bb[1], cv + bb[2], cv + bb[3], 0.02, 0.07, 'wood', tag + '·格心');
+      for (const bb of latticeBars(cw, ch, o.pattern || 'step')) {
+        localBox(mb, mp, cu + bb[0], cu + bb[1], cv + bb[2], cv + bb[3], LZ[0], LZ[1], 'wood', tag + '·格心');
       }
       // 下部裙板
-      localBox(mb, mp, a + 0.068, b - 0.068, y0 + 0.12, gy0 - 0.06, -0.04, 0.04, 'wood', tag + '·裙板');
-      localBox(mb, mp, a + 0.12, b - 0.12, y0 + 0.3, y0 + h * 0.34, 0.036, 0.07, 'gold', tag + '·裙板线');
+      localBox(mb, mp, a + 0.068, b - 0.068, y0 + 0.12, gy0 - 0.06, PN[0], PN[1], 'wood', tag + '·裙板');
       if (GF.detail(3)) {
-        // 绦环板：格心与裙板之间的一道窄板，板上两枚卡子花
+        const gx0 = a + 0.07 - 0.002, gx1 = b - 0.07 + 0.002;
+        // 绦环板（格心与裙板之间的一道窄板，板上两枚卡子花）
         const ty = gy0 - 0.12;
-        localBox(mb, mp, a + 0.07, b - 0.07, ty, gy0 - 0.02, -0.03, 0.05, 'woodDark', tag + '·绦环板');
+        localBox(mb, mp, a + 0.07, b - 0.07, ty, gy0 - 0.02, TZ[0], TZ[1], 'woodDark', tag + '·绦环板');
         for (const cu2 of [0.3, 0.7]) {
           const uu = a + 0.07 + (b - a - 0.14) * cu2;
-          localBox(mb, mp, uu - 0.05, uu + 0.05, ty + 0.02, gy0 - 0.04, 0.05, 0.09, 'gold', tag + '·卡子花');
+          localBox(mb, mp, uu - 0.05, uu + 0.05, ty + 0.02, gy0 - 0.04, KZ[0], KZ[1], 'gold', tag + '·卡子花');
         }
-        // 裙板四周起线（仔边），板心才不像一块贴皮（外扩 2 mm 咬进边梃，避免与边梃立面同面）
-        const gx0 = a + 0.07 - 0.002, gx1 = b - 0.07 + 0.002;
-        localBox(mb, mp, gx0, gx1, y0 + 0.12, y0 + 0.16, -0.05, 0.05, 'woodDark', tag + '·裙板边');
-        localBox(mb, mp, gx0, gx1, gy0 - 0.1, gy0 - 0.06, -0.05, 0.05, 'woodDark', tag + '·裙板边');
-        localBox(mb, mp, gx0, gx0 + 0.05, y0 + 0.16, gy0 - 0.1, -0.05, 0.05, 'woodDark', tag + '·裙板边');
-        localBox(mb, mp, gx1 - 0.05, gx1, y0 + 0.16, gy0 - 0.1, -0.05, 0.05, 'woodDark', tag + '·裙板边');
+        // 裙板四周仔边（panelEdge 前脸 −12）与板心金线（panelLine 前脸 −6）：两道线各占一槽
+        localBox(mb, mp, gx0, gx1, y0 + 0.12, y0 + 0.16, PE[0], PE[1], 'woodDark', tag + '·裙板边');
+        localBox(mb, mp, gx0, gx1, gy0 - 0.1, gy0 - 0.06, PE[0], PE[1], 'woodDark', tag + '·裙板边');
+        localBox(mb, mp, gx0, gx0 + 0.05, y0 + 0.16, gy0 - 0.1, PE[0], PE[1], 'woodDark', tag + '·裙板边');
+        localBox(mb, mp, gx1 - 0.05, gx1, y0 + 0.16, gy0 - 0.1, PE[0], PE[1], 'woodDark', tag + '·裙板边');
+        localBox(mb, mp, a + 0.12, b - 0.12, y0 + 0.3, y0 + h * 0.34, PLT[0], PLT[1], 'gold', tag + '·裙板线');
         // 格心仔边（内框）
-        localBox(mb, mp, a + 0.09, b - 0.09, gy0, gy0 + 0.04, 0.06, 0.1, 'wood', tag + '·仔边');
-        localBox(mb, mp, a + 0.09, b - 0.09, gy1 - 0.04, gy1, 0.06, 0.1, 'wood', tag + '·仔边');
+        localBox(mb, mp, a + 0.09, b - 0.09, gy0, gy0 + 0.04, ZB[0], ZB[1], 'wood', tag + '·仔边');
+        localBox(mb, mp, a + 0.09, b - 0.09, gy1 - 0.04, gy1, ZB[0], ZB[1], 'wood', tag + '·仔边');
       }
     }
-    localBox(mb, mp, uc - w / 2, uc + w / 2, y0 - 0.12, y0, -0.1, 0.1, 'stone', tag + '·门槛');
+    localBox(mb, mp, uc - w / 2, uc + w / 2, y0 - 0.12, y0, TH[0], TH[1], 'stone', tag + '·门槛');
   }
 
   /* ------------------------------ 匾额 ------------------------------ */
@@ -301,17 +358,17 @@
     const mp = mapper(o.dir, o.at);
     const w = o.w || 1.8, h = o.h || 0.6, vc = o.vc;
     // 底板
-    localBox(mb, mp, o.uc - w / 2, o.uc + w / 2, vc - h / 2, vc + h / 2, -0.05, 0.1, 'dark', '匾额');
+    localBox(mb, mp, o.uc - w / 2, o.uc + w / 2, vc - h / 2, vc + h / 2, -0.02, 0.055, 'dark', '匾额');
     // 金框：每条边都咬进底板 4 mm，避开“框内边 == 板边”的整条同面
-    localBox(mb, mp, o.uc - w / 2 - 0.06, o.uc + w / 2 + 0.06, vc + h / 2 - 0.004, vc + h / 2 + 0.06, -0.05, 0.1, 'gold', '匾额·框');
-    localBox(mb, mp, o.uc - w / 2 - 0.06, o.uc + w / 2 + 0.06, vc - h / 2 - 0.06, vc - h / 2 + 0.004, -0.05, 0.1, 'gold', '匾额·框');
-    localBox(mb, mp, o.uc - w / 2 - 0.06, o.uc - w / 2 + 0.004, vc - h / 2, vc + h / 2, -0.05, 0.1, 'gold', '匾额·框');
-    localBox(mb, mp, o.uc + w / 2 - 0.004, o.uc + w / 2 + 0.06, vc - h / 2, vc + h / 2, -0.05, 0.1, 'gold', '匾额·框');
+    localBox(mb, mp, o.uc - w / 2 - 0.06, o.uc + w / 2 + 0.06, vc + h / 2 - 0.004, vc + h / 2 + 0.06, -0.02, 0.065, 'gold', '匾额·框');
+    localBox(mb, mp, o.uc - w / 2 - 0.06, o.uc + w / 2 + 0.06, vc - h / 2 - 0.06, vc - h / 2 + 0.004, -0.02, 0.065, 'gold', '匾额·框');
+    localBox(mb, mp, o.uc - w / 2 - 0.06, o.uc - w / 2 + 0.004, vc - h / 2, vc + h / 2, -0.02, 0.065, 'gold', '匾额·框');
+    localBox(mb, mp, o.uc + w / 2 - 0.004, o.uc + w / 2 + 0.06, vc - h / 2, vc + h / 2, -0.02, 0.065, 'gold', '匾额·框');
     // 字（以金色方块示意，1~4 个字）
     const n = o.chars || 3;
     for (let i = 0; i < n; i++) {
       const u = o.uc + (i - (n - 1) / 2) * (w / (n + 0.6));
-      localBox(mb, mp, u - 0.1, u + 0.1, vc - h * 0.26, vc + h * 0.26, 0.1, 0.14, 'gold', '匾额·字');
+      localBox(mb, mp, u - 0.1, u + 0.1, vc - h * 0.26, vc + h * 0.26, 0.065, 0.105, 'gold', '匾额·字');
     }
   }
 
@@ -329,7 +386,7 @@
     const st = style || 'mid';
     // 栌斗：斗欹（下收）+ 斗平（外张），两个棱台叠起来才有“斗”的轮廓
     mb.taper(x, z, 0.26 * s, 0.26 * s, 0.34 * s, 0.34 * s, y, y + 0.09 * s, dm, tag + '·斗欹');
-    mb.taper(x, z, 0.34 * s, 0.34 * s, 0.40 * s, 0.40 * s, y + 0.09 * s, y + 0.17 * s, dm, tag + '·斗平');
+    mb.taper(x, z, 0.32 * s, 0.32 * s, 0.40 * s, 0.40 * s, y + 0.088 * s, y + 0.17 * s, dm, tag + '·斗平');   // 斗平底 0.34→0.32：原来斗欹顶环与斗平底环同尺寸同高，每个斗都有一整圈方环同面（240 对）
     const yb = y + 0.17 * s;
     if (st === 'simple') {
       // 一斗三升：泥道拱（两端卷杀）+ 三个散斗（上大下小）
@@ -338,7 +395,7 @@
         mb.taper(x + sx * 0.40 * s, z, 0.16 * s, 0.22 * s, 0.06 * s, 0.16 * s, yb, yb + 0.125 * s, mc, tag + '·拱头');
       }
       for (const dx of [-0.42, 0, 0.42]) {
-        mb.taper(x + dx * s, z, 0.15 * s, 0.15 * s, 0.19 * s, 0.19 * s, yb + 0.13 * s, yb + 0.25 * s, dm, tag + '·散斗');
+        mb.taper(x + dx * s, z, 0.15 * s, 0.15 * s, 0.19 * s, 0.19 * s, yb + 0.126 * s, yb + 0.25 * s, dm, tag + '·散斗');
       }
       return;
     }
@@ -351,15 +408,15 @@
       const reach = (0.5 + k * 0.3) * s;          // 本跳出跳长度（含半在柱内的部分）
       const armD = 0.19 * s;
       // 华栱：沿出跳方向（+z）的臂，向外出挑
-      mb.boxC(x, z + reach / 2 - 0.08 * s, 0.2 * s, reach, yy, yy + 0.13 * s, mc, tag + '·华栱');
+      mb.boxC(x, z + reach / 2 - 0.08 * s, 0.2 * s, reach, yy - 0.004 * s, yy + 0.13 * s, mc, tag + '·华栱');   // 底面压进斗平顶 4 mm
       // 栱头卷杀：臂端收成小斜面
       mb.taper(x, z + reach - 0.08 * s, 0.2 * s, 0.1 * s, 0.16 * s, 0.06 * s, yy, yy + 0.13 * s, mc, tag + '·栱头');
       // 臂端散斗
-      mb.taper(x, z + reach - 0.14 * s, 0.15 * s, 0.15 * s, 0.19 * s, 0.19 * s, yy + 0.13 * s, yy + 0.25 * s, dm, tag + '·散斗');
+      mb.taper(x, z + reach - 0.14 * s, 0.15 * s, 0.15 * s, 0.19 * s, 0.19 * s, yy + 0.126 * s, yy + 0.25 * s, dm, tag + '·散斗');
       // 沿墙向的横栱（泥道栱／瓜子栱）：宽度随跳递增
-      mb.boxC(x, z + armD / 2, (0.72 + k * 0.22) * s, armD, yy + 0.02 * s, yy + 0.14 * s, mc, tag + '·横栱');
+      mb.boxC(x, z + armD / 2, (0.72 + k * 0.22) * s, armD + 0.008 * s, yy + 0.02 * s, yy + 0.14 * s, mc, tag + '·横栱');
       for (const sx of [-1, 1]) {
-        mb.taper(x + sx * (0.36 + k * 0.11) * s, z + armD / 2, 0.15 * s, 0.15 * s, 0.06 * s, 0.12 * s, yy + 0.02 * s, yy + 0.14 * s, mc, tag + '·栱头');
+        mb.taper(x + sx * (0.36 + k * 0.11) * s, z + armD / 2, 0.15 * s, 0.15 * s, 0.06 * s, 0.12 * s, yy + 0.026 * s, yy + 0.146 * s, mc, tag + '·栱头');   // 上下各错 6 mm，不再与横栱同一对水平面
       }
       // 昂：斜置长木，前端压在檐下，是唐辽斗栱最显眼的一道斜线
       // 昂：斜置长木，前端压在檐下，是唐辽斗栱最显眼的一道斜线。
@@ -368,21 +425,26 @@
     }
     // 令栱（最外一跳上的长横栱）+ 耍头
     const yTop0 = yb + steps * 0.19 * s;
-    mb.boxC(x, z + 0.42 * s, (1.1 + (steps - 2) * 0.2) * s, 0.2 * s, yTop0, yTop0 + 0.13 * s, mc, tag + '·令栱');
-    mb.taper(x, z + 0.5 * s, 0.38 * s, 0.24 * s, 0.26 * s, 0.14 * s, yTop0 + 0.13 * s, yTop0 + 0.25 * s, mc, tag + '·耍头');
+    // 相邻朵叠压错位：令栱/拱眼壁/柱头枋都是一整条连过去的 box，相邻两朵在 x 上
+    // 叠 0.4~0.5 m，上下面本来就同平面；按朵序给 0/1.5/3 mm 阶梯，接缝就有了错台，
+    // 不再整条同面（连条视觉仍连续，320 档看不到 1.5 mm 的台阶）。
+    const seq = ((Math.round(x * 100000) % 7919) * 7 % 3 + 3) % 3;   // 素数散列，避开等间距朵距的整数共振
+    const sy = seq * 0.0015;
+    mb.boxC(x, z + 0.42 * s, (1.1 + (steps - 2) * 0.2) * s, 0.206 * s, yTop0 + sy, yTop0 + 0.13 * s + sy, mc, tag + '·令栱');
+    mb.taper(x, z + 0.5 * s, 0.38 * s, 0.24 * s, 0.26 * s, 0.14 * s, yTop0 + 0.128 * s + sy, yTop0 + 0.25 * s + sy, mc, tag + '·耍头');
     if (GF.detail(2) && !o.gap) {
       // 拱眼壁 + 柱头枋：把铺作与檐口之间的空隙填实，檐下才有“层层叠出去”的深度，
       // 不然一排在像素上就是几个悬空的小柱子。
       const yTop = yTop0 + 0.25 * s;
       const gw = gapW > 0 ? Math.max(1.15 * s, gapW * 0.98) : 1.15 * s;
       const gd = gapW > 0 ? Math.max(1.45 * s, gapW * 0.98) : 1.45 * s;
-      mb.boxC(x, z + 0.06 * s, gw, 0.5 * s, yTop + 0.02, yTop + 0.26 * s, 'paintBlue', tag + '·拱眼壁');
-      mb.boxC(x, z + 0.1 * s, gd, 0.6 * s, yTop + 0.256 * s, yTop + 0.38 * s, mc, tag + '·柱头枋');
+      mb.boxC(x, z + 0.06 * s, gw, 0.506 * s, yTop + 0.02 + sy, yTop + 0.26 * s + sy, 'paintBlue', tag + '·拱眼壁');
+      mb.boxC(x, z + 0.1 * s, gd, 0.606 * s, yTop + 0.256 * s + sy, yTop + 0.38 * s + sy, mc, tag + '·柱头枋');
       if (GF.detail(3)) {
         // 枋上金线：细到 0.02 m，320 档才看得见
-        mb.boxC(x, z + 0.1 * s, gd, 0.62 * s, yTop + 0.32 * s, yTop + 0.335 * s, 'gold', tag + '·枋金线');
+        mb.boxC(x, z + 0.1 * s, gd, 0.626 * s, yTop + 0.32 * s + sy, yTop + 0.335 * s + sy, 'gold', tag + '·枋金线');
         // 慢拱（第二道横拱，比华拱长一截）
-        mb.boxC(x, z + 0.19 * s, (1.0 + (steps - 2) * 0.16) * s, 0.19 * s, yb + 0.06 * s, yb + 0.18 * s, mc, tag + '·慢拱');
+        mb.boxC(x, z + 0.19 * s, (1.0 + (steps - 2) * 0.16) * s, 0.196 * s, yb + 0.06 * s + sy, yb + 0.18 * s + sy, mc, tag + '·慢拱');
       }
     }
   }
@@ -426,10 +488,10 @@
     const x0 = o.x0, x1 = o.x1, z0 = o.z0, z1 = o.z1;
     const mat = o.mat || 'wood';
     const b = y0 - 0.005;   // 底面压进额枋 5 mm：原来普拍枋底 == 额枋顶，整圈同一张面在闪
-    mb.box(x0 - 0.03, x1 + 0.03, b, y1, z1 - w / 2, z1 + w / 2, mat, o.tag + '·前');
-    mb.box(x0 - 0.03, x1 + 0.03, b, y1, z0 - w / 2, z0 + w / 2, mat, o.tag + '·后');
-    mb.box(x1 - w / 2, x1 + w / 2, b, y1, z0 - 0.03, z1 + 0.03, mat, o.tag + '·右');
-    mb.box(x0 - w / 2, x0 + w / 2, b, y1, z0 - 0.03, z1 + 0.03, mat, o.tag + '·左');
+    mb.box(x0 - 0.03, x1 + 0.03, b, y1, z1 + 0.022 - w, z1 + 0.022, mat, o.tag + '·前');
+    mb.box(x0 - 0.03, x1 + 0.03, b, y1, z0 - 0.022, z0 - 0.022 + w, mat, o.tag + '·后');
+    mb.box(x1 + 0.022 - w, x1 + 0.022, b - 0.002, y1 - 0.002, z0 - 0.03, z1 + 0.03, mat, o.tag + '·右');
+    mb.box(x0 - 0.022, x0 - 0.022 + w, b - 0.002, y1 - 0.002, z0 - 0.03, z1 + 0.03, mat, o.tag + '·左');   // 左右两条顶面低 2 mm：转角处与前后条顶面不再齐平
   }
 
   /* --------------------------- 额枋（带彩画） --------------------------- */
@@ -453,9 +515,9 @@
   function queti(mb, dir, at, u, y, w, tag) {
     const mp = mapper(dir, at);
     // 阶梯状小托木
-    localBox(mb, mp, u, u + w, y, y + 0.14, 0.02, 0.22, 'wood', tag);
-    localBox(mb, mp, u + 0.06, u + w * 0.8, y - 0.14, y, 0.02, 0.18, 'wood', tag);
-    localBox(mb, mp, u + 0.12, u + w * 0.62, y - 0.26, y - 0.14, 0.02, 0.14, 'wood', tag);
+    localBox(mb, mp, u, u + w, y, y + 0.14, -0.020, 0.030, 'wood', tag);
+    localBox(mb, mp, u + 0.06, u + w * 0.8, y - 0.14, y, -0.016, 0.020, 'wood', tag);
+    localBox(mb, mp, u + 0.12, u + w * 0.62, y - 0.26, y - 0.14, -0.012, 0.010, 'wood', tag);   // 三级各占一槽：原来三级后脸同在 0.02 一张平面
   }
 
   /* ------------------------------ 台基 ------------------------------ */
@@ -633,7 +695,7 @@
         const swI = sw / 2 + i * 0.015;
         // 最下面一级 h-d 恰好为 0：原来照样吐出一个零高度的盒子（12 个退化三角面，
         // 顶面与底面精确重合、彼此共面，等于白送 12 面 + 一堆共面重叠）。画面上它本来就不占像素。
-        if (h - d > 0.002) mb.box(-swI, swI, 0, h - d, zz0, zz1, 'stone', tag + '·踏跺');
+        if (h - d > 0.002) mb.box(-swI, swI, -0.03, h - d, zz0, zz1, 'stone', tag + '·踏跺');   // 底沉到地平以下 3 cm：每级踏跺的底面原来与院墙/台基的底面同在 y=0 这张大平面上（0.89 m²）
         if (det >= 3) {
           // 踏跺也不能是一块整石：踏面按 0.4 m 分条石，立面每 0.4 m 一道暗缝。
           // 但都不做成盒子了 —— 原来 12 mm 厚的踏面石盒、8 mm 宽的缝盒各 12 面，
@@ -738,12 +800,15 @@
     }
 
     const det = GF.detailLevel();
+    const rr = 0.155 - ((Math.round((a[0] + a[1] + b[0] * 1.3 + b[1] * 1.7) * 997) % 3 + 3) % 3) * 0.002;   // 转角双柱去重：不同 run 的柱径差 0–4 mm
     for (let i = 0; i <= n; i++) {
       const t = i / n;
       const x = V.lerp(a[0], b[0], t), z = V.lerp(a[1], b[1], t);
       if (det >= 2) {
         // 望柱：柱身略收分，柱头做宝珠/莲瓣（lathe 一圈），不再是平顶方帽
-        mb.taper(x, z, 0.17, 0.17, 0.15, 0.15, y, y + 0.56, 'marble', tag + '·望柱');
+        // 底径 0.155（原 0.17）：柱距正好 0.34 时，原尺寸两根柱的侧立面严格贴着
+        // （栏杆·望柱×望柱 0.72 m² / 16 对），整排柱子中间那两条竖缝一直在闪
+        mb.taper(x, z, rr, rr, 0.149, 0.149, y, y + 0.56, 'marble', tag + '·望柱');
         mb.lathe(x, z, [[0.001, 0], [0.09, 0.005], [0.125, 0.05], [0.115, 0.1], [0.07, 0.15], [0.02, 0.18], [0.001, 0.2]], 8, 'marble', tag + '·柱头');
       } else {
         mb.boxC(x, z, 0.16, 0.16, y, y + 0.62, 'marble', tag + '·望柱');
@@ -844,12 +909,17 @@
       // 压顶压进墙顶 8 mm、脊再压进压顶 8 mm：这两处原来上下两层严格同面，
       // 整圈院墙 20 m² + 11 m² 站在墙顶同一条面上，斜视一转就闪花边。
       const lp = 0.008;
+      // 前后两条（isX）与左右两条在四个转角互相压着，两条压顶原来底/顶面完全同平面。
+      // 左右两条上下各收 1.2 mm，转角处不再共面（1.0 m² / 4 对）。
+      const jz = isX ? 0.0104 : 0.0092;   // 左右条底面上抬 1.2 mm
+      const hsh = ((Math.round((Math.min(ax, bx) * 1.3 + Math.min(az, bz) * 1.7) * 997) % 4 + 4) % 4);
+      const jt = (isX ? 0 : 0.0012) + hsh * 0.0006;        // 顶面下压 1.2 mm
       if (isX) {
-        mb.box(Math.min(ax, bx) - 0.06, Math.max(ax, bx) + 0.06, y - lp, y + 0.16, az - d / 2 - 0.08, az + d / 2 + 0.08, 'tile', tag + '·压顶');
-        mb.box(Math.min(ax, bx) - 0.06, Math.max(ax, bx) + 0.06, y + 0.16 - lp, y + rh, az - 0.08, az + 0.08, 'tileEnd', tag + '·脊');
+        mb.box(Math.min(ax, bx) - 0.06, Math.max(ax, bx) + 0.06, y - lp - hsh * 0.0008, y + 0.16 - jt, az - d / 2 - hsh * 0.0008, az + d / 2 + hsh * 0.0008, 'tile', tag + '·压顶');
+        mb.box(Math.min(ax, bx) - 0.06, Math.max(ax, bx) + 0.06, y + 0.16 - lp, y + rh - jt, az - 0.08, az + 0.08, 'tileEnd', tag + '·脊');
       } else {
-        mb.box(ax - d / 2 - 0.08, ax + d / 2 + 0.08, y - lp, y + 0.16, Math.min(az, bz) - 0.06, Math.max(az, bz) + 0.06, 'tile', tag + '·压顶');
-        mb.box(ax - 0.08, ax + 0.08, y + 0.16 - lp, y + rh, Math.min(az, bz) - 0.06, Math.max(az, bz) + 0.06, 'tileEnd', tag + '·脊');
+        mb.box(ax - d / 2 - 0.08, ax + d / 2 + 0.08, y - jz + 0.0012, y + 0.16 - jt, Math.min(az, bz) - 0.06, Math.max(az, bz) + 0.06, 'tile', tag + '·压顶');
+        mb.box(ax - 0.08, ax + 0.08, y + 0.16 - lp, y + rh - jt, Math.min(az, bz) - 0.06, Math.max(az, bz) + 0.06, 'tileEnd', tag + '·脊');
       }
       const mp = mapper(s.dir, s.at);
       // 月洞门石券：下部两侧立框（0 → 直段顶），上部沿半圆铺券石（圆心在直段顶）
@@ -900,8 +970,9 @@
   function lion(mb, x, z, s, tag) {
     s = s || 1;
     mb.boxC(x, z, 0.8 * s, 0.8 * s, 0, 0.18 * s, 'stoneDark', '石狮·座');
-    mb.boxC(x, z, 0.5 * s, 0.62 * s, 0.18 * s, 0.62 * s, 'stone', '石狮·身');
-    mb.boxC(x, z - 0.1 * s, 0.42 * s, 0.36 * s, 0.62 * s, 0.86 * s, 'stone', '石狮·头');
+    // 座 / 身 / 头 三件逐级压进去 2 cm：原来 身底=座顶、头底=身顶 严格齐平（0.96 + 0.49 m²）
+    mb.boxC(x, z, 0.5 * s, 0.62 * s, 0.16 * s, 0.62 * s, 'stone', '石狮·身');
+    mb.boxC(x, z - 0.1 * s, 0.42 * s, 0.36 * s, 0.60 * s, 0.86 * s, 'stone', '石狮·头');
     mb.boxC(x, z - 0.06 * s, 0.52 * s, 0.1 * s, 0.66 * s, 0.76 * s, 'stoneDark', '石狮·鬃');
     for (const sx of [-1, 1]) {
       mb.boxC(x + sx * 0.16 * s, z - 0.2 * s, 0.12 * s, 0.2 * s, 0.18 * s, 0.42 * s, 'stone', '石狮·腿');
@@ -951,21 +1022,52 @@
   }
   // 窄长叶片：根部收窄、中腰最宽、叶尖收成一点，两段折出下垂；正反两面各画一次。
   // 竹、柳共用——叶子要有叶子的形状，不能拿一根方木条代替。
+  /* 叶片母题（批 6）：一片窄叶固定成一组“单位坐标”顶点，实例化时只做一次旋转/缩放/平移。
+   *   u = 沿叶长（0 根 → 1 尖），v = 横向（±1 = 半宽），w = 下垂（0..1，乘 droop）
+   * 根边收 0.3、中腰最宽 1.0、叶尖收成一点，五点定一片叶。
+   * 原来每片叶正反各画一次（同一位置的六张三角面，两两共面 10143 对 / 44.7 m²）——
+   * 渲染器本来就按相机翻法线，单面即可双面可见，背面那一遍纯属自找 z-fighting。 */
+  const LEAF_MOTIF = [[0, -0.3, 0], [0, 0.3, 0], [0.5, -1, -0.3], [0.5, 1, -0.3], [1, 0, -1]];
+
+  // 叶形母题：同一种树只认一种母题，靠 tag 里的树名分流（原来七种树共用一片通用叶，
+  // 320 档下竹、柳、银杏、枫的叶子长得一模一样，冠形全靠枝干区分）。
+  const LEAF_MOTIFS = {
+    // 竹：窄长、近乎平行、叶尖略垂
+    '竹':   [[0, -0.25, 0], [0, 0.25, 0], [0.55, -0.42, -0.10], [0.55, 0.42, -0.10], [1, 0, -0.26]],
+    // 柳：细长、中段即下垂，叶尖垂到底
+    '柳':   [[0, -0.20, 0], [0, 0.20, 0], [0.50, -0.34, -0.55], [0.50, 0.34, -0.55], [1, 0, -1.05]],
+    // 银杏：扇面，基部窄、上部宽，叶端平缺
+    '银杏': [[0, -0.25, 0], [0, 0.25, 0], [0.68, -1.10, -0.12], [0.68, 1.10, -0.12], [1, 0, -0.16]],
+    // 枫：掌形，两肩外张成角，叶尖略翘
+    '枫':   [[0, -0.30, 0], [0, 0.30, 0], [0.48, -1.25, -0.20], [0.48, 1.25, -0.20], [1, 0, -0.42]],
+  };
+  function leafMotif(tag) {
+    if (!tag) return LEAF_MOTIF;
+    for (const k in LEAF_MOTIFS) if (tag.indexOf(k) >= 0) return LEAF_MOTIFS[k];
+    return LEAF_MOTIF;
+  }
   function leafBlade(mb, base, ang, len, hw, droop, mat, tag) {
-    const dx = Math.cos(ang), dz = Math.sin(ang);
-    const px = -dz, pz = dx;
-    const w0 = hw * 0.3;
-    const A = [base[0] - px * w0, base[1] + 0.02, base[2] - pz * w0];
-    const B = [base[0] + px * w0, base[1] + 0.02, base[2] + pz * w0];
-    const midX = base[0] + dx * len * 0.5, midZ = base[2] + dz * len * 0.5;
-    const midY = base[1] + 0.02 - droop * 0.3;
-    const C = [midX - px * hw, midY, midZ - pz * hw];
-    const D = [midX + px * hw, midY, midZ + pz * hw];
-    const tip = [base[0] + dx * len, base[1] + 0.02 - droop, base[2] + dz * len];
-    mb.quad(A, B, D, C, mat, tag);
-    mb.quad(C, D, B, A, mat, tag);
-    mb.tri(C, D, tip, mat, tag);
-    mb.tri(tip, D, C, mat, tag);
+    const dx = Math.cos(ang), dz = Math.sin(ang), px = -dz, pz = dx;
+    const P = leafMotif(tag).map((m) => [
+      base[0] + dx * m[0] * len + px * m[1] * hw,
+      base[1] + 0.02 + droop * m[2],
+      base[2] + dz * m[0] * len + pz * m[1] * hw
+    ]);
+    const A0 = P[0], A1 = P[1], C = P[2], D = P[3], T = P[4];
+    // 叶片厚度：320 档（det≥3）沿中肋抬 4~8 mm，把平面叶折成 V 形断面。
+    // 平片时代叶子斜对镜头就是一条零宽度的线；折过之后任何角度都有 3~5 px 的实体厚度。
+    const rib = GF.detail(3) ? Math.min(0.009, Math.max(0.006, hw * 0.12)) : 0;   // 叶厚下限提到 6 mm：320 档 6 mm ≈ 2 px，低于 2 px 的 V 折在像素上会被削平
+    if (rib > 0) {
+      const M0 = [(A0[0] + A1[0]) / 2, (A0[1] + A1[1]) / 2 + rib, (A0[2] + A1[2]) / 2];
+      const M1 = [(C[0] + D[0]) / 2, (C[1] + D[1]) / 2 + rib, (C[2] + D[2]) / 2];
+      mb.quad(A0, M0, M1, C, mat, tag);
+      mb.quad(M0, A1, D, M1, mat, tag);
+      mb.tri(C, M1, T, mat, tag);
+      mb.tri(M1, D, T, mat, tag);
+      return;
+    }
+    mb.quad(A0, A1, D, C, mat, tag);
+    mb.tri(C, D, T, mat, tag);
   }
 
   // 一根枝分两级：本级出枝，末级交给叶/花单元铺满。分杈数、分杈角、长度收率都带随机，
@@ -1032,7 +1134,7 @@
       const C = [c[0] + Math.cos(pa + 0.6) * pr * 1.3, c[1] + 0.02 * s, c[2] + Math.sin(pa + 0.6) * pr * 1.3];
       const D = [c[0] + Math.cos(pa + 1.2) * pr, c[1] + 0.014 * s, c[2] + Math.sin(pa + 1.2) * pr];
       mb.quad(A, B, C, D, mat, tag);
-      mb.quad(D, C, B, A, mat, tag);
+      // 背面不再重画：单面即可双面可见（见 leafBlade 注释）
     }
   }
 
@@ -1227,13 +1329,17 @@
           const outLen = (0.14 + r.next() * 0.16) * s;
           const dropLen = (1.0 + r.next() * 0.75) * s;
           const p1 = [start[0] + Math.cos(aa) * outLen, start[1] - 0.05 * s, start[2] + Math.sin(aa) * outLen];
-          const p2 = [p1[0] + Math.cos(aa) * 0.04 * s, p1[1] - dropLen, p1[2] + Math.sin(aa) * 0.04 * s];
+          const p2 = [p1[0] + Math.cos(aa) * 0.055 * s, p1[1] - dropLen * 0.55, p1[2] + Math.sin(aa) * 0.055 * s];
+          const p3 = [p2[0] - Math.cos(aa) * 0.022 * s, p1[1] - dropLen, p2[2] - Math.sin(aa) * 0.022 * s];
           GF.beamRound(mb, start, p1, 0.013 * s, 4, 'willow', '柳·条');
           GF.beamRound(mb, p1, p2, 0.011 * s, 4, 'willow', '柳·条');
-          const leaves = 9;
+          GF.beamRound(mb, p2, p3, 0.009 * s, 4, 'willow', '柳·条');
+          const leaves = 10;
           for (let m = 0; m < leaves; m++) {
             const t = (m + 1) / (leaves + 1);
-            const at = [p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t, p1[2] + (p2[2] - p1[2]) * t];
+            const seg = t < 0.55 ? [p1, p2] : [p2, p3];
+            const tt = t < 0.55 ? t / 0.55 : (t - 0.55) / 0.45;
+            const at = [seg[0][0] + (seg[1][0] - seg[0][0]) * tt, seg[0][1] + (seg[1][1] - seg[0][1]) * tt, seg[0][2] + (seg[1][2] - seg[0][2]) * tt];
             const la = aa + (m % 2 ? 1.05 : -1.05);
             leafBlade(mb, at, la, (0.09 + r.next() * 0.04) * s, 0.028 * s, 0.06 * s, 'willow', '柳·叶');
           }
@@ -1263,7 +1369,7 @@
           const C = [x + ca * r1 - pa * w1, yy1, z + sa * r1 - pb * w1];
           const D = [x + ca * r1 + pa * w1, yy1, z + sa * r1 + pb * w1];
           mb.quad(A, B, C, D, 'leaf', '芭蕉·叶');
-          mb.quad(D, C, B, A, 'leaf', '芭蕉·叶');
+          
         }
       }
       mb.cyl(x, z, 0.24 * s, 2.1 * s, 2.22 * s, 6, 'leaf', '芭蕉·心');
@@ -1394,12 +1500,54 @@
     }
     mb.prism(top, y, y + 0.07 * s, 'stone', tag + '·顶层');
   }
+  // 叠石母题：五种轮廓（墩石 / 石笋 / 卧石 / 错叠 / 扇石），按位置散列选型、相位随位置旋转。
+  // 原来小石只有 qianshiRock 一种断面，岸线上一排石头其实是同一块石头的随机半径版本；
+  // 母题表给的是固定轮廓 + 固定相位比，相邻两块既不同型、也不会凑出同一张侧面（不共面）。
+  const ROCK_MOTIF = [
+    { k: 8, st: [[0.62, 0.00, 0.34], [0.56, 0.33, 0.62], [0.40, 0.60, 0.72]] },                                  // 墩石：矮胖一块
+    { k: 7, st: [[0.34, 0.00, 0.26], [0.28, 0.24, 0.58], [0.20, 0.56, 0.90], [0.10, 0.88, 1.02]] },              // 石笋：细高起尖
+    { k: 9, st: [[0.68, 0.00, 0.22], [0.60, 0.18, 0.40]] },                                                      // 卧石：宽扁两层
+    { k: 7, st: [[0.50, 0.00, 0.30], [0.58, 0.26, 0.50], [0.34, 0.46, 0.74]] },                                  // 错叠：中段外凸
+    { k: 8, st: [[0.58, 0.00, 0.20], [0.50, 0.18, 0.44], [0.30, 0.40, 0.66], [0.14, 0.62, 0.78]] },              // 扇石：逐层收分
+  ];
+  function stoneMotif(mb, x, z, s, r, tag) {
+    const h = Math.abs(Math.round((x * 131.7 + z * 977.3) * 1000));
+    const mi = h % ROCK_MOTIF.length;
+    const m = ROCK_MOTIF[mi];
+    const ph = (h % 360) * 0.0174533;
+    const lean = (r.next() - 0.5) * 0.10 * s;
+    for (let i = 0; i < m.st.length; i++) {
+      const seg = m.st[i];
+      const pts = [];
+      for (let j = 0; j < m.k; j++) {
+        const a = ph + (j / m.k) * 6.2832 + i * 0.19;
+        const rad = 0.5 * s * seg[0] * (1 + 0.05 * Math.sin(3 * a + ph));
+        pts.push([x + Math.cos(a) * rad + lean * (seg[1] + seg[2]) * 0.5, z + Math.sin(a) * rad * 0.82]);
+      }
+      mb.prism(pts, seg[1] * s, seg[2] * s, 'stone', tag + '·石');
+    }
+    // 顶部压一块薄石：轮廓收口，顶面平，320 档不会看到空心的层口
+    const tp = [];
+    for (let j = 0; j < 7; j++) {
+      const a = ph + (j / 7) * 6.2832 + 0.35;
+      const rad = 0.5 * s * 0.30 * (0.92 + r.next() * 0.14);
+      tp.push([x + Math.cos(a) * rad, z + Math.sin(a) * rad * 0.82]);
+    }
+    const ty = m.st[m.st.length - 1][2] * s;
+    mb.prism(tp, ty - 0.004 * s, ty + 0.030 * s, 'stone', tag + '·顶石');
+  }
   function rock(mb, x, z, s, rng, tag, kind) {
     s = s || 1;
     const r = rng || new GF.RNG(7);
-    const kd = kind || (s >= 0.75 ? 'taihu' : 'qianshi');
+    const kd = kind || (s >= 0.75 ? 'taihu' : 'motif');
     if (kd === 'taihu') taihuRock(mb, x, z, s, r, tag || '假山');
-    else qianshiRock(mb, x, z, s, r, tag || '叠石');
+    else if (kd === 'qianshi') qianshiRock(mb, x, z, s, r, tag || '叠石');
+    else {
+      // 每五块石头里留一块给千层石，岸线才有层理与块石混搭，不会整排同一种
+      const h = Math.abs(Math.round((x * 131.7 + z * 977.3) * 1000));
+      if (h % 5 === 0) qianshiRock(mb, x, z, s, r, tag || '叠石');
+      else stoneMotif(mb, x, z, s, r, tag || '叠石');
+    }
   }
 
   /* ------------------------------ 水池 ------------------------------ */
@@ -1456,13 +1604,15 @@
         }
       }
     } else if (kind === 'bed') {
+      // 榻 / 垫 / 枕 三件各让 2 cm：垫与枕都坐进下一件 2 cm，
+      // 原来 垫底=榻面、枕底=垫顶 严格齐平（榻×榻·垫 2.94 m²、榻·垫×榻·枕 0.44 m² 的同面）
       mb.boxC(x, z, 1.3 * s, 0.9 * s, 0, 0.42 * s, 'wood', '榻');
-      mb.boxC(x, z, 1.2 * s, 0.82 * s, 0.42 * s, 0.52 * s, 'cloth', '榻·垫');
-      mb.boxC(x - 0.42 * s, z, 0.3 * s, 0.5 * s, 0.52 * s, 0.66 * s, 'cloth', '榻·枕');
+      mb.boxC(x, z, 1.2 * s, 0.82 * s, 0.40 * s, 0.52 * s, 'cloth', '榻·垫');
+      mb.boxC(x - 0.42 * s, z, 0.3 * s, 0.5 * s, 0.50 * s, 0.66 * s, 'cloth', '榻·枕');
       mb.boxC(x, z - 0.5 * s, 1.3 * s, 0.06 * s, 0, 1.0 * s, 'wood', '榻·屏');
     } else if (kind === 'altar') {
       mb.boxC(x, z, 1.6 * s, 0.6 * s, 0, 0.85 * s, 'wood', '香案');
-      mb.boxC(x, z, 1.7 * s, 0.7 * s, 0.85 * s, 0.95 * s, 'timber', '香案·面');
+      mb.boxC(x, z, 1.7 * s, 0.7 * s, 0.83 * s, 0.95 * s, 'timber', '香案·面');
       censer(mb, x, z, 0.6 * s, '香案·炉');
     } else if (kind === 'shrine') {
       mb.boxC(x, z, 0.9 * s, 0.6 * s, 0, 1.3 * s, 'timber', '佛龛');
@@ -1497,7 +1647,8 @@
     const uc = (u0 + u1) / 2;
     const tag = o.tag || '隔断';
 
-    localBox(mb, mp, u0, u1, v0, v0 + 0.14, -t, t, 'wood', tag + '·下槛');
+    // 下槛坐进地面 4 cm：原来 下槛底 = 地板顶 严格齐平（地板×下槛 0.48–0.51 m²）
+    localBox(mb, mp, u0, u1, v0 - 0.04, v0 + 0.14, -t, t, 'wood', tag + '·下槛');
     localBox(mb, mp, u0, u1, v1 - 0.18, v1, -t, t, 'wood', tag + '·上槛');
     localBox(mb, mp, u0, u0 + 0.12, v0, v1, -t, t, 'wood', tag + '·边柱');
     localBox(mb, mp, u1 - 0.12, u1, v0, v1, -t, t, 'wood', tag + '·边柱');
@@ -1530,10 +1681,11 @@
       if (b - a < 0.15) continue;
       const h = (v1 - 0.18) - (v0 + 0.14);
       const py0 = v0 + 0.14 + h * 0.42;
-      // 下裙板
-      localBox(mb, mp, a, b, v0 + 0.14, py0, -0.045, 0.045, o.lowerMat || 'wood', tag + '·裙板');
+      // 下裙板：底边压进下槛 4 cm、两侧咬进边柱/抱框 4 mm，
+      // 原来 裙板底=下槛顶、裙板边=边柱边 两处都严格齐平
+      localBox(mb, mp, a - 0.004, b + 0.004, v0 + 0.10, py0, -0.045, 0.045, o.lowerMat || 'wood', tag + '·裙板');
       // 上部格心（背衬窗纸）
-      localBox(mb, mp, a, b, py0 + 0.04, v1 - 0.18, -0.03, -0.01, 'paper', tag + '·纱');
+      localBox(mb, mp, a - 0.004, b + 0.004, py0 + 0.04, v1 - 0.18, -0.03, -0.01, 'paper', tag + '·纱');
       const w = b - a, hh = (v1 - 0.18) - (py0 + 0.04);
       const bars = latticeBars(w, hh, o.pattern || 'step');
       const cu = (a + b) / 2, cv = py0 + 0.04 + hh / 2;
@@ -1644,7 +1796,7 @@
     mb.boxC(x, z, 0.5 * s, 0.5 * s, 0, 0.12 * s, 'stoneDark', tag + '·座');
     mb.cyl(x, z, 0.12 * s, 0.12 * s, 0.72 * s, 8, 'stone', tag + '·柱');
     mb.boxC(x, z, 0.42 * s, 0.42 * s, 0.72 * s, 0.78 * s, 'stone', tag + '·托');
-    mb.boxC(x, z, 0.36 * s, 0.36 * s, 0.78 * s, 1.06 * s, 'lamp', tag + '·灯室');
+    mb.boxC(x, z, 0.36 * s, 0.36 * s, 0.778 * s, 1.06 * s, 'lamp', tag + '·灯室');
     for (const sx of [-1, 1]) {
       mb.boxC(x + sx * 0.2 * s, z, 0.03, 0.3 * s, 0.86 * s, 1.04 * s, 'stone', tag + '·窗棂');
     }
@@ -1667,8 +1819,8 @@
     s = s || 1;
     tag = tag || '碑';
     mb.boxC(x, z, 0.9 * s, 0.6 * s, 0, 0.22 * s, 'stoneDark', tag + '·座');
-    mb.boxC(x, z, 0.6 * s, 0.16 * s, 0.22 * s, 1.7 * s, 'stone', tag + '·碑身');
-    mb.boxC(x, z, 0.7 * s, 0.2 * s, 1.7 * s, 1.9 * s, 'stone', tag + '·碑首');
+    mb.boxC(x, z, 0.6 * s, 0.16 * s, 0.218 * s, 1.7 * s, 'stone', tag + '·碑身');
+    mb.boxC(x, z, 0.7 * s, 0.2 * s, 1.698 * s, 1.9 * s, 'stone', tag + '·碑首');
     for (let i = 0; i < 3; i++) {
       mb.boxC(x, z - 0.09 * s, 0.34 * s, 0.03, 0.7 * s + i * 0.28 * s, 0.78 * s + i * 0.28 * s, 'gold', tag + '·字');
     }
