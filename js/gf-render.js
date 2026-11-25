@@ -11,6 +11,7 @@
   const MAT_PAT = {
     brick: 'mason', brickB: 'mason', stone: 'mason', stoneB: 'mason',
     stoneDark: 'mason', slab: 'mason', marble: 'mason', marbleB: 'mason',
+    slabTop: 'paving', stoneBTop: 'paving',
     plaster: 'plaster',
     wood: 'wood', woodDark: 'wood', timber: 'wood', zhu: 'wood',
     water: 'water', waterB: 'water'
@@ -400,7 +401,8 @@
       }
       ppm = target;
       W = tw; H = th;
-      const ccx = (bx0 + bx1) * 0.5, ccy = (by0 + by1) * 0.5;
+      const ccx = Array.isArray(o.centerPx) ? o.centerPx[0] : (bx0 + bx1) * 0.5;
+      const ccy = Array.isArray(o.centerPx) ? o.centerPx[1] : (by0 + by1) * 0.5;
       ox = W * 0.5 - ccx * ppm;
       oy = H * 0.5 - ccy * ppm;
     }
@@ -459,7 +461,12 @@
      */
     let depthLo = null, lw = 0, lh = 0;
     const LO = 3;
-    if (preview && mesh.triCount > 20000) {
+    /* 单点遮挡剔除默认关闭：
+     * 它用“面重心落在一个 1/3 分辨率深度格”来判断整张小面被挡，
+     * 在轻量帧（几 px/m）下重心常落在相邻构件/路面上，会把整排窗、斗拱、
+     * 甚至整座小建筑的可见面误判为“被挡住”，转动视角时这些面就忽隐忽现。
+     * 画面正确性优先，只有显式传 o.occlusion=true 的旧调试路径才启用。 */
+    if (o.occlusion === true && preview && mesh.triCount > 20000) {
       lw = Math.max(1, Math.ceil(W / LO));
       lh = Math.max(1, Math.ceil(H / LO));
       depthLo = new Float32Array(lw * lh).fill(-1e9);
@@ -509,7 +516,12 @@
       const z0 = pz[i0], z1 = pz[i1], z2 = pz[i2];
 
       const area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
-      if (Math.abs(area) < 0.55) continue;
+      // 完整帧（导出 / 松手后的全精度预览）不按屏幕面积丢面：只要不是严格退化的
+      // 零面积三角形，全部走光栅；屏幕外由光栅器自然裁边，模型本身不做任何剔除。
+      // 只有拖动/俯角/透视的轻量交互帧（带 maxPixels）才跳过亚像素小面保帧率。
+      if (area === 0) continue;
+      const lightFrame = preview && o.maxPixels != null;
+      if (lightFrame && Math.abs(area) < 0.55) continue;
 
       // 背面剔除（可选，实验开关）：屏幕绕向为负的面一律背对相机，
       // 对实体构件是“内壁”，本来就被外面挡着；单面片若被剔会破洞，所以默认关，由页面按需打开。
@@ -560,6 +572,7 @@
       // 肌理开关按面判定一次（原来每像素都在判 patKind 与法线角度）
       const patKind = isGround ? null : MAT_PAT[matName];
       const patOn = !!patKind && (
+        (patKind === 'paving' && Math.abs(ny) > 0.6) ||
         (patKind === 'mason' && Math.abs(ny) < 0.62) ||
         (patKind === 'plaster' && Math.abs(ny) < 0.62) ||
         patKind === 'wood' ||
@@ -598,7 +611,17 @@
             const wy = w0 * wy0 + w1 * wy1 + w2 * wy2c;
             const wxp2 = w0 * wx0 + w1 * wx1 + w2 * wx2;
             const wzp2 = w0 * wz0 + w1 * wz1 + w2 * wz2;
-            if (patKind === 'mason') {
+            if (patKind === 'paving') {
+              // 铺装是水平面：按 x/z 两个方向切条石，不跟着墙面只切一个方向。
+              // 0.9m × 0.6m 的块在 44px/m 下是 40×26px，缝在像素上读得出来。
+              const gx = wxp2 / 0.9, gz = wzp2 / 0.6;
+              const fx = ((gx + (Math.floor(gz) % 2 ? 0.5 : 0)) % 1 + 1) % 1;
+              const fz = (gz % 1 + 1) % 1;
+              const dX = Math.min(fx, 1 - fx) * 0.9;
+              const dZ = Math.min(fz, 1 - fz) * 0.6;
+              if (dX < 0.03 || dZ < 0.03) { c0 *= 0.80; c1 *= 0.80; c2 *= 0.82; }
+              else if (dX < 0.06 || dZ < 0.06) { c0 *= 0.94; c1 *= 0.94; c2 *= 0.95; }
+            } else if (patKind === 'mason') {
               const course = 0.33, jointW = 0.032, runW = 0.66;
               const hor = Math.abs(nx) >= Math.abs(nz) ? wzp2 : wxp2;
               const row = Math.floor(wy / course);
@@ -793,10 +816,18 @@
     '  int pat = int(u_pat[mi]);',
     '  bool usePat = pat == 1 || pat == 2 ? abs(n.y) < 0.62',
     '              : pat == 3 ? true',
-    '              : pat == 4 ? abs(n.y) > 0.7 : false;',
+    '              : pat == 4 ? abs(n.y) > 0.7',
+    '              : pat == 5 ? abs(n.y) > 0.7 : false;',
     '  if (!gnd && usePat) {',
     '    float wx = v_wpos.x, wy = v_wpos.y, wz = v_wpos.z;',
-    '    if (pat == 1) {',
+    '    if (pat == 5) {',
+    '      float gx = wx / 0.9, gz = wz / 0.6;',
+    '      float fx = mod(gx + (mod(floor(gz), 2.0) > 0.5 ? 0.5 : 0.0), 1.0);',
+    '      float fz = mod(gz, 1.0);',
+    '      float dX = min(fx, 1.0 - fx) * 0.9, dZ = min(fz, 1.0 - fz) * 0.6;',
+    '      if (dX < 0.03 || dZ < 0.03) c *= vec3(0.80, 0.80, 0.82);',
+    '      else if (dX < 0.06 || dZ < 0.06) c *= vec3(0.94, 0.94, 0.95);',
+    '    } else if (pat == 1) {',
     '      float hor = abs(n.x) >= abs(n.z) ? wz : wx;',
     '      float course = 0.33, jointW = 0.032, runW = 0.66;',
     '      float row = floor(wy / course);',
@@ -1122,7 +1153,8 @@
         }
         ppm = target;
         W = tw; H = th;
-        const ccx = (bx0 + bx1) * 0.5, ccy = (by0 + by1) * 0.5;
+        const ccx = Array.isArray(o.centerPx) ? o.centerPx[0] : (bx0 + bx1) * 0.5;
+        const ccy = Array.isArray(o.centerPx) ? o.centerPx[1] : (by0 + by1) * 0.5;
         ox = W * 0.5 - ccx * ppm;
         oy = H * 0.5 - ccy * ppm;
       }
@@ -1155,7 +1187,7 @@
       matKeys.forEach((k, i) => (matIndex[k] = i));
       const ramps = new Float32Array(GM * 3 * 3);
       const pats = new Float32Array(GM);
-      const PAT_NUM = { mason: 1, plaster: 2, wood: 3, water: 4 };
+      const PAT_NUM = { mason: 1, plaster: 2, wood: 3, water: 4, paving: 5 };
       for (let i = 0; i < Math.min(GM, matKeys.length); i++) {
         const rp = pal.mats[matKeys[i]] || pal.mats[matKeys[0]];
         for (let j = 0; j < 3; j++) {

@@ -128,7 +128,7 @@
       this.quad(B, A, A2, B2, mat, tag); // 后 (-z)
       this.quad(A, D, D2, A2, mat, tag); // 左 (-x)
       this.quad(C, B, B2, C2, mat, tag); // 右 (+x)
-      this.quad(A2, B2, C2, D2, mat, tag); // 顶
+      this.quad(A2, D2, C2, B2, mat, tag); // 顶 (+y)
       this.quad(C, D, A, B, mat, tag); // 底
     }
     /** 以中心定位的长方体 */
@@ -147,8 +147,8 @@
         const j = (i + 1) % 4;
         this.quad(s[i], s[j], t[j], t[i], mat, tag);
       }
-      this.quad(s[3], s[2], s[1], s[0], mat, tag);
-      this.quad(t[0], t[1], t[2], t[3], mat, tag);
+      this.quad(s[0], s[1], s[2], s[3], mat, tag); // 底 (-y)
+      this.quad(t[3], t[2], t[1], t[0], mat, tag); // 顶 (+y)
     }
     /** 竖向圆柱（多边形棱柱） */
     cyl(cx, cz, r, y0, y1, n, mat, tag, rot) {
@@ -171,8 +171,8 @@
       const top = [cx, y1, cz], bot = [cx, y0, cz];
       for (let i = 0; i < n; i++) {
         const p = pts[i], q = pts[(i + 1) % n];
-        this.tri(top, [p[0], y1, p[1]], [q[0], y1, q[1]], mat, tag);
-        this.tri(bot, [q[0], y0, q[1]], [p[0], y0, p[1]], mat, tag);
+        this.tri(top, [q[0], y1, q[1]], [p[0], y1, p[1]], mat, tag); // 顶 (+y)
+        this.tri(bot, [p[0], y0, p[1]], [q[0], y0, q[1]], mat, tag); // 底 (-y)
       }
     }
     /** XZ 平面多边形竖直拉伸（用于八边形塔身、拱门轮廓、月洞等） */
@@ -380,6 +380,10 @@
     thatchB:  ['#7d602e', '#ab8742', '#cdad66'], // 茅草垄交替
     mat:      ['#7d6f42', '#9c8c56', '#bcab74']  // 草席
   };
+
+  // 铺装顶面：与条石同色，但走“顶面铺砖”肌理，不和立面砌缝混用
+  BASE_MATS.slabTop = BASE_MATS.slab;
+  BASE_MATS.stoneBTop = BASE_MATS.stoneB;
 
   // 修正一处笔误（保持表结构完整）
   BASE_MATS.marble = ['#8f8c83', '#b0ada3', '#d2cfc4'];

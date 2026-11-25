@@ -48,20 +48,25 @@
 
     // 大雄宝殿：全寺最高最大，三层台基 + 月台 + 庑殿
     const mz = -3.2, mW = 9.6, mD = 5.4, mBase = 0.75;
-    const terrTop = tieredTerrace(mb, mW, mD, mBase, 3, '大雄台基');
-    mb.box(-mW * 0.36, mW * 0.36, 0, mBase, mz + mD / 2, mz + mD / 2 + 1.8, 'stoneDark', '大雄月台');
-    mb.box(-mW * 0.36, mW * 0.36, mBase, mBase + 0.06, mz + mD / 2, mz + mD / 2 + 1.8, 'stone', '月台台面');
+    const msh = unitShift(r, '大雄宝殿');
+    const baseMesh = new GF.Mesh();
+    const terrTop = tieredTerrace(baseMesh, mW, mD, mBase, 3, '大雄台基');
+    baseMesh.box(-mW * 0.36, mW * 0.36, 0, mBase, mz + mD / 2, mz + mD / 2 + 1.8, 'stoneDark', '大雄月台');
+    baseMesh.box(-mW * 0.36, mW * 0.36, mBase, mBase + 0.06, mz + mD / 2, mz + mD / 2 + 1.8, 'stone', '月台台面');
     for (let i = 0; i < 3; i++) {
       const d = (i + 1) * mBase / 3;
-      mb.box(-1.6, 1.6, 0, mBase - d, mz + mD / 2 + 1.8 + i * 0.3, mz + mD / 2 + 1.8 + (i + 1) * 0.3, 'stone', '月台踏跺');
+      baseMesh.box(-1.6, 1.6, 0, mBase - d, mz + mD / 2 + 1.8 + i * 0.3, mz + mD / 2 + 1.8 + (i + 1) * 0.3, 'stone', '月台踏跺');
     }
+    P.railing(baseMesh, { a: [-mW * 0.36, mz + mD / 2 + 1.8], b: [-mW * 0.36, mz + mD / 2], y: mBase + 0.06, style: 'marble', tag: '月台栏' });
+    P.railing(baseMesh, { a: [mW * 0.36, mz + mD / 2 + 1.8], b: [mW * 0.36, mz + mD / 2], y: mBase + 0.06, style: 'marble', tag: '月台栏' });
+    // 台基跟殿身共用同一份 unitShift：拖动大雄宝殿时台基、月台、踏跺、栏杆一起走
+    baseMesh.translate(msh.dx, 0, msh.dz);
+    mb.merge(baseMesh);
     axisUnit(mb, r, {
       tag: '大雄宝殿', z: mz, y: terrTop - 0.12, statBaseH: mBase,
       r: { baseH: 0.12, dougong: true, dgScale: 0.9, dgStyle: 'full', railing: true },
       unit: { W: mW, D: mD, bays: 5, roofType: 'hip', eave: 1.2, veranda: true, partition: 1.2 }
     });
-    P.railing(mb, { a: [-mW * 0.36, mz + mD / 2 + 1.8], b: [-mW * 0.36, mz + mD / 2], y: mBase + 0.06, style: 'marble', tag: '月台栏' });
-    P.railing(mb, { a: [mW * 0.36, mz + mD / 2 + 1.8], b: [mW * 0.36, mz + mD / 2], y: mBase + 0.06, style: 'marble', tag: '月台栏' });
     P.censer(mb, 0, mz + mD / 2 + 2.4, 1.3, '香炉');
     for (const sx of [-1, 1]) P.lion(mb, sx * (mW / 2 + 0.9), mz + mD / 2 + 1.6, 1.0, '石狮');
 
@@ -128,9 +133,13 @@
 
     // 三清殿（主殿，月台，歇山）
     const mz = -1.8, mW = 8.4, mD = 5.0, mBase = 0.7;
-    const terrTop = tieredTerrace(mb, mW, mD, mBase, 2, '三清台基');
-    mb.box(-mW * 0.34, mW * 0.34, 0, mBase, mz + mD / 2, mz + mD / 2 + 1.6, 'stoneDark', '三清月台');
-    mb.box(-mW * 0.34, mW * 0.34, mBase, mBase + 0.06, mz + mD / 2, mz + mD / 2 + 1.6, 'stone', '月台台面');
+    const msh = unitShift(r, '三清殿');
+    const baseMesh = new GF.Mesh();
+    const terrTop = tieredTerrace(baseMesh, mW, mD, mBase, 2, '三清台基');
+    baseMesh.box(-mW * 0.34, mW * 0.34, 0, mBase, mz + mD / 2, mz + mD / 2 + 1.6, 'stoneDark', '三清月台');
+    baseMesh.box(-mW * 0.34, mW * 0.34, mBase, mBase + 0.06, mz + mD / 2, mz + mD / 2 + 1.6, 'stone', '月台台面');
+    baseMesh.translate(msh.dx, 0, msh.dz);
+    mb.merge(baseMesh);
     axisUnit(mb, r, {
       tag: '三清殿', z: mz, y: terrTop - 0.12, statBaseH: mBase,
       r: { baseH: 0.12, dougong: true, dgScale: 0.85, dgStyle: 'full', railing: true },

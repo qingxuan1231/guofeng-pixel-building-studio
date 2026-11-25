@@ -45,6 +45,7 @@
   function draw() {
     const f = state.frame;
     if (!f) return;
+    lockViewCenter(f);
     // GPU 开着但这一帧其实是 CPU 出的（FBO 建不起来、超出纹理上限等）：
     // 连续两次就认定这台机器用不了 GPU，自动切回 CPU 并在状态栏说清楚，别让按钮一直骗人。
     if (state.gpu && f.gpu !== true) {

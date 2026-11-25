@@ -34,7 +34,9 @@ node cli/render.js --preset siheyuan --dirs 4 --out out/court_sheet.png
 node cli/render.js --all --outdir out/presets
 ```
 
-`--recipe 配方.json` 可加载自己保存的配方；`--ppm 24` 改像素密度，`--style ink` 强制手绘风格。
+`--recipe 配方.json` 可加载自己保存的配方；`--ppm 24` 改像素密度；`--style ink` 强制手绘风格。
+
+配方的结构回归：`node cli/preset-audit.js`，按台基/屋身/屋面/铺作/城制逐套核对开间、进深、逐层数组、城墙剖面与门洞尺度，有 error 时退出码为 1。
 
 画布操作：右键按住拖动转视角（左右拖调方位、上下拖调俯角）；Shift+右键拖动平移；按住方向键（或 `<` / `>`）左右/上下平移；滚轮以光标为锚点缩放；双击复位。左键只用于点选 / 拖动陈设与建筑。
 

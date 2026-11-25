@@ -398,6 +398,8 @@
   function base(mb, r, o) {
     const W = o.W, D = o.D, h = r.baseH;
     const x0 = -W / 2 - 0.5, x1 = W / 2 + 0.5, z0 = -D / 2 - 0.5, z1 = D / 2 + 0.5;
+    // 墙顶铺舍 / 敌楼 / 角楼：直接坐在城墙压顶上，不再生成独立台明，避免白台悬空。
+    if (r.baseOn === false) return { x0, x1, z0, z1, h: 0 };
     // 水上桩基（临水楼台）：台基四周密排、内部隔一搭一，桩身伸进水里
     if (r.stilts) {
       const pad = 0.75;

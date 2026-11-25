@@ -102,7 +102,7 @@
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     const old = state.zoom;
-    state.zoom = GF.clamp(state.zoom * (e.deltaY > 0 ? 0.9 : 1.1), 0.5, 8);
+    state.zoom = GF.clamp(state.zoom * (e.deltaY > 0 ? 0.9 : 1.1), 0.08, 8);
     const rect = canvas.getBoundingClientRect();
     const dx = e.clientX - (rect.left + rect.width / 2);
     const dy = e.clientY - (rect.top + rect.height / 2);
@@ -112,5 +112,5 @@
     layout();
   }, { passive: false });
   canvas.addEventListener('dblclick', () => {
-    state.panX = state.panY = 0; state.zoom = 2; layout();
+    state.panX = state.panY = 0; state.zoom = fitZoom(); layout();
   });

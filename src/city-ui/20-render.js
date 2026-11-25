@@ -18,15 +18,20 @@
     state.orbitK = 1;
     const f = state.frame;
     state.viewAspect = f.w / f.h;
+    // 完整帧的原生尺寸记下来：转向时轻量帧像素少，但画布 CSS 尺寸仍锁在这个尺寸，
+    // 不会因为轻量帧变小而在舞台上突然缩成一小块。
+    state.viewW = f.w; state.viewH = f.h;
     const cap = 1050000;
     if (f.w * f.h <= cap) {
-      // 完整预览本身就在轻量帧预算内：直接复用同尺寸 FBO，拖动时零重分配
       state.lightFrame = [f.w, f.h];
+      state.lightPPM = state.city.render.ppm;
     } else {
       const px = Math.min(previewBudget(), cap);
       const fw = Math.max(4, Math.floor(Math.sqrt(px * state.viewAspect) / 4) * 4);
       const fh = Math.max(4, Math.floor(px / fw / 4) * 4);
       state.lightFrame = [fw, fh];
+      // 轻量帧和完整帧同一画幅比例；按面积比换算真实像素密度，状态栏不再把轻量帧谎报成 44px/m
+      state.lightPPM = state.city.render.ppm * Math.min(1, Math.sqrt((fw * fh) / (f.w * f.h)));
     }
   }
 
@@ -55,9 +60,9 @@
     };
     if (preview) {
       o.preview = true;
-      o.maxPixels = previewBudget();
-      o.viewport = [wrap.clientWidth || 1200, wrap.clientHeight || 800];
-      o.fitExtent = fitExtentForPreview();
+      // 拖动/滑杆过程中的轻量帧才降像素；松手后的完整预览严格按用户 ppm 出图，
+      // 不再把 44px/m 偷偷降到 5px/m。画布用 1:1 像素显示，靠平移看大图。
+      if (extra && extra.light) o.maxPixels = previewBudget();
     }
     if (extra) Object.assign(o, extra);
     return o;
@@ -90,18 +95,27 @@
     if (!skipLayout) layout();
   }
 
+  function fitZoom() {
+    const w = state.viewW || (state.frame && state.frame.w) || wrap.clientWidth || 1;
+    const h = state.viewH || (state.frame && state.frame.h) || wrap.clientHeight || 1;
+    const vw = wrap.clientWidth || 1200, vh = wrap.clientHeight || 800;
+    return GF.clamp(Math.min(vw / w, vh / h) * 0.96, 0.08, 8);
+  }
+
   function layout() {
     const f = state.frame;
     if (!f) return;
-    // 视口填充：渲染帧直接按舞台尺寸出图，画布固定铺满舞台，zoom 只做整体放大
-    const scale = state.zoom / 2;
+    // 像素视图：画布按完整帧的原生像素显示，1 帧像素 = 1 CSS 像素，滚轮只放大 CSS，
+    // 不再把高密度帧压回舞台宽度，导致 44px/m 看起来像 5px/m。
+    const scale = state.zoom;
+    const bw = state.viewW || f.w, bh = state.viewH || f.h;
     // 平移限制：即使整城刚好铺满舞台，也留出可以左右/上下挪动的余量
-    const overX = Math.max(wrap.clientWidth * 0.3, (f.w * scale - wrap.clientWidth) / 2 + wrap.clientWidth * 0.18);
-    const overY = Math.max(wrap.clientHeight * 0.3, (f.h * scale - wrap.clientHeight) / 2 + wrap.clientHeight * 0.18);
+    const overX = Math.max(wrap.clientWidth * 0.3, (bw * scale - wrap.clientWidth) / 2 + wrap.clientWidth * 0.18);
+    const overY = Math.max(wrap.clientHeight * 0.3, (bh * scale - wrap.clientHeight) / 2 + wrap.clientHeight * 0.18);
     state.panX = GF.clamp(state.panX, -overX, overX);
     state.panY = GF.clamp(state.panY, -overY, overY);
-    canvas.style.width = (wrap.clientWidth * scale) + 'px';
-    canvas.style.height = (wrap.clientHeight * scale) + 'px';
+    canvas.style.width = (bw * scale) + 'px';
+    canvas.style.height = (bh * scale) + 'px';
     canvas.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
   }
 
@@ -118,18 +132,31 @@
       o = renderOpts(null, null, true, {
         orbit: true,
         outline: false,
-        style: 'pixel'
+        style: 'pixel',
+        light: true,
+        // 转向/俯角用固定画幅和固定像素密度：画面比例不随角度跳动，
+        // 也不会因为包围盒一秒一变而出现整块取景被裁掉/拉伸。
+        orbitFrame: state.lightFrame,
+        orbitPPM: state.lightPPM
       });
     } else {
       o = renderOpts(null, null, true);
     }
     state.frame = GF.render(state.mesh, o);
     if (!orbit) rememberViewFrame();
+    const ppmNow = state.city.render.ppm;
+    if (!orbit && state.previewPpm != null && state.previewPpm !== ppmNow) {
+      // 用户改密度就是要看这个密度本身，直接切到 1:1 原生像素；初始载入仍按适应全城。
+      state.panX = state.panY = 0;
+      state.zoom = 1;
+    }
+    state.previewPpm = ppmNow;
     draw(false);
     if (!orbit) {
       $('#stat').textContent = `预览 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · ${Math.round(performance.now() - t0)}ms`;
     } else {
-      $('#stat').textContent = `${tag || '旋转'}预览 ${state.frame.w}×${state.frame.h}px · 轻量帧 ${Math.round(performance.now() - t0)}ms`;
+      const pm = state.frame.map && state.frame.map.ppm ? state.frame.map.ppm : 0;
+      $('#stat').textContent = `${tag || '旋转'}预览 ${state.frame.w}×${state.frame.h}px · 实际 ${pm.toFixed(1)}px/m · 松手后按 ${state.city.render.ppm}px/m 出全图`;
     }
   }
 
@@ -263,8 +290,9 @@
       state.frame = GF.render(state.mesh, renderOpts(null, null, true));
       state.pendingRender = false;
       rememberViewFrame();
+      state.previewPpm = state.city.render.ppm;
       draw();
-      if (!keepView) { state.panX = state.panY = 0; state.zoom = 2; layout(); }
+      if (!keepView) { state.panX = state.panY = 0; state.zoom = fitZoom(); layout(); }
       $('#stat').textContent = `出图 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · ${Math.round(performance.now() - t0)}ms`;
       const info = state.mesh.cityInfo || {};
       const gateN = info.gates ? Object.values(info.gates).reduce((a, b) => a + b, 0) : 0;

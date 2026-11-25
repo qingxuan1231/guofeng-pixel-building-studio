@@ -2,9 +2,10 @@
   /* ------------------------------ 总装 ------------------------------ */
   GF.build = function (recipe, opts) {
     const r = GF.normalize ? GF.normalize(recipe) : recipe;
-    // 出图密度决定细部档位：320 px/m 会启用瓦当逐垄、门钉九路、斗拱铺作等
-    const ppm = (opts && opts.ppm) || (r.render && r.render.ppm) || 40;
-    GF.setDetail(GF.detailFor(ppm));
+    // 细部档位按真实调用参数决定：城池显式传 detail:3（保留完整高面数），
+    // 古建页不传时回到按出图密度推导的原始档位，不再对所有页面强行拉满。
+    if (opts && opts.detail != null) GF.setDetail(opts.detail);
+    else GF.setDetail(GF.detailFor((opts && opts.ppm) || 0));
     const mb = new GF.Mesh();
     // 屋面通用参数（剪边 / 悬鱼 / 风铎 / 山花材质）统一透传，任何屋顶都会生效
     GF.roofs.setDefaults({

@@ -7,7 +7,7 @@
   const state = {
     city: GF.getCityPreset('standard'),
     mesh: null, frame: null,
-    zoom: 2, panX: 0, panY: 0,
+    zoom: 1, panX: 0, panY: 0,
     busy: false, pending: false, preset: 'standard',
     pendingRender: false
   };

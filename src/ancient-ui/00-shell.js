@@ -12,6 +12,7 @@
     panY: 0,
     view: 'all',
     refit: true,
+    viewCenter: null,
     playing: false,
     moves: [],
     moveMode: false,

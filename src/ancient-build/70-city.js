@@ -90,13 +90,24 @@
       sub.box(-Wg / 2 + 0.1, Wg / 2 - 0.1, y, y + 0.045, -face, -face + 0.08, 'brickB', '城门·砖缝');
     }
     const nx = Math.max(8, Math.round(Wg / 0.9));
+    const guijiao = r.gateArch === 'guijiao';
+    const gateTopAt = (d, x) => {
+      if (guijiao) {
+        // 圭角门：平顶 + 两上角 45° 抹角，不画半圆券
+        const q = Math.min(d.w * 0.18, d.h * 0.22);
+        const edge = Math.abs(x - d.u);
+        const cut = Math.max(0, edge - (d.w / 2 - q)) / Math.max(0.001, q);
+        return d.h - Math.min(1, cut) * q;
+      }
+      const t = Math.min(1, Math.abs(x - d.u) / (d.w / 2));
+      return d.h - Math.sqrt(Math.max(0, 1 - t * t)) * (d.w / 2) * 0.9;
+    };
     for (let i = 0; i < nx; i++) {
       const x0 = -Wg / 2 + (Wg * i) / nx, x1 = -Wg / 2 + (Wg * (i + 1)) / nx;
       const cxm = (x0 + x1) / 2;
       let hTop = H;
       for (const d of doors) {
-        const t = Math.min(1, Math.abs(cxm - d.u) / (d.w / 2));
-        const hh = d.h - Math.sqrt(Math.max(0, 1 - t * t)) * (d.w / 2) * 0.9;
+        const hh = gateTopAt(d, cxm);
         if (hh < hTop) hTop = hh;
       }
       if (hTop > 0.3) sub.box(x0, x1, hTop, H, -face, face, 'brick', '城门·城台');
@@ -108,22 +119,35 @@
       for (const sz of [-1, 1]) {
         sub.box(d.u - d.w / 2 + 0.04, d.u + d.w / 2 - 0.04, 0.05, d.h * 0.86, sz * (face - 0.14), sz * (face + 0.02), 'dark', '门洞');
       }
-      const archR = d.w / 2 + 0.12, archCy = d.h * 0.4;
-      for (const sz of [-1, 1]) {
-        const zf = sz * (face + 0.05);
-        for (let k = 0; k <= 9; k++) {
-          const a = Math.PI * (0.06 + 0.88 * k / 9);
-          const px = d.u + Math.cos(a) * archR, py = archCy + Math.sin(a) * archR * 0.78;
-          sub.boxC(px, zf + sz * 0.17, 0.3, 0.16, py - 0.18, py + 0.18, 'stoneB', '券脸石');
+      if (guijiao) {
+        // 圭角门：平过梁 + 两侧角石，不设券脸石
+        const q = Math.min(d.w * 0.18, d.h * 0.22);
+        for (const sz of [-1, 1]) {
+          const zf = sz * (face + 0.05);
+          sub.box(d.u - d.w / 2 - 0.28, d.u + d.w / 2 + 0.28, d.h - 0.24, d.h, zf - 0.12, zf + 0.12, 'stoneB', '圭角石·过梁');
+          for (const sx of [-1, 1]) {
+            sub.boxC(d.u + sx * (d.w / 2 - q / 2), zf + sz * 0.15, q * 0.8, 0.22, d.h - q, d.h, 'stoneB', '圭角石·角');
+          }
         }
-        sub.boxC(d.u - archR, zf + sz * 0.17, 0.36, 0.18, archCy - 0.6, archCy - 0.1, 'stone', '券脚');
-        sub.boxC(d.u + archR, zf + sz * 0.17, 0.36, 0.18, archCy - 0.6, archCy - 0.1, 'stone', '券脚');
+      } else {
+        const archR = d.w / 2 + 0.12, archCy = d.h * 0.4;
+        for (const sz of [-1, 1]) {
+          const zf = sz * (face + 0.05);
+          for (let k = 0; k <= 9; k++) {
+            const a = Math.PI * (0.06 + 0.88 * k / 9);
+            const px = d.u + Math.cos(a) * archR, py = archCy + Math.sin(a) * archR * 0.78;
+            sub.boxC(px, zf + sz * 0.17, 0.3, 0.16, py - 0.18, py + 0.18, 'stoneB', '券脸石');
+          }
+          sub.boxC(d.u - archR, zf + sz * 0.17, 0.36, 0.18, archCy - 0.6, archCy - 0.1, 'stone', '券脚');
+          sub.boxC(d.u + archR, zf + sz * 0.17, 0.36, 0.18, archCy - 0.6, archCy - 0.1, 'stone', '券脚');
+        }
       }
+      const leafTop = guijiao ? d.h * 0.9 : d.h * 0.76;
       for (const sz of [-1, 1]) {
         const z = sz * (face - 0.18);
-        sub.box(d.u - d.w / 2 + 0.06, d.u - 0.03, 0.1, d.h * 0.76, z, z + sz * 0.1, 'zhu', '城门');
-        sub.box(d.u + 0.03, d.u + d.w / 2 - 0.06, 0.1, d.h * 0.76, z, z + sz * 0.1, 'zhu', '城门');
-        sub.box(d.u - 0.03, d.u + 0.03, 0.1, d.h * 0.76, z, z + sz * 0.12, 'woodDark', '门缝');
+        sub.box(d.u - d.w / 2 + 0.06, d.u - 0.03, 0.1, leafTop, z, z + sz * 0.1, 'zhu', '城门');
+        sub.box(d.u + 0.03, d.u + d.w / 2 - 0.06, 0.1, leafTop, z, z + sz * 0.1, 'zhu', '城门');
+        sub.box(d.u - 0.03, d.u + 0.03, 0.1, leafTop, z, z + sz * 0.12, 'woodDark', '门缝');
       }
     }
   }
@@ -250,7 +274,75 @@
     return { x: gx, z: gz, axis, ox, oz, w: gw };
   }
 
-  // 街边摊：细案台 + 四腿 + 蓝白条纹布棚 + 三色货；轴 x 时摊面沿 x 展开
+  // 街市地块：不设坊墙，四边临街铺面 + 低模坡顶 + 招牌/雨棚；中间留小院。
+  // 每间铺面只做“铺面体 + 坡顶 + 一块招牌”，保证 320px/m 下也不至于爆面。
+  function cityShopRow(mb, r, rng, axis, fixed, u0, u1, faceSign) {
+    const span = u1 - u0;
+    if (span < 3.0) return 0;
+    const n = Math.max(2, Math.round(span / 3.2));
+    const step = span / n;
+    let shops = 0;
+    for (let i = 0; i < n; i++) {
+      const uc = u0 + step * (i + 0.5);
+      const w = Math.max(2.2, step * 0.88);
+      const d = Math.max(2.2, Math.min(3.8, Math.min(r.streetW * 1.6, 3.4)));
+      const h = 2.15 + rng.next() * 0.55;
+      let x0, x1, z0, z1;
+      if (axis === 'x') {
+        x0 = uc - w / 2; x1 = uc + w / 2;
+        if (faceSign > 0) { z0 = fixed - d; z1 = fixed; } else { z0 = fixed; z1 = fixed + d; }
+      } else {
+        z0 = uc - w / 2; z1 = uc + w / 2;
+        if (faceSign > 0) { x0 = fixed - d; x1 = fixed; } else { x0 = fixed; x1 = fixed + d; }
+      }
+      const wx = x1 - x0, wz = z1 - z0;
+      mb.box(x0, x1, 0, h, z0, z1, rng.next() < 0.55 ? 'plaster' : 'wood', '市肆·铺面');
+      mb.box(x0, x1, h, h + 0.12, z0, z1, 'woodDark', '市肆·檐枋');
+      // 坡顶：用低模四坡，沿街方向转 90°
+      const roof = new GF.Mesh();
+      const rw = axis === 'x' ? wx + 0.5 : wz + 0.5;
+      const rd = axis === 'x' ? wz + 0.5 : wx + 0.5;
+      cityCheapRoof(roof, 0, 0, rw, rd, h + 0.12, 0.5, r.tile, r.tileB, '市肆·屋顶');
+      if (axis === 'z') roof.rotateY(90, 0, 0);
+      roof.translate((x0 + x1) / 2, 0, (z0 + z1) / 2);
+      mb.merge(roof);
+      // 临街面：一块暗色门板 + 布雨棚 + 竖招牌
+      const fx = axis === 'x' ? (x0 + x1) / 2 : (faceSign > 0 ? x1 + 0.04 : x0 - 0.04);
+      const fz = axis === 'x' ? (faceSign > 0 ? z1 + 0.04 : z0 - 0.04) : (z0 + z1) / 2;
+      if (axis === 'x') {
+        mb.boxC(fx, fz, Math.min(1.0, w * 0.42), 0.08, 0.1, h * 0.58, 'dark', '市肆·门板');
+        mb.box(fx - w / 2, fx + w / 2, h * 0.72, h * 0.78, fz - 0.22, fz + 0.22, 'cloth', '市肆·雨棚');
+        mb.boxC(fx, fz + faceSign * 0.22, w * 0.46, 0.08, h * 0.9, h + 0.32, 'woodDark', '市肆·招牌');
+      } else {
+        mb.boxC(fx, fz, 0.08, Math.min(1.0, w * 0.42), 0.1, h * 0.58, 'dark', '市肆·门板');
+        mb.box(fx - 0.22, fx + 0.22, h * 0.72, h * 0.78, fz - w / 2, fz + w / 2, 'cloth', '市肆·雨棚');
+        mb.boxC(fx + faceSign * 0.22, fz, 0.08, w * 0.46, h * 0.9, h + 0.32, 'woodDark', '市肆·招牌');
+      }
+      shops++;
+    }
+    return shops;
+  }
+
+  function cityMarketBlock(mb, r, cx, cz, bw, bd) {
+    const rng = new GF.RNG((((Number(r.seed) || 1) ^ Math.round((cx + 500) * 131 + (cz + 500) * 17)) >>> 0));
+    bw *= 0.9 + rng.next() * 0.08;
+    bd *= 0.9 + rng.next() * 0.08;
+    const x0 = cx - bw / 2, x1 = cx + bw / 2, z0 = cz - bd / 2, z1 = cz + bd / 2;
+    const d = Math.max(2.2, Math.min(3.8, Math.min(bw, bd) * 0.18));
+    let shops = 0;
+    shops += cityShopRow(mb, r, rng, 'x', z0, x0, x1, -1);
+    shops += cityShopRow(mb, r, rng, 'x', z1, x0, x1, 1);
+    shops += cityShopRow(mb, r, rng, 'z', x0, z0 + d, z1 - d, -1);
+    shops += cityShopRow(mb, r, rng, 'z', x1, z0 + d, z1 - d, 1);
+    // 内院：一小间仓房 / 住屋，避免整块只剩一圈店面
+    const iw = Math.min(bw * 0.28, 4.2), id = Math.min(bd * 0.28, 3.6);
+    if (iw > 2.2 && id > 2.2) {
+      mb.boxC(cx, cz, iw, id, 0, 2.2, 'plaster', '市肆·内院屋');
+      cityCheapRoof(mb, cx, cz, iw + 0.45, id + 0.45, 2.2, 0.45, r.tile, r.tileB, '市肆·内院屋顶');
+    }
+    return shops;
+  }
+
   function cityStall(mb, x, z, axis, s, night) {
     s = s || 1;
     const w = 2.6 * s, d = 1.4 * s;
@@ -296,6 +388,7 @@
     const rng = new GF.RNG((Number(r.seed) || 1) ^ 0x9e3779b9);
     const dens = GF.clamp ? GF.clamp(r.lifeDensity == null ? 0.55 : r.lifeDensity, 0, 1) : 0.55;
     const night = !!r.night;
+    const market = r.streetMode === 'market';
     const step = 9 + (1 - dens) * 8;
     let n = 0;
     const place = (x, z, axis, prob) => {
@@ -322,6 +415,7 @@
       for (let i = 0; i < o.nx; i++) {
         if (rng.next() > 0.35 + 0.35 * dens) continue;
         const x = -o.Wi / 2 + o.cellW * (i + (rng.next() < 0.5 ? 0.28 : 0.72));
+        if (market && ((j % 2 === 0 && x > 0) || (j % 2 === 1 && x < 0))) continue;
         if (o.inCompound(x, cz)) continue;
         if (Math.abs(x) < o.aveW / 2 + 0.8) continue;
         place(x, cz - o.sw / 2 - 0.5, 'x', 0.85);
@@ -592,10 +686,16 @@
     const nx = Math.max(1, r.blocksX), nz = Math.max(1, r.blocksZ);
     const cellW = Wi / nx, cellD = Di / nz;
     const sw = r.streetW, aveW = sw * 2.1;
+    const market = r.streetMode === 'market';
     for (let j = 1; j < nz; j++) {
       const cz = -Di / 2 + cellD * j;
-      if (inCompound(0, cz)) continue;
-      mb.box(-Wi / 2, Wi / 2, 0, 0.055, cz - sw / 2, cz + sw / 2, 'stoneB', '街巷铺装');
+      // 街市模式：横向次街只铺半段，收到中轴御道即止，形成 T 字路口；
+      // 坊制模式仍铺满，保持唐长安式九经九纬的穿行感。
+      let x0 = -Wi / 2, x1 = Wi / 2;
+      if (market) { if (j % 2 === 0) x1 = 0; else x0 = 0; }
+      if (x1 - x0 < 1) continue;
+      if (inCompound((x0 + x1) / 2, cz)) continue;
+      mb.box(x0, x1, 0, 0.055, cz - sw / 2, cz + sw / 2, 'stoneB', '街巷铺装');
     }
     for (let i = 1; i < nx; i++) {
       const cx = -Wi / 2 + cellW * i;
@@ -685,16 +785,23 @@
       cityWallRun(mb, [palaceRect[0], palaceRect[3]], [palaceRect[0], palaceRect[2]], r, pr);
     }
 
-    // 里坊方格网（宫城 / 皇城范围内的坊跳过）
+    // 里坊方格网（宫城 / 皇城范围内的坊跳过）；街市模式改铺临街市肆，不设坊墙
     const wardGates = [];
+    let marketBlocks = 0, marketShops = 0;
     for (let i = 0; i < nx; i++) {
       for (let j = 0; j < nz; j++) {
         const cx = -Wi / 2 + cellW * (i + 0.5);
         const cz = -Di / 2 + cellD * (j + 0.5);
         if (inCompound(cx, cz)) continue;
         const b2w = Math.max(2, cellW - sw), b2d = Math.max(2, cellD - sw);
-        const g = cityBlock(mb, r, cx, cz, b2w, b2d);
-        if (g) wardGates.push(g);
+        if (market) {
+          const shops = cityMarketBlock(mb, r, cx, cz, b2w, b2d);
+          marketBlocks++;
+          marketShops += shops;
+        } else {
+          const g = cityBlock(mb, r, cx, cz, b2w, b2d);
+          if (g) wardGates.push(g);
+        }
       }
     }
 
@@ -734,7 +841,9 @@
     }
 
     // 供报告探针读取的计数
-    mb.cityStats = { bastionCount, bastionSpacings, wengcheng: wengCount, life: lifeN, wards: (function () {
+    mb.cityStats = { bastionCount, bastionSpacings, wengcheng: wengCount, life: lifeN,
+      streetMode: r.streetMode, marketBlocks, marketShops, wallProfile: r.wallProfile, gateArch: r.gateArch,
+      gates: gates.length, wards: (function () {
       let n = 0;
       for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
         const cx = -Wi / 2 + cellW * (i + 0.5), cz = -Di / 2 + cellD * (j + 0.5);

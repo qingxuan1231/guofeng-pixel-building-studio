@@ -184,8 +184,9 @@
         { path: 'cityD', label: '城垣进深', type: 'range', min: 80, max: 400, step: 5, unit: '工具单位', only: ['city'] },
         { path: 'northW', label: '北墙宽（梯形）', type: 'range', min: 0, max: 300, step: 4, unit: '工具单位', only: ['city'], dep: { path: 'cityShape', equals: 'trapezoid' } },
         { path: 'wallH', label: '城墙高', type: 'range', min: 2.0, max: 7.0, step: 0.2, unit: 'm', only: ['city'] },
-        { path: 'wallBaseW', label: '墙底宽', type: 'range', min: 1.0, max: 4.0, step: 0.1, unit: 'm', only: ['city'] },
-        { path: 'wallTopW', label: '墙顶宽', type: 'range', min: 0.6, max: 3.0, step: 0.1, unit: 'm', only: ['city'] },
+        { path: 'wallProfile', label: '城墙收分档', type: 'select', opts: GF.WALL_PROFILE_OPTS, only: ['city'] },
+        { path: 'wallBaseW', label: '墙底宽', type: 'range', min: 1.0, max: 4.0, step: 0.1, unit: 'm', only: ['city'], dep: { path: 'wallProfile', equals: 'custom' } },
+        { path: 'wallTopW', label: '墙顶宽（档位反算）', type: 'range', min: 0.3, max: 4.0, step: 0.1, unit: 'm', digits: 4, only: ['city'], dep: { path: 'wallProfile', equals: 'custom' } },
         { path: 'merlon', label: '外侧垛口（雉堞）', type: 'toggle', only: ['city'] },
         { path: 'merlonStep', label: '垛口间距', type: 'range', min: 0.8, max: 4.0, step: 0.1, unit: 'm', only: ['city'], dep: { path: 'merlon', equals: true } },
         { path: 'merlonW', label: '垛口宽', type: 'range', min: 0.3, max: 1.2, step: 0.05, unit: 'm', only: ['city'], dep: { path: 'merlon', equals: true } },
@@ -195,6 +196,7 @@
         { path: 'gateCount', label: '正门门道数', type: 'select', opts: [{ v: 1, t: '1 门道' }, { v: 3, t: '3 门道' }, { v: 5, t: '5 门道' }], only: ['city'] },
         { path: 'gateW', label: '门道宽', type: 'range', min: 1.5, max: 3.5, step: 0.1, unit: 'm', only: ['city'] },
         { path: 'gateH', label: '门洞高', type: 'range', min: 2.5, max: 4.5, step: 0.1, unit: 'm', only: ['city'] },
+        { path: 'gateArch', label: '门洞样式', type: 'select', opts: [{ v: 'arch', t: '券门（半圆拱）' }, { v: 'guijiao', t: '圭角门（平顶抹角）' }], only: ['city'] },
         { path: 'gateTower', label: '城门楼', type: 'toggle', only: ['city'] },
         { path: 'gateSide', label: '开门面', type: 'select', opts: [{ v: 'front', t: '仅正门' }, { v: 'two', t: '南北两面' }, { v: 'four', t: '四面' }], only: ['city'] },
         { path: 'bastionN', label: '每面马面数（0 为不设）', type: 'range', min: 0, max: 12, step: 1, only: ['city'] },
@@ -210,6 +212,7 @@
         { path: 'blocksX', label: '坊格·东西列数', type: 'range', min: 1, max: 14, step: 1, only: ['city'] },
         { path: 'blocksZ', label: '坊格·南北行数', type: 'range', min: 1, max: 14, step: 1, only: ['city'] },
         { path: 'streetW', label: '街宽', type: 'range', min: 1.0, max: 4.0, step: 0.2, unit: 'm', only: ['city'] },
+        { path: 'streetMode', label: '街市模式', type: 'select', opts: [{ v: 'ward', t: '坊制（坊墙+坊门）' }, { v: 'market', t: '街市（临街店铺+丁字路口）' }], only: ['city'] },
         { path: 'life', label: '生活层（摊/幌/灯）', type: 'toggle', only: ['city'] },
         { path: 'lifeDensity', label: '生活层密度', type: 'range', min: 0.1, max: 1, step: 0.05, only: ['city'], dep: { path: 'life', equals: true } },
         { path: 'night', label: '夜市模式（灯更多）', type: 'toggle', only: ['city'], dep: { path: 'life', equals: true } },
@@ -366,7 +369,10 @@
       <span class="val"></span></div>`;
     const rg = row.querySelector('input');
     const val = row.querySelector('.val');
-    const fmt = (v) => (it.step < 1 ? Number(v).toFixed(2) : Number(v)) + (it.unit || '');
+    const fmt = (v) => {
+      const dec = it.digits != null ? it.digits : (it.step < 1 ? 2 : 0);
+      return Number(v).toFixed(dec) + (it.unit || '');
+    };
     rg.addEventListener('input', () => {
       if (it.path === 'render.pitch') {
         val.textContent = fmt(rg.value);
@@ -450,7 +456,16 @@
   }
 
   let timer = null;
-  function onChange() {
+  function onChange(it) {
+    // 收分档切换：立刻把顶宽按档位反算写回配方，避免面板显示旧值
+    if (it && (it.path === 'wallProfile' || it.path === 'wallH')) {
+      const sec = GF.wallProfileSection(state.recipe.wallProfile, state.recipe.wallH, state.recipe.wallBaseW);
+      if (sec) {
+        state.recipe.wallBaseW = sec.base;
+        state.recipe.wallTopW = sec.top;
+        syncControls();
+      }
+    }
     // 水池开关联动
     if (state.recipe.pondOn && !state.recipe.env.pond) {
       state.recipe.env.pond = { x: 3.6, z: 5.4, w: 2.2, d: 1.5 };

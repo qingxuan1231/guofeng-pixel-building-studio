@@ -9,7 +9,7 @@
       c.addEventListener('click', () => {
         state.city = GF.getCityPreset(p.key);
         state.preset = p.key;
-        state.panX = state.panY = 0; state.zoom = 2;
+        state.panX = state.panY = 0; state.zoom = 1;
         markChip(p.key);
         syncControls();
         renderAncientList();

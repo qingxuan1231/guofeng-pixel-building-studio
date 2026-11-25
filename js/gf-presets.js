@@ -33,6 +33,7 @@
     jin: 1, axisRaise: true, fangStyle: 'classic',
     /* ---- 阶段③ 城制（city）---- */
     cityW: 200, cityD: 180, wallBaseW: 2.5, wallTopW: 1.25,
+    wallProfile: 'custom', gateArch: 'arch', streetMode: 'ward',
     merlon: true, parapet: true, merlonStep: 2.2, merlonW: 0.55, merlonH: 0.66,
     parapetH: 0.42,
     gateCount: 3, gateTower: true, gateSide: 'four',
@@ -65,6 +66,42 @@
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
+  /* ---------------------------- 城墙收分档 ----------------------------
+   * ratio = 墙底宽 / 墙顶宽。顶宽严格按底宽反算，不再另设一个会漂移的值。
+   * capital：4:2:1（底:顶=2:1）
+   * county ：高:底:顶=8:4:3.5（底:顶=4:3.5≈1.1429）
+   * palace ：明清宫城实测 8.62:6.66（底:顶≈1.2943）
+   * custom ：保留配方里的底/顶，不反算
+   * ------------------------------------------------------------------ */
+  GF.WALL_PROFILES = {
+    capital: { label: '都城收分 4:2:1', ratio: 2.0, taper: 0.5, h: 4, b: 2, t: 1 },
+    county: { label: '县城收分 8:4:3.5', ratio: 4 / 3.5, taper: 1 - 3.5 / 4, h: 8, b: 4, t: 3.5 },
+    palace: { label: '宫城收分 8.62:6.66', ratio: 8.62 / 6.66, taper: 1 - 6.66 / 8.62, b: 8.62, t: 6.66 },
+    custom: { label: '自定义', ratio: 0, taper: 0 }
+  };
+  GF.WALL_PROFILE_OPTS = ['capital', 'county', 'palace', 'custom'].map((v) => ({
+    v, t: GF.WALL_PROFILES[v].label
+  }));
+  // 结构剖面：有高度链的档位直接由墙高反算底/顶；宫城只锁底:顶，不臆造高度链。
+  GF.wallProfileSection = function (profile, height, base) {
+    const p = GF.WALL_PROFILES[profile];
+    if (!p) return null;
+    let b = Number(base);
+    if (p.h && p.b && p.t) {
+      b = (Number(height) || 0) * p.b / p.h;
+      return { base: +b.toFixed(4), top: +(b * p.t / p.b).toFixed(4) };
+    }
+    if (p.b && p.t && b > 0) {
+      return { base: +b.toFixed(4), top: +(b * p.t / p.b).toFixed(4) };
+    }
+    return null;
+  };
+  GF.wallProfileTop = function (profile, base) {
+    const p = GF.WALL_PROFILES[profile];
+    if (!p || !p.ratio) return null;
+    return +(base / p.ratio).toFixed(4);
+  };
+
   GF.DEFAULT_RECIPE = clone(DEF);
 
   GF.normalize = function (src) {
@@ -89,6 +126,7 @@
     for (const ak of ['floorHList', 'shrinkList', 'eaveList', 'dgList']) {
       if (!Array.isArray(r[ak])) r[ak] = [];
     }
+    if (typeof GF.fitSeries === 'function') GF.fitSeries(r);
     // 城制字段：旧配方缺省 / 非法值回落默认档，保证旧配方与手写 JSON 可直接构建
     const cityNum = (k, d, allowZero) => {
       const v = Number(r[k]);
@@ -121,6 +159,19 @@
     if (r.cityShape !== 'trapezoid') r.cityShape = 'rect';
     if (['corner', 'north'].indexOf(r.palaceCorner) < 0) r.palaceCorner = 'center';
     if (['front', 'two', 'four'].indexOf(r.gateSide) < 0) r.gateSide = 'four';
+    // P1 城制三档：收分档、门洞样式、街市模式。非法值回落，旧配方不传则保持 custom / arch / ward。
+    if (!GF.WALL_PROFILES[r.wallProfile]) r.wallProfile = 'custom';
+    if (['arch', 'guijiao'].indexOf(r.gateArch) < 0) r.gateArch = 'arch';
+    if (['ward', 'market'].indexOf(r.streetMode) < 0) r.streetMode = 'ward';
+    // 非自定义档：底/顶由结构剖面反算，不再信任手写值；custom 保留配方。
+    const section = GF.wallProfileSection(r.wallProfile, r.wallH, r.wallBaseW);
+    if (section) {
+      r.wallBaseW = section.base;
+      r.wallTopW = section.top;
+    } else {
+      const profileTop = GF.wallProfileTop(r.wallProfile, r.wallBaseW);
+      if (profileTop != null) r.wallTopW = profileTop;
+    }
     // 瓦色联动
     const tileMap = {
       grey: ['tile', 'tileB'], celadon: ['glazeG', 'glazeGD'],
@@ -141,7 +192,110 @@
     return r;
   };
 
-  /* ------------------------------ 预设 ------------------------------ */
+  // 结构断言：返回可读问题清单，不抛错；用于预设回归与配方导出前自检。
+  GF.structAudit = function (src) {
+    const r = GF.normalize(src || {});
+    const issues = [];
+    const warn = (k, msg) => issues.push({ level: 'warn', key: k, msg });
+    const bad = (k, msg) => issues.push({ level: 'error', key: k, msg });
+    const types = ['hall', 'house', 'ge', 'pagoda', 'pavilion', 'round', 'archway', 'gate',
+      'courtyard', 'bridge', 'xie', 'fang', 'que', 'corridor', 'tai', 'cave', 'city'];
+    if (types.indexOf(r.type) < 0) bad('type', `未知类型 ${r.type}`);
+    if (r.type !== 'city' && r.type !== 'archway' && r.type !== 'corridor' && r.type !== 'tai') {
+      if (!(r.bays > 0) || Math.round(r.bays) !== r.bays) bad('bays', `开间数非正整数：${r.bays}`);
+      if (r.bays % 2 === 0 && ['hall', 'ge', 'pagoda'].indexOf(r.type) >= 0) warn('bays', `主殿/楼阁开间为偶数：${r.bays}`);
+      if (!(r.bayW > 0) || !(r.depth > 0)) bad('depth', '面阔/进深非正数');
+      const dw = r.depth / (r.bays * r.bayW);
+      if (dw < 0.3 || dw > 1.2) warn('depth', `进深/通面阔=${dw.toFixed(2)}，超出 0.30~1.20`);
+    }
+    if (r.type !== 'city' && r.type !== 'que' && r.type !== 'corridor' && r.type !== 'tai') {
+      if (!(r.floorH >= 1.4 && r.floorH <= 6.5)) warn('floorH', `层高 ${r.floorH}m 超出 1.4~6.5`);
+      const n = r.type === 'pagoda' ? r.tiers : r.floors;
+      for (const [k, want] of [['floorHList', n], ['eaveList', n], ['dgList', n], ['shrinkList', Math.max(0, n - 1)]]) {
+        if (r[k].length && r[k].length !== want) bad(k, `${k} 长度 ${r[k].length} ≠ ${want}`);
+      }
+    }
+    if (r.type === 'pagoda') {
+      if ([6, 8].indexOf(r.sides) < 0) warn('sides', `塔身边数 ${r.sides} 非六/八`);
+      if (r.tiers < 3) warn('tiers', `塔层数 ${r.tiers} 少于 3`);
+    }
+    if (r.type === 'gate') {
+      if (!(r.gateW < r.width)) bad('gateW', `门洞宽 ${r.gateW} ≥ 城台宽 ${r.width}`);
+      if (!(r.gateH < r.wallH)) bad('gateH', `门洞高 ${r.gateH} ≥ 城台高 ${r.wallH}`);
+    }
+    if (r.type === 'city') {
+      if (!(r.wallH > 0) || !(r.wallBaseW > 0) || !(r.wallTopW > 0)) bad('wall', '城墙高/底/顶非正数');
+      if (!(r.wallTopW < r.wallBaseW)) bad('wall', `墙顶不窄于墙底：${r.wallTopW} ≥ ${r.wallBaseW}`);
+      if (!GF.WALL_PROFILES[r.wallProfile]) bad('wallProfile', `未知收分档位 ${r.wallProfile}`);
+      const sec = GF.wallProfileSection(r.wallProfile, r.wallH, r.wallBaseW);
+      if (sec) {
+        if (Math.abs(r.wallBaseW - sec.base) > 1e-3) bad('wall', `底厚 ${r.wallBaseW} ≠ 剖面 ${sec.base}`);
+        if (Math.abs(r.wallTopW - sec.top) > 1e-3) bad('wall', `顶厚 ${r.wallTopW} ≠ 剖面 ${sec.top}`);
+      }
+      if ([1, 3, 5].indexOf(r.gateCount) < 0) bad('gateCount', `门道数 ${r.gateCount} 非 1/3/5`);
+      if (!(r.gateW < (r.w || r.cityW) / 2)) bad('gateW', `门洞宽 ${r.gateW} 超过城宽一半`);
+    }
+    if (!(r.eave >= 0.2 && r.eave <= 2.5)) warn('eave', `出檐 ${r.eave}m 超出 0.2~2.5`);
+    if (!(r.slope >= 0.2 && r.slope <= 0.9)) warn('slope', `举高 ${r.slope} 超出 0.2~0.9`);
+    if (!(r.upturn >= 0 && r.upturn <= 0.8)) warn('upturn', `翘角 ${r.upturn} 超出 0~0.8`);
+    return { ok: issues.filter((x) => x.level === 'error').length === 0, issues };
+  };
+
+  /* ---------------------------- 结构分组 ----------------------------
+   * 配方按“台基 / 屋身 / 屋面 / 铺作 / 城制 / 院落 / 环境”归组。
+   * 分组只描述字段归属，不改构建接口；用于审计、导出说明与后续重构。
+   * ---------------------------------------------------------------- */
+  GF.STRUCT_GROUPS = {
+    base: ['baseH', 'steps', 'stepW', 'railing', 'pedestal', 'railStyle', 'pitDepth', 'rimH'],
+    body: ['bays', 'bayW', 'depth', 'floors', 'floorH', 'floorHList', 'wallMat', 'colMat',
+      'winW', 'winH', 'winPattern', 'doorW', 'doorH', 'doorStyle', 'doorLeaves',
+      'radius', 'sides', 'width', 'wallH', 'gateW', 'gateH', 'depthTower', 'tiers'],
+    roof: ['roofType', 'eave', 'eaveList', 'slope', 'upturn', 'tile', 'tileB', 'tileColor',
+      'ridgeStyle', 'beasts', 'finial', 'trimColor', 'trimMat', 'xuanYu', 'windDuo'],
+    bracket: ['dougong', 'dgScale', 'dgStyle', 'dgEye', 'dgList', 'queti'],
+    plan: ['pingzuo', 'pingzuoStyle', 'fujie', 'fujieR', 'baoxia', 'baoxiaD', 'baoxiaW',
+      'shrinkList', 'terraceGate', 'huamen', 'ceiling', 'plaque', 'lanterns', 'lions',
+      'censer', 'couplet', 'menZan', 'baogu', 'horseWall', 'interior'],
+    court: ['courtW', 'courtD', 'courtStyle', 'jin', 'axisRaise', 'fangStyle', 'units',
+      'span', 'bridgeW', 'arch'],
+    city: ['cityW', 'cityD', 'realW', 'realD', 'scale', 'wallBaseW', 'wallTopW', 'wallProfile',
+      'gateArch', 'streetMode', 'merlon', 'merlonStep', 'merlonW', 'merlonH', 'parapet',
+      'parapetH', 'gateCount', 'gateTower', 'gateSide', 'bastionSpacing', 'bastionN',
+      'bastionProj', 'bastionW', 'bastionTower', 'cornerTower', 'blockW', 'blockD',
+      'streetW', 'blocksX', 'blocksZ', 'blockWallH', 'axisHalls', 'axisPalace',
+      'palaceCorner', 'palaceW', 'palaceD', 'northW', 'innerW', 'innerD', 'moatW', 'moatD',
+      'moatBridge', 'cityShape', 'wengcheng', 'wengD', 'wengW', 'wengOffset', 'arrowTower',
+      'drawbridge', 'bridgeUp', 'life', 'lifeDensity', 'night'],
+    env: ['env', 'render']
+  };
+  GF.structGroupOf = function (key) {
+    for (const k in GF.STRUCT_GROUPS) if (GF.STRUCT_GROUPS[k].indexOf(key) >= 0) return k;
+    return 'other';
+  };
+  GF.structParts = function (r) {
+    const out = {};
+    for (const k in GF.STRUCT_GROUPS) out[k] = {};
+    for (const k in r) out[GF.structGroupOf(k)][k] = r[k];
+    return out;
+  };
+
+  // 逐层序列：只修正“已经写了”的数组；概念参考的空数组保持空，不虚构尺寸。
+  GF.fitSeries = function (r) {
+    const n = r.type === 'pagoda' ? Math.max(1, Math.round(r.tiers || 1)) : Math.max(1, Math.round(r.floors || 1));
+    const shape = (key, fallback, len) => {
+      const a = r[key];
+      if (!Array.isArray(a)) { r[key] = []; return; }
+      if (!a.length || len <= 0) return;
+      const out = a.slice(0, len).map((v) => (isFinite(Number(v)) ? Number(v) : fallback));
+      while (out.length < len) out.push(out.length ? out[out.length - 1] : fallback);
+      r[key] = out;
+    };
+    shape('floorHList', r.floorH, n);
+    shape('eaveList', r.eave, n);
+    shape('dgList', 0, n);
+    shape('shrinkList', r.type === 'pagoda' ? 0.86 : 0.92, Math.max(0, n - 1));
+    return r;
+  };
   const PRESETS = {
     jiangnan: {
       name: '江南民居', type: 'house', seed: 101, era: 'ming',
@@ -237,6 +391,7 @@
     },
     lou: {
       name: '三层楼阁', type: 'ge', seed: 107,      bays: 3, bayW: 3.0, depth: 6.8, floors: 3, floorH: 3.0,
+      floorHList: [3.1, 3.0, 2.9], shrinkList: [0.96, 0.95], eaveList: [1.0, 0.95, 0.9], dgList: [0, 0, 0],
       pingzuo: true, pingzuoStyle: 'wood',
       baseH: 0.8, steps: 3, railing: false, wallMat: 'plaster', colMat: 'timber',
       tileColor: 'grey', eave: 1.0, slope: 0.5, upturn: 0.4,
@@ -248,15 +403,23 @@
       env: { ground: 'stone', groundSize: 14, trees: ['pine', 'plum'], rocks: 1, pond: null, banners: 0, path: true }
     },
     ta: {
-      name: '七层宝塔', type: 'pagoda', seed: 108,
-      tiers: 7, radius: 2.5, floorH: 2.2, baseH: 0.6,
+      name: '七层宝塔', type: 'pagoda', seed: 108, sides: 8,
+      tiers: 7, radius: 2.5, floorH: 2.2, baseH: 0.6, pingzuo: true,
+      floorHList: [2.4, 2.3, 2.2, 2.1, 2.0, 1.9, 1.8],
+      shrinkList: [0.9, 0.9, 0.9, 0.9, 0.9, 0.9],
+      eaveList: [0.8, 0.78, 0.76, 0.74, 0.72, 0.7, 0.68],
+      dgList: [2, 2, 2, 1, 1, 1, 1],
       colMat: 'timber', tileColor: 'grey', eave: 0.75, slope: 0.6, finial: true,
       plaque: false,
       env: { ground: 'stone', groundSize: 16, trees: ['pine', 'pine', 'gingko'], rocks: 2, pond: { x: 6, z: 5, w: 3.4, d: 2.6 }, banners: 2, path: true }
     },
     muta: {
-      name: '木塔·五层', type: 'pagoda', seed: 131,
+      name: '木塔·五层', type: 'pagoda', seed: 131, sides: 8,
       tiers: 5, radius: 2.8, floorH: 2.8, baseH: 0.9, steps: 3, railing: true, railStyle: 'marble',
+      floorHList: [2.9, 2.8, 2.7, 2.6, 2.5],
+      shrinkList: [0.9, 0.9, 0.9, 0.9],
+      eaveList: [1.0, 0.95, 0.9, 0.85, 0.8],
+      dgList: [2, 2, 2, 1, 1],
       colMat: 'timber', tileColor: 'grey', eave: 1.0, slope: 0.52, finial: true, pingzuo: true,
       fujie: true, fujieR: 1.7,
       plaque: true,
@@ -283,7 +446,7 @@
       tileColor: 'grey', eave: 1.1, slope: 0.5, roofType: 'gable',
       winPattern: 'step', winW: 1.3, winH: 1.4, doorW: 2.0, doorH: 2.7,
       plaque: true, lanterns: true,
-      cut: { front: true, right: true, left: false, back: false, roof: false },
+      cut: { front: false, right: false, left: false, back: false, roof: false },
       interior: [
         { kind: 'bed', x: -1.2, z: -1.9 },
         { kind: 'table', x: 1.0, z: -1.4 },
@@ -303,7 +466,7 @@
       tileColor: 'grey', eave: 1.3, slope: 0.45, floorH: 3.2, baseH: 0.4,
       winPattern: 'ice', winW: 1.2, winH: 1.3, doorW: 1.8, doorH: 2.5,
       plaque: true, lanterns: true,
-      cut: { front: true, right: true, left: false, back: false, roof: false },
+      cut: { front: false, right: false, left: false, back: false, roof: false },
       interior: [
         { kind: 'table', x: 0, z: -1.2 },
         { kind: 'shelf', x: -2.4, z: -1.6 },
@@ -327,7 +490,7 @@
       eave: 0.9, slope: 0.45, roofType: 'roll', upturn: 0.4,
       winPattern: 'ice', doorW: 1.8, doorH: 2.5, plaque: true, lanterns: true,
       xuanYu: true, windDuo: true,
-      cut: { front: true, right: true, left: false, back: false, roof: false },
+      cut: { front: false, right: false, left: false, back: false, roof: false },
       interior: [
         { kind: 'table', x: 0, z: -0.8 }, { kind: 'screen', x: 0, z: -2.0 },
         { kind: 'shelf', x: -2.2, z: -1.4 }, { kind: 'lamp', x: 2.2, z: 0 }
@@ -344,7 +507,7 @@
       dougong: true, dgScale: 0.95, dgStyle: 'full', dgEye: true, queti: true,
       plaque: true, censer: true, lions: true, lanterns: true,
       winPattern: 'step', doorW: 2.2, doorH: 3.0,
-      cut: { front: true, right: true, left: false, back: false, roof: false },
+      cut: { front: false, right: false, left: false, back: false, roof: false },
       interior: [], // 大殿佛龛组由 courtyardTemple 按殿内地面标高生成（居中对称）
       env: { ground: 'stone', groundSize: 13, trees: ['pine', 'gingko'], rocks: 1, pond: null, banners: 0, path: true, props: ['stonelamp', 'stele'] }
     },
@@ -357,7 +520,7 @@
       dougong: true, dgScale: 0.9, dgStyle: 'full', queti: true,
       plaque: true, censer: true, lions: true, lanterns: true,
       winPattern: 'step', doorW: 2.2, doorH: 3.0,
-      cut: { front: true, right: true, left: false, back: false, roof: false },
+      cut: { front: false, right: false, left: false, back: false, roof: false },
       interior: [{ kind: 'altar', x: 0, z: -1.6 }, { kind: 'screen', x: 0, z: -3.0 }],
       env: { ground: 'stone', groundSize: 15, trees: ['pine', 'pine'], rocks: 1, pond: null, banners: 0, path: true, props: ['stonelamp', 'stele'] }
     },
@@ -369,7 +532,7 @@
       tileColor: 'grey', eave: 1.1, slope: 0.5, roofType: 'gableHip', ridgeStyle: 'plain',
       dougong: true, dgScale: 0.85, plaque: true, censer: true, lanterns: true,
       winPattern: 'straight', doorW: 2.0, doorH: 2.8,
-      cut: { front: true, right: true, left: false, back: false, roof: false },
+      cut: { front: false, right: false, left: false, back: false, roof: false },
       interior: [{ kind: 'altar', x: 0, z: -1.4 }],
       env: { ground: 'stone', groundSize: 12, trees: ['pine', 'bamboo'], rocks: 1, pond: null, banners: 0, path: true, props: ['stonelamp'] }
     },
@@ -381,7 +544,7 @@
       eave: 0.9, slope: 0.5, roofType: 'gable', upturn: 0.2,
       winPattern: 'step', winW: 1.2, winH: 1.3, doorW: 1.9, doorH: 2.6,
       plaque: true, lanterns: true,
-      cut: { front: true, right: true, left: false, back: false, roof: false },
+      cut: { front: false, right: false, left: false, back: false, roof: false },
       interior: [{ kind: 'bed', x: -1.2, z: -1.6 }, { kind: 'table', x: 1.0, z: -1.2 }, { kind: 'screen', x: 0, z: -2.2 }],
       env: { ground: 'brick', groundSize: 10, trees: ['bamboo', 'plum'], rocks: 1, pond: null, banners: 0, path: true }
     },
@@ -393,7 +556,7 @@
       eave: 1.0, slope: 0.48, roofType: 'gableHip',
       dougong: true, dgScale: 0.8, plaque: true,
       winPattern: 'straight', doorW: 2.0, doorH: 2.8,
-      cut: { front: true, right: true, left: false, back: false, roof: false },
+      cut: { front: false, right: false, left: false, back: false, roof: false },
       interior: [{ kind: 'altar', x: 0, z: -1.4 }],
       env: { ground: 'stone', groundSize: 10, trees: ['pine', 'bamboo'], rocks: 1, pond: null, banners: 0, path: true, props: ['stele'] }
     },
@@ -413,7 +576,7 @@
       eave: 1.0, slope: 0.5, roofType: 'gableHip', upturn: 0.25,
       dougong: true, dgScale: 0.8, plaque: true, lanterns: true,
       winPattern: 'step', doorW: 2.0, doorH: 2.7,
-      cut: { front: true, right: true, left: false, back: false, roof: false },
+      cut: { front: false, right: false, left: false, back: false, roof: false },
       interior: [{ kind: 'table', x: 0, z: 0.6 }, { kind: 'screen', x: 0, z: -1.6 }],
       env: { ground: 'grass', groundSize: 12, trees: ['willow', 'plum', 'maple'], rocks: 2, pond: null, banners: 0, path: true, props: ['penjing', 'stonelamp'] }
     },
@@ -435,6 +598,7 @@
     chongge: {
       name: '重檐楼阁', type: 'ge', seed: 118,
       bays: 3, bayW: 3.0, depth: 6.0, floors: 2, floorH: 3.0, baseH: 0.8, steps: 3,
+      floorHList: [3.0, 2.9], shrinkList: [0.97], eaveList: [0.9, 0.85], dgList: [2, 2],
       railing: true, railStyle: 'wood', wallMat: 'plaster', colMat: 'timber',
       tileColor: 'grey', eave: 0.9, slope: 0.5, upturn: 0.42, roofType: 'gableHip',
       dougong: true, dgScale: 0.85, dgStyle: 'mid', queti: true,
@@ -442,8 +606,9 @@
       env: { ground: 'stone', groundSize: 13, trees: ['pine', 'plum'], rocks: 1, pond: null, banners: 0, path: true }
     },
     tengwang: {
-      name: '滕王阁', type: 'ge', seed: 134,
+      name: '滕王阁', type: 'ge', seed: 134, era: 'tang',
       bays: 5, bayW: 3.2, depth: 7.0, floors: 3, floorH: 3.4, baseH: 1.1, steps: 4,
+      floorHList: [3.5, 3.3, 3.1], shrinkList: [0.96, 0.94], eaveList: [1.15, 1.05, 0.95], dgList: [2, 2, 2],
       railing: true, railStyle: 'wood', wallMat: 'zhu', colMat: 'timber',
       tileColor: 'celadon', eave: 1.15, slope: 0.42, upturn: 0.5, roofType: 'gableHip',
       dougong: true, dgScale: 1.0, dgStyle: 'mid', queti: true,
@@ -451,7 +616,7 @@
       env: { ground: 'stone', groundSize: 18, trees: ['pine', 'plum'], rocks: 1, pond: null, banners: 2, path: true }
     },
     que: {
-      name: '汉阙', type: 'que', seed: 119,
+      name: '汉阙', type: 'que', seed: 119, era: 'han',
       width: 12, wallH: 6.0, floorH: 3.0, baseH: 0.6,
       wallMat: 'brick', tileColor: 'grey', eave: 0.7, slope: 0.42, upturn: 0.5,
       plaque: true,
@@ -483,6 +648,7 @@
     shizijia: {
       name: '十字歇山阁', type: 'ge', seed: 123,
       bays: 3, bayW: 3.2, depth: 6.4, floors: 2, floorH: 3.0, baseH: 0.9, steps: 3,
+      floorHList: [3.0, 2.9], shrinkList: [0.97], eaveList: [1.0, 0.95], dgList: [2, 2],
       wallMat: 'zhu', colMat: 'timber', tileColor: 'yellow',
       eave: 1.0, slope: 0.52, upturn: 0.5, roofType: 'cross',
       dougong: true, dgScale: 0.9, dgStyle: 'full', ridgeStyle: 'ornate', beasts: 3,
@@ -581,19 +747,19 @@
     },
     /* ---------------- 阶段② 塔与楼阁：文物实例 ---------------- */
     leifeng: {
-      name: '雷峰塔', type: 'pagoda', seed: 301,
+      name: '雷峰塔', type: 'pagoda', seed: 301, era: 'song', sides: 8,
       tiers: 5, radius: 3.26, floorH: 1.7, baseH: 0.9, steps: 3,
       floorHList: [1.85, 1.7, 1.6, 1.5, 1.42],
       shrinkList: [0.94, 0.92, 0.9, 0.88],
       eaveList: [0.85, 0.8, 0.75, 0.7, 0.65],
       dgList: [2, 2, 2, 1, 1],
-      pingzuo: true, fujie: true, fujieR: 0.67,
+      pingzuo: true, fujie: true, fujieR: 0.84,
       colMat: 'timber', tileColor: 'grey', slope: 0.5, upturn: 0.35, finial: true,
       plaque: false,
       env: { ground: 'stone', groundSize: 16, trees: ['pine', 'pine', 'gingko'], rocks: 2, pond: null, banners: 2, path: true }
     },
     yingxian: {
-      name: '应县木塔', type: 'pagoda', seed: 302,
+      name: '应县木塔', type: 'pagoda', seed: 302, era: 'song', sides: 8,
       tiers: 5, radius: 4.0, floorH: 1.8, baseH: 0.9, steps: 3, railing: true, railStyle: 'marble',
       floorHList: [2.0, 1.9, 1.8, 1.7, 1.6],
       shrinkList: [0.92, 0.9, 0.9, 0.88],
@@ -605,9 +771,10 @@
       env: { ground: 'stone', groundSize: 18, trees: ['pine', 'pine'], rocks: 2, pond: null, banners: 2, path: true }
     },
     wenchang: {
-      name: '文昌阁·城关', type: 'ge', seed: 303,
+      name: '文昌阁·城关', type: 'ge', seed: 303, era: 'qing',
       terraceGate: true, width: 9.4, depthTower: 6.8, wallH: 4.4, gateW: 2.6, gateH: 3.2,
       bays: 3, bayW: 2.8, depth: 4.6, floors: 2, floorH: 3.0, baseH: 0.4, steps: 3,
+      floorHList: [3.0, 2.9], shrinkList: [0.97], eaveList: [1.0, 0.95],
       railing: true, railStyle: 'marble', wallMat: 'zhu', colMat: 'timber',
       tileColor: 'yellow', trimColor: 'green', eave: 1.0, slope: 0.5, upturn: 0.45, roofType: 'cross',
       dougong: true, dgScale: 0.85, dgStyle: 'mid', queti: true,
@@ -615,7 +782,7 @@
       env: { ground: 'marble', groundSize: 15, trees: ['pine'], rocks: 0, pond: null, banners: 0, path: true }
     },
     feiyun: {
-      name: '飞云楼', type: 'ge', seed: 304,
+      name: '飞云楼', type: 'ge', seed: 304, era: 'ming',
       bays: 5, bayW: 2.3, depth: 11.5, floors: 3, tiers: 4, floorH: 3.0, baseH: 0.9, steps: 3,
       floorHList: [3.25, 3.05, 2.85], shrinkList: [0.96, 0.93, 0.9], eaveList: [1.0, 0.9, 0.8], dgList: [2, 2, 2],
       pingzuo: true, pingzuoStyle: 'wood', baoxia: true, baoxiaD: 1.25, baoxiaW: 0.42,
@@ -627,7 +794,7 @@
     },
     /* ---------------- 阶段② 概念参考（仅标题 / 关键词，不设虚构尺寸） ---------------- */
     fanlou: {
-      name: '樊楼·水上十字楼', type: 'ge', seed: 305,
+      name: '樊楼·水上十字楼', type: 'ge', seed: 305, era: 'song',
       bays: 3, bayW: 3.4, depth: 7.6, floors: 3, floorH: 3.5, baseH: 1.0, steps: 4,
       pingzuo: true, baoxia: true, baoxiaD: 1.5, baoxiaW: 0.52,
       railing: true, railStyle: 'wood', wallMat: 'plaster', colMat: 'timber',
@@ -669,8 +836,9 @@
     /* ---------------- 阶段③ 城：都城实例 ---------------- */
     tangchangan: {
       name: '城 · 唐长安', type: 'city', seed: 401,
+      era: 'tang',
       cityW: 400, cityD: 356, realW: 9721, realD: 8651, scale: 24.3,
-      wallH: 4.0, wallBaseW: 2.0, wallTopW: 1.0, merlon: true, parapet: true,
+      wallH: 4.0, wallBaseW: 2.0, wallTopW: 1.0, wallProfile: 'capital', gateArch: 'guijiao', streetMode: 'ward', merlon: true, parapet: true,
       gateCount: 5, gateW: 2.0, gateH: 3.4, gateTower: true, gateSide: 'four',
       bastionN: 13, bastionProj: 1.3, cornerTower: true,
       blockW: 0, blockD: 0, streetW: 1.9, blocksX: 12, blocksZ: 10, blockWallH: 1.0,
@@ -683,8 +851,9 @@
     },
     luoyang: {
       name: '城 · 洛阳', type: 'city', seed: 402,
+      era: 'tang',
       cityW: 300, northW: 216, cityD: 299, realW: 7312, realD: 7290, scale: 24.4,
-      wallH: 4.0, wallBaseW: 2.0, wallTopW: 1.0, merlon: true, parapet: true,
+      wallH: 4.0, wallBaseW: 2.0, wallTopW: 1.0, wallProfile: 'capital', gateArch: 'guijiao', streetMode: 'ward', merlon: true, parapet: true,
       gateCount: 3, gateW: 2.0, gateH: 3.4, gateTower: true, gateSide: 'four',
       bastionN: 10, bastionProj: 1.3, cornerTower: true,
       blockW: 0, blockD: 0, streetW: 1.6, blocksX: 12, blocksZ: 11, blockWallH: 1.0,
@@ -697,8 +866,9 @@
     },
     beijing: {
       name: '城 · 明清北京', type: 'city', seed: 403,
+      era: 'ming',
       cityW: 300, cityD: 300, realW: 6200, realD: 6200, scale: 20.7,
-      wallH: 5.5, wallBaseW: 3.4, wallTopW: 1.7, merlon: true, parapet: true,
+      wallH: 5.5, wallBaseW: 2.75, wallTopW: 1.375, wallProfile: 'capital', gateArch: 'arch', streetMode: 'market', merlon: true, parapet: true,
       gateCount: 3, gateW: 2.4, gateH: 3.8, gateTower: true, gateSide: 'four',
       bastionN: 8, bastionProj: 1.7, cornerTower: true,
       blockW: 0, blockD: 0, streetW: 2.0, blocksX: 9, blocksZ: 9, blockWallH: 1.1,
@@ -713,8 +883,9 @@
     },
     gugong: {
       name: '城 · 紫禁城', type: 'city', seed: 404,
+      era: 'ming',
       cityW: 120, cityD: 153, realW: 753, realD: 961, scale: 6.28,
-      wallH: 3.2, wallBaseW: 1.37, wallTopW: 1.06, merlon: true, parapet: true,
+      wallH: 3.2, wallBaseW: 1.37, wallTopW: 1.0585, wallProfile: 'palace', gateArch: 'arch', streetMode: 'market', merlon: true, parapet: true,
       gateCount: 3, gateW: 1.8, gateH: 3.0, gateTower: true, gateSide: 'four',
       bastionN: 0, bastionProj: 1.0, cornerTower: true,
       blockW: 0, blockD: 0, streetW: 1.6, blocksX: 2, blocksZ: 2, blockWallH: 1.0,
@@ -730,6 +901,12 @@
   /* 古建页只出单体建筑；“城 · 唐长安 / 洛阳 / 明清北京 / 紫禁城”四座城的配方
      已迁到城池工坊（js/gf-city.js 的 PRESETS），这里不再进古建的配方按钮，
      数据仍保留在本文件里，供 type:'city' 的老配方载入时兼容。 */
+  GF.auditPresets = function () {
+    return Object.keys(PRESETS).map((key) => {
+      const report = GF.structAudit(Object.assign(clone(PRESETS[key]), { preset: key }));
+      return { key, name: PRESETS[key].name, ok: report.ok, issues: report.issues };
+    });
+  };
   GF.presetList = Object.keys(PRESETS)
     .filter((k) => PRESETS[k].type !== 'city')
     .map((k) => ({ key: k, name: PRESETS[k].name }));
@@ -799,6 +976,7 @@
     return GF.normalize(base);
   };
 })(typeof window !== 'undefined' ? window : globalThis);
+
 
 
 

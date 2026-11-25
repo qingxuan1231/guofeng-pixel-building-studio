@@ -46,8 +46,18 @@
       gpu: state.gpu,
       gridMask: !!state.grid,
       viewport: [wrap.clientWidth || 1200, wrap.clientHeight || 800],
-      fitExtent: fitExtentForPreview()
+      fitExtent: fitExtentForPreview(),
+      // 视角中心一旦定下就锁住：拖动物体只改世界坐标，不再让相机跟着新包围盒重新居中
+      centerPx: state.viewCenter
     }, extra || {}));
+  }
+  // 从当前帧反算“画面正中对应的投影坐标”，后续所有帧都以它为锚点
+  function lockViewCenter(f) {
+    if (state.viewCenter || !f || !f.map || !f.map.ppm) return;
+    state.viewCenter = [
+      (f.w * 0.5 - f.map.ox) / f.map.ppm,
+      (f.h * 0.5 - f.map.oy) / f.map.ppm
+    ];
   }
 
   // 记录完整预览的画幅比例，并预先算好交互轻量帧的固定画布尺寸。

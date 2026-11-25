@@ -1,0 +1,42 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>gpu probe</title>
+<style>body{margin:0;background:#222;color:#fff;font:12px sans-serif}.row{display:flex;flex-wrap:wrap;gap:4px}.item{width:300px}.item canvas{width:300px;height:auto;display:block}.item b{display:block;padding:2px}</style>
+</head><body><div id="out" class="row"></div>
+<script src="../js/gf-core.js"></script>
+<script src="../js/gf-roof.js"></script>
+<script src="../js/gf-parts.js"></script>
+<script src="../src/ancient-build/00-common.js"></script>
+<script src="../src/ancient-build/10-dwellings.js"></script>
+<script src="../src/ancient-build/20-gates.js"></script>
+<script src="../src/ancient-build/30-courtyard.js"></script>
+<script src="../src/ancient-build/40-layout.js"></script>
+<script src="../src/ancient-build/50-compounds.js"></script>
+<script src="../src/ancient-build/60-garden.js"></script>
+<script src="../src/ancient-build/70-city.js"></script>
+<script src="../src/ancient-build/80-assembly.js"></script>
+<script src="../js/gf-presets.js"></script>
+<script src="../js/gf-city.js"></script>
+<script src="../js/gf-render.js"></script>
+<script src="../js/gf-export.js"></script>
+<script>
+const q = new URLSearchParams(location.search);
+const key = q.get('preset') || 'pass';
+const mode = q.get('mode') || 'both';
+const city = GF.cityNormalize(GF.getCityPreset(key));
+const mesh = GF.buildCity(city);
+document.title = key + ' tris=' + mesh.triCount;
+const out = document.getElementById('out');
+for (const yaw of [0,30,60,90,120,150,180,210,240,270,300,330]) {
+  for (const gpu of (mode === 'both' ? [true,false] : [mode === 'gpu'])) {
+    const o = {ppm:44, pitch:52, yaw, palette:city.render.palette, style:'pixel', outline:false,
+      shadow:false, persp:1, transparent:true, focus:false, pad:8, preview:true, maxPixels:2600000,
+      orbit:true, gpu, cpu:!gpu, seed:city.seed};
+    const f = GF.render(mesh, o);
+    const box = document.createElement('div'); box.className = 'item';
+    const lab = document.createElement('b'); lab.textContent = `${yaw}° ${gpu?'GPU':'CPU'} ${f.w}x${f.h}`;
+    const cv = document.createElement('canvas'); cv.width=f.w; cv.height=f.h;
+    cv.getContext('2d').putImageData(new ImageData(f.rgba,f.w,f.h),0,0);
+    box.appendChild(lab); box.appendChild(cv); out.appendChild(box);
+  }
+}
+</script></body></html>

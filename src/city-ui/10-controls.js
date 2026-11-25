@@ -9,6 +9,27 @@
     for (const k of ks) { if (cur[k] == null) cur[k] = {}; cur = cur[k]; }
     cur[last] = v;
   }
+  function depOK(it, r) {
+    const d = it.dep;
+    if (!d) return true;
+    const v = getPath(r, d.path);
+    if (d.truthy && !v) return false;
+    if (d.falsy && v) return false;
+    if (d.oneOf && d.oneOf.indexOf(v) < 0) return false;
+    if (d.notOneOf && d.notOneOf.indexOf(v) >= 0) return false;
+    if (d.equals !== undefined && v !== d.equals) return false;
+    if (d.notEquals !== undefined && v === d.notEquals) return false;
+    return true;
+  }
+  function applyVisibility() {
+    registry.forEach((b) => {
+      const row = b.el.closest('.row');
+      if (!row) return;
+      const ok = depOK(b.it, state.city);
+      row.classList.toggle('dimmed', !ok);
+      row.querySelectorAll('input, select').forEach((inp) => { inp.disabled = !ok; });
+    });
+  }
 
   /* ----------------------------- 控件定义 ----------------------------- */
   const STYLES = [
@@ -37,14 +58,17 @@
       { path: 'w', label: '城宽', type: 'range', min: 60, max: 200, step: 2, unit: 'm' },
       { path: 'd', label: '城深', type: 'range', min: 50, max: 180, step: 2, unit: 'm' },
       { path: 'wallH', label: '城墙高', type: 'range', min: 6, max: 14, step: 0.5, unit: 'm' },
-      { path: 'wallT', label: '墙底厚', type: 'range', min: 3, max: 8, step: 0.2, unit: 'm' },
-      { path: 'wallTaper', label: '收分（顶厚比）', type: 'range', min: 0, max: 0.4, step: 0.02 },
-      { path: 'gateW', label: '城门洞宽', type: 'range', min: 8, max: 16, step: 0.5, unit: 'm' }
+      { path: 'wallT', label: '墙底厚', type: 'range', min: 3, max: 8, step: 0.2, unit: 'm', dep: { path: 'wallProfile', equals: 'custom' } },
+      { path: 'wallProfile', label: '城墙收分档', type: 'select', opts: GF.WALL_PROFILE_OPTS },
+      { path: 'wallTaper', label: '收分（顶厚比）', type: 'range', min: 0, max: 0.5, step: 0.02, digits: 4, dep: { path: 'wallProfile', equals: 'custom' } },
+      { path: 'gateW', label: '城门洞宽', type: 'range', min: 8, max: 16, step: 0.5, unit: 'm' },
+      { path: 'gateArch', label: '门洞样式', type: 'select', opts: [{ v: 'arch', t: '券门（半圆拱）' }, { v: 'guijiao', t: '圭角门（平顶抹角）' }] }
     ] },
     { title: '二 · 街网与地块', items: [
       { path: 'cols', label: '街网·东西列', type: 'range', min: 2, max: 6, step: 1, unit: '坊' },
       { path: 'rows', label: '街网·南北行', type: 'range', min: 2, max: 6, step: 1, unit: '坊' },
       { path: 'roadW', label: '主街宽', type: 'range', min: 6, max: 16, step: 0.5, unit: 'm' },
+      { path: 'streetMode', label: '街市模式', type: 'select', opts: [{ v: 'market', t: '街市（开放街巷）' }, { v: 'ward', t: '坊制（坊墙+坊门）' }] },
       { path: 'life', label: '生活层（摊/幌/灯）', type: 'toggle' },
       { path: 'lifeDensity', label: '生活层密度', type: 'range', min: 0.1, max: 1, step: 0.05 },
       { path: 'night', label: '夜市模式（灯更多）', type: 'toggle' },
@@ -127,7 +151,21 @@
         op.value = o.v; op.textContent = o.t;
         sel.appendChild(op);
       });
-      sel.addEventListener('change', () => { setPath(state.city, it.path, sel.value); onChange(it.path); });
+      sel.addEventListener('change', () => {
+        setPath(state.city, it.path, sel.value);
+        if (it.path === 'wallProfile' || it.path === 'wallH') {
+          const sec = GF.wallProfileSection ? GF.wallProfileSection(state.city.wallProfile, state.city.wallH, state.city.wallT) : null;
+          if (sec) {
+            state.city.wallT = sec.base;
+            state.city.wallTaper = +(1 - sec.top / sec.base).toFixed(4);
+          } else {
+            const p = GF.WALL_PROFILES && GF.WALL_PROFILES[state.city.wallProfile];
+            if (p && p.ratio) state.city.wallTaper = +(1 - 1 / p.ratio).toFixed(4);
+          }
+          syncControls();
+        }
+        onChange(it.path);
+      });
       registry.push({ el: sel, it, kind: 'select' });
       return row;
     }
@@ -151,7 +189,10 @@
       <span class="val"></span></div>`;
     const rg = row.querySelector('input');
     const val = row.querySelector('.val');
-    const fmt = (v) => (it.step < 1 ? Number(v).toFixed(2) : Number(v)) + (it.unit || '');
+    const fmt = (v) => {
+      const dec = it.digits != null ? it.digits : (it.step < 1 ? 2 : 0);
+      return Number(v).toFixed(dec) + (it.unit || '');
+    };
     rg.addEventListener('input', () => {
       if (it.path === 'render.pitch') {
         val.textContent = fmt(rg.value);
@@ -191,6 +232,7 @@
       box.appendChild(body);
       host.appendChild(box);
     });
+    applyVisibility();
   }
 
   function syncControls() {
@@ -208,6 +250,7 @@
     const pct = Math.round((rp.persp == null ? 1 : rp.persp) * 100);
     if ($('#perspRange')) { $('#perspRange').value = pct; $('#perspVal').textContent = pct; }
     setCamInfo();
+    applyVisibility();
   }
 
   function setCamInfo() {

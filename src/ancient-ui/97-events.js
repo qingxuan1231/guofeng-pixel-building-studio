@@ -8,6 +8,7 @@
       c.textContent = p.name;
       c.dataset.key = p.key;
       c.addEventListener('click', () => {
+        state.viewCenter = null;
         state.recipe = GF.getPreset(p.key);
         state.panX = state.panY = 0;
         state.view = 'all';
@@ -58,6 +59,7 @@
     }
 
     $('#btnRandom').addEventListener('click', () => {
+      state.viewCenter = null;
       state.recipe = GF.randomRecipe(Date.now() % 1e9);
       state.view = 'all';
       state.refit = true;
@@ -76,6 +78,7 @@
       const fr = new FileReader();
       fr.onload = () => {
         try {
+          state.viewCenter = null;
           state.recipe = GF.normalize(JSON.parse(fr.result));
           state.view = 'all';
           state.refit = true;
