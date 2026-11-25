@@ -17,7 +17,7 @@
     const ux = (o.x || 0) + sh.dx, uz = (o.z || 0) + sh.dz;
     u.mesh.translate(ux, o.y || 0, uz);
     mb.merge(u.mesh);
-    regUnit(mb, o.tag, o.tag, ux, uz, unit.W, unit.D, 0, u.topY + (o.y || 0), rr.baseH);
+    regUnit(mb, o.tag, o.tag, ux, uz, unit.W, unit.D, 0, u.topY + (o.y || 0), rr.baseH, false, u.parts, o.y || 0);
     const bh = o.statBaseH != null ? o.statBaseH : rr.baseH;
     layStats(mb).axis.push({
       tag: o.tag, x: ux, z: uz, W: unit.W, D: unit.D,
@@ -39,7 +39,7 @@
     u.mesh.rotateY(rot);
     u.mesh.translate(ux, 0, uz);
     mb.merge(u.mesh);
-    regUnit(mb, o.tag, o.tag, ux, uz, unit.W, unit.D, rot, u.topY, rr.baseH);
+    regUnit(mb, o.tag, o.tag, ux, uz, unit.W, unit.D, rot, u.topY, rr.baseH, false, u.parts);
     layStats(mb).flanks.push({
       tag: o.tag, x: ux, z: uz, W: unit.W, D: unit.D,
       baseH: o.r && o.r.baseH != null ? o.r.baseH : rr.baseH, rot
@@ -157,7 +157,7 @@
       const sh = unitShift(r, id);
       main.mesh.translate(sh.dx, 0, zMain + sh.dz);
       mb.merge(main.mesh);
-      regUnit(mb, id, '第 ' + (j + 1) + ' 进正房', sh.dx, zMain + sh.dz, um.W, um.D, 0, main.topY, ru.baseH);
+      regUnit(mb, id, '第 ' + (j + 1) + ' 进正房', sh.dx, zMain + sh.dz, um.W, um.D, 0, main.topY, ru.baseH, false, main.parts);
       // 内隔墙（末进不砌）：两侧各一段，中留 1.6m 内门，门上压门楣与小门罩
       if (j < jin - 1) {
         const zW = zBack;
@@ -201,7 +201,7 @@
       const sh = unitShift(r, id);
       wing.mesh.translate(wx + sh.dx, 0, zWing + sh.dz);
       mb.merge(wing.mesh);
-      regUnit(mb, id, sx > 0 ? '东厢房' : '西厢房', wx + sh.dx, zWing + sh.dz, um.W, um.D, rot, wing.topY, ru.baseH);
+      regUnit(mb, id, sx > 0 ? '东厢房' : '西厢房', wx + sh.dx, zWing + sh.dz, um.W, um.D, rot, wing.topY, ru.baseH, false, wing.parts);
     }
 
     // 抄手游廊（首进两侧，从门内直抵首进正房前）

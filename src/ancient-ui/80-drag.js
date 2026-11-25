@@ -122,7 +122,7 @@
     dragRaf = requestAnimationFrame(() => {
       dragRaf = 0;
       try {
-        state.mesh = GF.build(state.recipe);
+        state.mesh = GF.build(state.recipe, { ppm: state.recipe.render.ppm });
         state.moves = state.mesh.moves || state.moves;
         const opts = previewOpts({ ppm: Math.min(state.recipe.render.ppm, 14), pad: 5 });
         state.frame = GF.render(state.mesh, opts);
@@ -144,7 +144,7 @@
     if (dragRaf) { cancelAnimationFrame(dragRaf); dragRaf = 0; }
     try {
       // 最后一次 input 可能还没被 rAF 画出来，收尾时按当前配方重建一次，再把完整帧补回来
-      state.mesh = GF.build(state.recipe);
+      state.mesh = GF.build(state.recipe, { ppm: state.recipe.render.ppm });
       state.moves = state.mesh.moves || state.moves;
       renderFullPreview();
     } catch (e) { console.error(e); }

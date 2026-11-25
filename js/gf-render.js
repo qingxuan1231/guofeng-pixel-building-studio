@@ -1418,7 +1418,13 @@
     const pitch = o.pitch == null ? 30 : o.pitch;
     const psOpts = { persp: o.persp == null ? 0 : o.persp };
     let maxW = 2, maxH = 2;
-    for (let yaw = 0; yaw < 360; yaw += 15) {
+    // 给定当前旋向时只算这一朝向：320px/m 下不能把 360° 的最坏包围盒当画幅，
+    // 否则边框能把画布撑到两万像素宽，浏览器直接画不出来。转动时按新朝向重算，
+    // 模型像素密度始终是用户设的值，只是画幅贴着当前朝向收。
+    const yaws = o.yaw == null
+      ? Array.from({ length: 24 }, (_, i) => i * 15)
+      : [((o.yaw % 360) + 360) % 360];
+    for (const yaw of yaws) {
       const cam = camera(yaw, pitch);
       const ps = makePersp(b, cam, psOpts);
       const cdepth = ps ? ps.c[0] * cam.view[0] + ps.c[1] * cam.view[1] + ps.c[2] * cam.view[2] : 0;
@@ -1434,8 +1440,9 @@
       maxW = Math.max(maxW, x1 - x0);
       maxH = Math.max(maxH, y1 - y0);
     }
-    // 留出足够远观余量：画布仍铺满舞台，模型缩到约 55~60%，转到任何朝向都不会顶边
-    return [maxW * 1.6, maxH * 1.6];
+    // 当前朝向只留 8% 余量；360° 扫掠仍保留 60% 远观余量（城池页用）
+    const margin = o.margin == null ? (o.yaw == null ? 1.6 : 1.08) : o.margin;
+    return [maxW * margin, maxH * margin];
   };
 
   /* --------------------------- 多方向与精灵表 --------------------------- */

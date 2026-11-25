@@ -282,6 +282,18 @@
       }
       return b;
     }
+    // 按标签筛出子网格：构件级拆分 / 隐藏用，不重建几何
+    subset(pred) {
+      const out = new GF.Mesh();
+      for (let t = 0; t < this.tag.length; t++) {
+        if (!pred(String(this.tag[t]), this.mat[t])) continue;
+        const p = t * 9;
+        for (let k = 0; k < 9; k++) { out.pos.push(this.pos[p + k]); out.nrm.push(this.nrm[p + k]); }
+        out.mat.push(this.mat[t]); out.tag.push(this.tag[t]);
+        out.wx.push(this.wx[t]); out.wz.push(this.wz[t]);
+      }
+      return out;
+    }
   };
 
   /* ------------------------------ 颜色 ------------------------------ */

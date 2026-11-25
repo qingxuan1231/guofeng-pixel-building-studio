@@ -61,12 +61,22 @@
     P.railing(baseMesh, { a: [mW * 0.36, mz + mD / 2 + 1.8], b: [mW * 0.36, mz + mD / 2], y: mBase + 0.06, style: 'marble', tag: '月台栏' });
     // 台基跟殿身共用同一份 unitShift：拖动大雄宝殿时台基、月台、踏跺、栏杆一起走
     baseMesh.translate(msh.dx, 0, msh.dz);
-    mb.merge(baseMesh);
+    const baseHide = !!(r.units && r.units['大雄宝殿'] && r.units['大雄宝殿'].parts && r.units['大雄宝殿'].parts.hide && r.units['大雄宝殿'].parts.hide.base);
+    if (!baseHide) mb.merge(baseMesh);
     axisUnit(mb, r, {
       tag: '大雄宝殿', z: mz, y: terrTop - 0.12, statBaseH: mBase,
       r: { baseH: 0.12, dougong: true, dgScale: 0.9, dgStyle: 'full', railing: true },
       unit: { W: mW, D: mD, bays: 5, roofType: 'hip', eave: 1.2, veranda: true, partition: 1.2 }
     });
+    // 把三层台基并进「大雄宝殿」的台基构件：选中 / 隐藏台基时连大台基一起处理
+    const bigBase = baseMesh.triCount ? baseMesh.bounds() : null;
+    const su = mb.units && mb.units[mb.units.length - 1];
+    if (bigBase && su && su.id === '大雄宝殿' && su.parts && su.parts.base) {
+      const pb = su.parts.base;
+      pb.x0 = Math.min(pb.x0, bigBase.x0); pb.x1 = Math.max(pb.x1, bigBase.x1);
+      pb.z0 = Math.min(pb.z0, bigBase.z0); pb.z1 = Math.max(pb.z1, bigBase.z1);
+      pb.y0 = Math.min(pb.y0, bigBase.y0); pb.y1 = Math.max(pb.y1, bigBase.y1);
+    }
     P.censer(mb, 0, mz + mD / 2 + 2.4, 1.3, '香炉');
     for (const sx of [-1, 1]) P.lion(mb, sx * (mW / 2 + 0.9), mz + mD / 2 + 1.6, 1.0, '石狮');
 
@@ -139,12 +149,21 @@
     baseMesh.box(-mW * 0.34, mW * 0.34, 0, mBase, mz + mD / 2, mz + mD / 2 + 1.6, 'stoneDark', '三清月台');
     baseMesh.box(-mW * 0.34, mW * 0.34, mBase, mBase + 0.06, mz + mD / 2, mz + mD / 2 + 1.6, 'stone', '月台台面');
     baseMesh.translate(msh.dx, 0, msh.dz);
-    mb.merge(baseMesh);
+    const baseHide = !!(r.units && r.units['三清殿'] && r.units['三清殿'].parts && r.units['三清殿'].parts.hide && r.units['三清殿'].parts.hide.base);
+    if (!baseHide) mb.merge(baseMesh);
     axisUnit(mb, r, {
       tag: '三清殿', z: mz, y: terrTop - 0.12, statBaseH: mBase,
       r: { baseH: 0.12, dougong: true, dgScale: 0.85, dgStyle: 'full', railing: true },
       unit: { W: mW, D: mD, bays: 5, roofType: 'gableHip', eave: 1.1, veranda: true, partition: 1.2 }
     });
+    const bigBase = baseMesh.triCount ? baseMesh.bounds() : null;
+    const su = mb.units && mb.units[mb.units.length - 1];
+    if (bigBase && su && su.id === '三清殿' && su.parts && su.parts.base) {
+      const pb = su.parts.base;
+      pb.x0 = Math.min(pb.x0, bigBase.x0); pb.x1 = Math.max(pb.x1, bigBase.x1);
+      pb.z0 = Math.min(pb.z0, bigBase.z0); pb.z1 = Math.max(pb.z1, bigBase.z1);
+      pb.y0 = Math.min(pb.y0, bigBase.y0); pb.y1 = Math.max(pb.y1, bigBase.y1);
+    }
     P.censer(mb, 0, mz + mD / 2 + 2.0, 1.2, '香炉');
 
     // 东西配殿：执事房 / 客堂
@@ -203,7 +222,7 @@
     const dzSh = unitShift(r, '倒座');
     dzUnit.mesh.translate(dzSh.dx, 0, dz + dzSh.dz);
     mb.merge(dzUnit.mesh);
-    regUnit(mb, '倒座', '倒座房', dzSh.dx, dz + dzSh.dz, dzGeom.W, dzGeom.D, 180, dzUnit.topY, 0.25);
+    regUnit(mb, '倒座', '倒座房', dzSh.dx, dz + dzSh.dz, dzGeom.W, dzGeom.D, 180, dzUnit.topY, 0.25, false, dzUnit.parts);
     layStats(mb).axis.push({ tag: '倒座', x: 0, z: dz, W: 8.0, D: 3.2, baseH: 0.25, topY: dzUnit.topY });
 
     // 垂花门（一进 / 二进）
@@ -256,7 +275,7 @@
     const zbSh = unitShift(r, '后罩房');
     zbUnit.mesh.translate(zbSh.dx, 0, zb + zbSh.dz);
     mb.merge(zbUnit.mesh);
-    regUnit(mb, '后罩房', '后罩房', zbSh.dx, zb + zbSh.dz, zbGeom.W, zbGeom.D, 180, zbUnit.topY, 0.4);
+    regUnit(mb, '后罩房', '后罩房', zbSh.dx, zb + zbSh.dz, zbGeom.W, zbGeom.D, 180, zbUnit.topY, 0.4, false, zbUnit.parts);
     layStats(mb).axis.push({ tag: '后罩房', x: 0, z: zb, W: 8.4, D: 3.0, baseH: 0.4, topY: zbUnit.topY });
 
     // 抄手游廊：沿东西院墙串联各进

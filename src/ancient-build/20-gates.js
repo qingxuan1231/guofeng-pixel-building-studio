@@ -229,7 +229,7 @@
     const u = r.units && id != null ? r.units[id] : null;
     return u && typeof u === 'object' ? u : null;
   }
-  const UNIT_GEOM = ['W', 'D', 'bays', 'floors', 'roofType', 'eave', 'floorH', 'veranda', 'partition', 'plaque', 'cheap'];
+  const UNIT_GEOM = ['W', 'D', 'bays', 'floors', 'roofType', 'eave', 'floorH', 'veranda', 'partition', 'plaque', 'cheap', 'parts'];
   const UNIT_RECIPE = ['baseH', 'floorH', 'slope', 'upturn', 'wallMat', 'colMat', 'winPattern', 'winW', 'winH',
     'doorStyle', 'doorW', 'doorH', 'plaque', 'tileColor', 'tile', 'tileB', 'railing', 'pedestal', 'steps'];
   function unitGeom(base, ov) {
@@ -256,21 +256,44 @@
     const u = r.units && id != null ? r.units[id] : null;
     return { dx: u && u.dx != null ? +u.dx : 0, dz: u && u.dz != null ? +u.dz : 0 };
   }
+  // 构件局部包围盒 → 世界坐标：先绕 Y 旋转，再平移到这一栋的落点
+  function shiftPartBoxes(parts, x, z, rot, yOff) {
+    const out = {};
+    const a = ((rot || 0) * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
+    yOff = yOff || 0;
+    Object.keys(parts || {}).forEach((k) => {
+      const b = parts[k];
+      if (!b) return;
+      let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+      for (const px of [b.x0, b.x1]) for (const pz of [b.z0, b.z1]) {
+        const wx = px * ca + pz * sa + (x || 0);
+        const wz = -px * sa + pz * ca + (z || 0);
+        if (wx < x0) x0 = wx; if (wx > x1) x1 = wx;
+        if (wz < z0) z0 = wz; if (wz > z1) z1 = wz;
+      }
+      out[k] = { x0, x1, z0, z1, y0: b.y0 + yOff, y1: b.y1 + yOff };
+    });
+    return out;
+  }
   // 登记一栋（画布点选、线框与编辑器都靠这条；同时进 moves 供按点位拾取）
-  function regUnit(mb, id, label, x, z, W, D, rot, topY, baseH, fixed) {
+  function regUnit(mb, id, label, x, z, W, D, rot, topY, baseH, fixed, parts, yOff) {
     if (!mb.units) mb.units = [];
     mb.units.push({
       id: String(id), label: label || String(id), x: +(x || 0).toFixed(2), z: +(z || 0).toFixed(2),
       W: +W.toFixed(2), D: +D.toFixed(2), rot: Math.round(rot || 0),
-      topY: +(topY || 0).toFixed(2), baseH: +(baseH || 0).toFixed(2), fixed: !!fixed
+      topY: +(topY || 0).toFixed(2), baseH: +(baseH || 0).toFixed(2), fixed: !!fixed,
+      parts: parts ? shiftPartBoxes(parts, x, z, rot, yOff) : null
     });
     mb.moves.push({ key: 'u:' + id, label: label || String(id), x: x || 0, z: z || 0, r: Math.max(W, D) / 2 });
   }
 
   function houseUnit(r, o) {
+    // 构件级拆分：台基 / 屋身 / 屋面各建一张子网格，再按需要合并。
+    // 子网格的包围盒登记到 unit.parts，供古建页按「这一栋的台基 / 屋身 / 屋面」选中和隐藏。
+    const kb = new GF.Mesh(), kbBody = new GF.Mesh(), kbRoof = new GF.Mesh();
     const m = new GF.Mesh();
-    const W = o.W, D = o.D;    const b = base(m, r, { W, D });
-    const top = body(m, {
+    const W = o.W, D = o.D;    const b = base(kb, r, { W, D });
+    const top = body(kbBody, {
       W, D, baseY: b.h + 0.04, floors: o.floors || 1, floorH: r.floorH, floorHList: o.floorHList,
       bays: o.bays || 3, wallMat: r.wallMat, colMat: r.colMat, cut: o.cut || {},
       winW: r.winW, winH: r.winH, winPattern: r.winPattern,
@@ -284,15 +307,15 @@
       const vz = D / 2 + eo * 0.78;
       for (let i = 0; i <= (o.bays || 3); i++) {
         const x = -W / 2 + (W * i) / (o.bays || 3);
-        m.cyl(x, vz, 0.16, b.h + 0.04, top.topY - 0.32, 8, r.colMat, '廊柱');
-        m.boxC(x, vz, 0.26, 0.26, b.h + 0.04, b.h + 0.17, 'stone', '柱础');
+        kbBody.cyl(x, vz, 0.16, b.h + 0.04, top.topY - 0.32, 8, r.colMat, '廊柱');
+        kbBody.boxC(x, vz, 0.26, 0.26, b.h + 0.04, b.h + 0.17, 'stone', '柱础');
       }
-      GF.beamBetween(m, [-W / 2, top.topY - 0.42, vz], [W / 2, top.topY - 0.42, vz], 0.14, 0.26, 'wood', '檐枋');
-      GF.beamBetween(m, [-W / 2, top.topY - 0.7, vz], [W / 2, top.topY - 0.7, vz], 0.06, 0.16, 'wood', '挂落');
+      GF.beamBetween(kbBody, [-W / 2, top.topY - 0.42, vz], [W / 2, top.topY - 0.42, vz], 0.14, 0.26, 'wood', '檐枋');
+      GF.beamBetween(kbBody, [-W / 2, top.topY - 0.7, vz], [W / 2, top.topY - 0.7, vz], 0.06, 0.16, 'wood', '挂落');
     }
     // 室内隔断（碧纱橱）
     if (o.partition != null) {
-      P.partition(m, {
+      P.partition(kbBody, {
         dir: 'front', at: o.partition,
         u0: -W / 2 + 0.6, u1: W / 2 - 0.6,
         v0: b.h + 0.06, v1: b.h + r.floorH - 0.3,
@@ -300,10 +323,10 @@
       });
     }
     (o.interior || []).forEach((it) => {
-      P.furniture(m, it.kind, it.x, it.z, it.s || 1, 0, '陈设·' + it.kind);
+      P.furniture(kbBody, it.kind, it.x, it.z, it.s || 1, 0, '陈设·' + it.kind);
     });
     if (!o.noRoof && !(o.cut || r.cut).roof) {
-      GF.roofs.build(m, {
+      GF.roofs.build(kbRoof, {
         cx: 0, cz: 0,
         x0: -W / 2 - eo, x1: W / 2 + eo,
         z0: -D / 2 - eo, z1: D / 2 + eo,
@@ -314,13 +337,41 @@
         ridgeStyle: 'plain', beasts: 0, gableMat: r.wallMat, tag: '屋面'
       });
       if (o.horseWall) {
-        P.horseHeadWall(m, { cx: 0, z: D / 2 + 0.1, halfLen: W / 2 + 0.4, y0: top.topY - 0.3, yTop: top.topY + r.slope * (D / 2 + r.eave) * 0.8, steps: 3, depth: 0.3 });
-        P.horseHeadWall(m, { cx: 0, z: -D / 2 - 0.1, halfLen: W / 2 + 0.4, y0: top.topY - 0.3, yTop: top.topY + r.slope * (D / 2 + r.eave) * 0.8, steps: 3, depth: 0.3 });
+        P.horseHeadWall(kbRoof, { cx: 0, z: D / 2 + 0.1, halfLen: W / 2 + 0.4, y0: top.topY - 0.3, yTop: top.topY + r.slope * (D / 2 + r.eave) * 0.8, steps: 3, depth: 0.3 });
+        P.horseHeadWall(kbRoof, { cx: 0, z: -D / 2 - 0.1, halfLen: W / 2 + 0.4, y0: top.topY - 0.3, yTop: top.topY + r.slope * (D / 2 + r.eave) * 0.8, steps: 3, depth: 0.3 });
       }
     }
     if (o.plaque) {
-      P.plaque(m, { dir: 'front', at: D / 2 - 0.02, uc: 0, vc: top.topY - 0.85, w: Math.min(2.2, W / 3), h: 0.52, chars: o.chars || 3 });
+      P.plaque(kbBody, { dir: 'front', at: D / 2 - 0.02, uc: 0, vc: top.topY - 0.85, w: Math.min(2.2, W / 3), h: 0.52, chars: o.chars || 3 });
     }
-    return { mesh: m, topY: top.topY, baseH: b.h };
+    const hide = (o.parts && o.parts.hide) || {};
+    // 屋身再按标签拆成：门 / 窗 / 廊柱 / 栏杆 / 其余墙体屋身。
+    // 这样台基、屋身、屋面之外，门窗柱栏也能单独选中和隐藏。
+    const isRail = (t) => /栏杆/.test(t);
+    const isDoor = (t) => /^(门|隔扇|板门|门扇|门框|门钉|门环|门槛|门楣)/.test(t);
+    const isWin = (t) => /^(窗|槛窗|格心|窗棂|窗纸|窗楣|窗台)/.test(t);
+    const isCol = (t) => /柱/.test(t) && !isRail(t);
+    const bodyCore = kbBody.subset((t) => !(isRail(t) || isDoor(t) || isWin(t) || isCol(t)));
+    const bodyDoors = kbBody.subset((t) => isDoor(t));
+    const bodyWins = kbBody.subset((t) => isWin(t));
+    const bodyCols = kbBody.subset((t) => isCol(t));
+    const bodyRails = kbBody.subset((t) => isRail(t));
+    if (!hide.base) m.merge(kb);
+    if (!hide.body) {
+      m.merge(bodyCore);
+      if (!hide.doors) m.merge(bodyDoors);
+      if (!hide.windows) m.merge(bodyWins);
+      if (!hide.columns) m.merge(bodyCols);
+      if (!hide.railing) m.merge(bodyRails);
+    }
+    if (!hide.roof) m.merge(kbRoof);
+    const box = (mm) => (mm.triCount ? mm.bounds() : null);
+    return {
+      mesh: m, topY: top.topY, baseH: b.h,
+      parts: {
+        base: box(kb), body: box(kbBody), roof: box(kbRoof),
+        doors: box(bodyDoors), windows: box(bodyWins), columns: box(bodyCols), railing: box(bodyRails)
+      }
+    };
   }
 

@@ -428,88 +428,156 @@
 
   /* ------------------------------ 台基 ------------------------------ */
   // style: xumizuo(须弥座) / plain(直台基) / stone(毛石台)
+  //
+  // 面数修复（本轮）：
+  // 台基原来是几十个 box / taper 叠出来的，两个毛病：
+  //   ① 每个 taper 自带上下盖面 → 段与段之间必然出现两张同高、同尺寸的盖面，
+  //      纯属白占面数，还会在 z-buffer 里逐像素抢深度（转视角时那一圈横纹在闪）；
+  //   ② 侧面石 / 缝底 / 铺地 / 玛瑙柱这些 3~16 mm 的薄板，在常规密度下只有零点几个
+  //      像素；js/gf-render.js 的交互轻量帧会把亚像素小面整片跳过（|area| < 0.55），
+  //      于是转动视角时整排细纹忽隐忽现 —— 这才是肉眼看到的“条纹闪烁”。
+  // 现在两条硬规矩：
+  //   ① 台身按断面环 loft：相邻两环之间只铺 4 条侧板，内部一张盖面都不封；
+  //   ② 小于 4 cm 的装饰不落几何，交给材质的砌缝肌理（逐像素算，不会闪）。
+  // 实测（qing 预置，ppm=320 档）：整块台基 3696 → 580 面，其中空台基（无踏跺）130 面；
+  // 台基内部的共面重叠面对 578 → 0。
+
+  // 断面方环：以中心定位的 4 个角点（俯视逆时针）
+  function rectRing(cx, cz, w, d, y) {
+    const x0 = cx - w / 2, x1 = cx + w / 2, z0 = cz - d / 2, z1 = cz + d / 2;
+    return [[x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1]];
+  }
+
+  // 断面环 loft：rings 自下而上，相邻两环之间只出 4 条侧板，上下盖面一刀不封。
+  // 两环同高、只收进尺寸时，这 4 条侧板就是一道水平压边，断面不会断开。
+  function loftRect(mb, cx, cz, rings, tag) {
+    for (let i = 1; i < rings.length; i++) {
+      const a = rings[i - 1], b = rings[i];
+      if (a.y === b.y && a.w === b.w && a.d === b.d) continue;
+      const s = rectRing(cx, cz, a.w, a.d, a.y);
+      const t = rectRing(cx, cz, b.w, b.d, b.y);
+      const mat = b.m || a.m || 'stone';
+      for (let k = 0; k < 4; k++) {
+        const j = (k + 1) % 4;
+        mb.quad(s[k], s[j], t[j], t[k], mat, tag);
+      }
+    }
+  }
+
+  // 顶面一张板：2 个三角面，不用 box 的 6 个面
+  function capRect(mb, cx, cz, w, d, y, mat, tag) {
+    const x0 = cx - w / 2, x1 = cx + w / 2, z0 = cz - d / 2, z1 = cz + d / 2;
+    mb.quad([x0, y, z1], [x1, y, z1], [x1, y, z0], [x0, y, z0], mat, tag);
+  }
+
   function platform(mb, o) {
     const h = o.h, tag = '台基';
     const style = o.style || 'xumizuo';
+    const det = GF.detailLevel();
+    // 三档形制统一按「中心 + 平面尺寸」定位，全部走同一套断面环 loft
+    const cx = (o.x0 + o.x1) / 2, cz = (o.z0 + o.z1) / 2;
+    const W = o.x1 - o.x0, D = o.z1 - o.z0;
 
     if (style === 'plain') {
-      // 直台基：陡板 + 阶条石压面
-      mb.box(o.x0, o.x1, 0, h - 0.1, o.z0, o.z1, 'stoneDark', tag + '·陡板');
-      mb.box(o.x0 - 0.05, o.x1 + 0.05, h - 0.1, h, o.z0 - 0.05, o.z1 + 0.05, 'stone', tag + '·阶条石');
-      for (let x = o.x0; x < o.x1 - 0.2; x += 1.2) {
-        mb.box(x + 0.02, Math.min(x + 1.18, o.x1 - 0.02), h - 0.1, h, o.z1 - 0.06, o.z1 + 0.05, 'slab', tag + '·阶条石');
-      }
-      mb.box(o.x0 + 0.02, o.x1 - 0.02, h, h + 0.04, o.z0 + 0.02, o.z1 - 0.02, 'stone', tag + '·台面');
+      // 直台基：陡板（暗）+ 阶条石外挑压面 + 台面。
+      // 原来是三块盒子叠起来：陡板顶面 / 阶条石底面、阶条石顶面 / 台面底面都同高，
+      // 现在并成一圈断面，这些内部盖面一张都不生成。
+      const rim = Math.max(0.05, h - 0.1), out = 0.05;
+      loftRect(mb, cx, cz, [
+        { y: 0, w: W, d: D },                                        // 陡板底（落地不封底）
+        { y: rim, w: W, d: D, m: 'stoneDark' },                       // 陡板立面
+        { y: rim, w: W + out * 2, d: D + out * 2, m: 'stoneDark' },   // 阶条石外挑
+        { y: h, w: W + out * 2, d: D + out * 2, m: 'slab' },          // 阶条石立面
+        { y: h, w: W - 0.04, d: D - 0.04, m: 'slab' }                 // 阶条石压面
+      ], tag);
+      // 台面：铺装砌缝交给 slabTop 材质（逐像素画，低档也不会退化成一条条细线）
+      capRect(mb, cx, cz, W - 0.04, D - 0.04, h, 'slabTop', tag + '·台面');
     } else if (style === 'stone') {
-      // 毛石台：乱石砌筑，缝里透暗
-      mb.box(o.x0, o.x1, 0, h, o.z0, o.z1, 'stoneDark', tag + '·台芯');
-      const rows = Math.max(1, Math.round(h / 0.28));
-      for (let r = 0; r < rows; r++) {
-        const y0 = (h * r) / rows, y1 = (h * (r + 1)) / rows - 0.02;
-        for (let x = o.x0; x < o.x1 - 0.1; x += 0.7) {
-          mb.box(x + 0.02, Math.min(x + 0.66, o.x1), y0 + 0.02, y1, o.z1 - 0.12, o.z1, 'stone', tag + '·毛石');
-        }
-        for (let z = o.z0; z < o.z1 - 0.1; z += 0.7) {
-          mb.box(o.x1 - 0.12, o.x1, y0 + 0.02, y1, z + 0.02, Math.min(z + 0.66, o.z1), 'stone', tag + '·毛石');
+      // 毛石台：一整圈台芯立面 + 台面。
+      // 乱石的块感交给材质砌缝（stoneDark / stone 的 mason 肌理），
+      // 精档才补真石块，而且只补正面一张四边形（2 面），不再一块一个盒子（12 面）。
+      loftRect(mb, cx, cz, [
+        { y: 0, w: W, d: D },
+        { y: h, w: W, d: D, m: 'stoneDark' },                // 台芯立面
+        { y: h, w: W - 0.04, d: D - 0.04, m: 'stoneDark' }   // 台面压边
+      ], tag);
+      capRect(mb, cx, cz, W - 0.04, D - 0.04, h, 'stoneBTop', tag + '·台面');
+      if (det >= 3) {
+        // 320 档才补真石块：块宽 0.66 m、缝 0.04 m（12.8 px），不会变成亚像素条纹
+        const rows = Math.max(1, Math.round(h / 0.28));
+        const off = 0.005;
+        for (let r = 0; r < rows; r++) {
+          const y0 = (h * r) / rows + 0.02, y1 = (h * (r + 1)) / rows - 0.02;
+          const mat = r % 2 ? 'stone' : 'stoneB';
+          for (let x = o.x0; x < o.x1 - 0.1; x += 0.7) {
+            const a = x + 0.02, b = Math.min(x + 0.66, o.x1);
+            if (b <= a) continue;
+            mb.quad([a, y0, o.z1 + off], [b, y0, o.z1 + off], [b, y1, o.z1 + off], [a, y1, o.z1 + off], mat, tag + '·毛石');
+            mb.quad([b, y0, o.z0 - off], [a, y0, o.z0 - off], [a, y1, o.z0 - off], [b, y1, o.z0 - off], mat, tag + '·毛石');
+          }
+          for (let z = o.z0; z < o.z1 - 0.1; z += 0.7) {
+            const a = z + 0.02, b = Math.min(z + 0.66, o.z1);
+            if (b <= a) continue;
+            mb.quad([o.x1 + off, y0, a], [o.x1 + off, y0, b], [o.x1 + off, y1, b], [o.x1 + off, y1, a], mat, tag + '·毛石');
+            mb.quad([o.x0 - off, y0, b], [o.x0 - off, y0, a], [o.x0 - off, y1, a], [o.x0 - off, y1, b], mat, tag + '·毛石');
+          }
         }
       }
-      mb.box(o.x0 + 0.02, o.x1 - 0.02, h, h + 0.04, o.z0 + 0.02, o.z1 - 0.02, 'stone', tag + '·台面');
     } else {
-      // 须弥座：六段线脚（圭脚—下枋—下枭—束腰—上枭—上枋），断面用棱台串起来，
-      // 320 px/m 时 0.1 m 的线脚收分就是 32 px，盒子叠不出这层转折。
-      const cx = (o.x0 + o.x1) / 2, cz = (o.z0 + o.z1) / 2;
-      const W = o.x1 - o.x0, D = o.z1 - o.z0;
-      const det = GF.detailLevel();
-      const inset = 0.18;
-      mb.box(o.x0, o.x1, 0, 0.12, o.z0, o.z1, 'stoneDark', tag + '·圭脚');
-      mb.taper(cx, cz, W - 0.02, D - 0.02, W - 0.10, D - 0.10, 0.12, 0.26, 'stone', tag + '·下枋');
-      mb.taper(cx, cz, W - 0.10, D - 0.10, W - 0.20, D - 0.20, 0.26, 0.33, 'stone', tag + '·下枭');
-      mb.taper(cx, cz, W - 0.20, D - 0.20, W - 0.34, D - 0.34, 0.33, 0.40, 'stoneDark', tag + '·下枭收');
-      const ya = 0.40, yb = Math.max(0.5, h - 0.32);
-      mb.box(o.x0 + 0.17, o.x1 - 0.17, ya, yb, o.z0 + 0.17, o.z1 - 0.17, 'stoneDark', tag + '·束腰');
-      // 束腰玛瑙柱：每 1.6 m 一道，只浅浅凸出 1.5 cm，同石材色——不是白条
+      // 须弥座：六段线脚（圭脚—下枋—下枭—束腰—上枭—上枋）用一圈断面环 loft 连起来。
+      // 320 px/m 时 0.1 m 的线脚收分就是 32 px，盒子叠不出这层转折，但棱台叠棱台
+      // 会在每道接缝处多一对同高盖面 —— 那就是原来条纹闪烁的来源，现在整条断面
+      // 一气贯通，接缝处一张盖面也没有。
+      const yb = Math.max(0.5, h - 0.32);
+      const rings = [
+        { y: 0, w: W, d: D },                                   // 圭脚底（落地不封底）
+        { y: 0.12, w: W, d: D, m: 'stoneDark' },                 // 圭脚
+        { y: 0.12, w: W - 0.02, d: D - 0.02, m: 'stoneDark' },    // 圭脚压边
+        { y: 0.26, w: W - 0.10, d: D - 0.10, m: 'stone' },        // 下枋
+        { y: 0.33, w: W - 0.20, d: D - 0.20, m: 'stone' },        // 下枭
+        // 下枭收这一段：低档兼作莲瓣带（原来是一排 26 cm 宽、2 cm 深的浅浮雕小盒，
+        // 40 档只有 0.8 px，纯属亚像素噪点），改成一圈浅色线脚，读起来是同一层意思。
+        { y: 0.40, w: W - 0.34, d: D - 0.34, m: (o.lotus && det < 2) ? 'marble' : 'stoneDark' },
+        { y: yb, w: W - 0.34, d: D - 0.34, m: 'stoneDark' },      // 束腰（退进去的暗带）
+        { y: yb + 0.1, w: W - 0.16, d: D - 0.16, m: 'stone' },    // 上枭
+        { y: h, w: W - 0.06, d: D - 0.06, m: 'marble' }           // 上枋
+      ];
+      loftRect(mb, cx, cz, rings, tag);
+      // 台面：上枋顶面一张板，铺装砌缝交给 slabTop 材质（逐像素算，任何密度下都稳定：
+      // 原来 320 档要铺 0.28 m 的石条、一块一个盒子，一块台基就上千面，且 8 mm 的缝
+      // 只有 2.6 px 宽，转视角时整片石缝在闪）。
+      const topW = W - 0.06, topD = D - 0.06;
+      capRect(mb, cx, cz, topW, topD, h, 'slabTop', tag + '·台面');
       if (det >= 2) {
-        for (let x = o.x0 + 0.4; x <= o.x1 - 0.3; x += 1.6) {
-          mb.box(x, x + 0.1, ya + 0.03, yb - 0.03, o.z1 - 0.185, o.z1 - 0.17, 'stone', tag + '·玛瑙柱');
-          mb.box(x, x + 0.1, ya + 0.03, yb - 0.03, o.z0 + 0.17, o.z0 + 0.185, 'stone', tag + '·玛瑙柱');
+        // 束腰玛瑙柱：每 1.6 m 一道竖线。原来凸出 1.5 cm（12 面/根，常规密度 0.6 px），
+        // 改成贴面一张竖板（2 面），靠颜色读，不靠那点凹凸。
+        const xw = W / 2 - 0.34, zw = D / 2 - 0.34, off = 0.004, hw = 0.05;
+        const ya2 = 0.44, yb2 = yb - 0.04;
+        for (let x = o.x0 + 0.6; x <= o.x1 - 0.6; x += 1.6) {
+          mb.quad([x - hw, ya2, cz + zw + off], [x + hw, ya2, cz + zw + off],
+                  [x + hw, yb2, cz + zw + off], [x - hw, yb2, cz + zw + off], 'stone', tag + '·玛瑙柱');
+          mb.quad([x + hw, ya2, cz - zw - off], [x - hw, ya2, cz - zw - off],
+                  [x - hw, yb2, cz - zw - off], [x + hw, yb2, cz - zw - off], 'stone', tag + '·玛瑙柱');
         }
-        for (let z = o.z0 + 0.4; z <= o.z1 - 0.3; z += 1.6) {
-          mb.box(o.x1 - 0.185, o.x1 - 0.17, ya + 0.03, yb - 0.03, z, z + 0.1, 'stone', tag + '·玛瑙柱');
-          mb.box(o.x0 + 0.17, o.x0 + 0.185, ya + 0.03, yb - 0.03, z, z + 0.1, 'stone', tag + '·玛瑙柱');
+        for (let z = o.z0 + 0.6; z <= o.z1 - 0.6; z += 1.6) {
+          mb.quad([cx + xw + off, ya2, z - hw], [cx + xw + off, ya2, z + hw],
+                  [cx + xw + off, yb2, z + hw], [cx + xw + off, yb2, z - hw], 'stone', tag + '·玛瑙柱');
+          mb.quad([cx - xw - off, ya2, z + hw], [cx - xw - off, ya2, z - hw],
+                  [cx - xw - off, yb2, z - hw], [cx - xw - off, yb2, z + hw], 'stone', tag + '·玛瑙柱');
         }
-        // 四角角柱：须弥座转角必须有石柱，不然四角是两片薄板对缝
+        // 四角角柱：转角一根石柱。原来是 8 cm 见方的盒子（只凸出 1 cm，还是亚像素），
+        // 现在每个转角两个贴面（各 2 面），示意柱身即可，总共 16 个三角面。
+        const pw = 0.09, cOff = 0.004;
         for (const sx of [-1, 1]) {
           for (const sz of [-1, 1]) {
-            mb.box(cx + sx * (W / 2 - 0.24), cx + sx * (W / 2 - 0.16), ya - 0.02, yb + 0.02,
-              cz + sz * (D / 2 - 0.24), cz + sz * (D / 2 - 0.16), 'marble', tag + '·角柱');
+            const px = cx + sx * xw, pz = cz + sz * zw;
+            const u0 = px - sx * pw;
+            mb.quad([u0, 0.40, pz + sz * cOff], [px, 0.40, pz + sz * cOff],
+                    [px, yb + 0.02, pz + sz * cOff], [u0, yb + 0.02, pz + sz * cOff], 'marble', tag + '·角柱');
+            const v0 = pz - sz * pw;
+            mb.quad([px + sx * cOff, 0.40, v0], [px + sx * cOff, 0.40, pz],
+                    [px + sx * cOff, yb + 0.02, pz], [px + sx * cOff, yb + 0.02, v0], 'marble', tag + '·角柱');
           }
-        }
-      }
-      // 上枭（外凸）+ 上枋
-      mb.taper(cx, cz, W - 0.34, D - 0.34, W - 0.16, D - 0.16, yb, yb + 0.1, 'stone', tag + '·上枭');
-      mb.taper(cx, cz, W - 0.16, D - 0.16, W - 0.06, D - 0.06, yb + 0.1, h, 'marble', tag + '·上枋');
-      if (det >= 2) {
-        // 台面铺条石：底下先垫一层暗色，再一块块铺上去，缝就是缝（8 mm，320 档 2.6 px），
-        // 比在整块台面上画线干净，也不会因抬起的“缝”反光变成白线。
-        mb.box(o.x0 + 0.02, o.x1 - 0.02, h, h + 0.03, o.z0 + 0.02, o.z1 - 0.02, 'stoneDark', tag + '·铺地垫层');
-        const g = 0.008, step = 1.2;
-        let j = 0;
-        for (let x = o.x0 + 0.02; x < o.x1 - 0.02; x += step, j++) {
-          let k = 0;
-          for (let z = o.z0 + 0.02; z < o.z1 - 0.02; z += step, k++) {
-            const x1 = Math.min(x + step - g, o.x1 - 0.02), z1 = Math.min(z + step - g, o.z1 - 0.02);
-            mb.box(x, x1, h + 0.03, h + 0.048, z, z1, (j + k) % 2 ? 'stone' : 'stoneB', tag + '·铺地');
-          }
-        }
-      } else {
-        mb.box(o.x0 + 0.02, o.x1 - 0.02, h, h + 0.04, o.z0 + 0.02, o.z1 - 0.02, 'stone', tag + '·台面');
-      }
-      // 莲瓣：精档不再做外挑的小白珠子（320 档下读成一排珍珠），
-      // 只在低档保留原来的浅浮雕点阵；须弥座的层次交给六段线脚 + 玛瑙柱 + 角柱。
-      if (o.lotus && det < 2) {
-        for (let x = o.x0 + 0.4; x < o.x1 - 0.3; x += 0.5) {
-          mb.box(x, x + 0.26, 0.34, 0.44, o.z1 - inset - 0.02, o.z1 - inset + 0.02, 'marble', tag + '·莲瓣');
-          mb.box(x, x + 0.26, 0.34, 0.44, o.z0 + inset - 0.02, o.z0 + inset + 0.02, 'marble', tag + '·莲瓣');
         }
       }
     }
@@ -523,24 +591,58 @@
       const zEdge = dirFront ? o.z1 : o.z0;
       for (let i = 0; i < st; i++) {
         const d = (i + 1) * (h / st);
+        // 与台明立面留 2 cm、级与级之间也留 2 cm：这点缝在像素画里正好是一条踏步暗线，
+        // 反而比把台阶埋进台明更好读；埋进去会让两级、垂带、御路石的底面大量重合。
         const za = zEdge + sgn * (i * 0.3 + 0.02);
         const zb = zEdge + sgn * ((i + 1) * 0.3);
         const zz0 = Math.min(za, zb), zz1 = Math.max(za, zb);
-        mb.box(-sw / 2, sw / 2, 0, h - d, zz0, zz1, 'stone', tag + '·踏跺');
-        // 垂带
+        // 每向下一级外放 1.5 cm：原来所有踏步同宽，侧面全在 x=±sw/2 这一张平面上互相重叠，
+        // 踏步侧面就是一片同高面（虽然多被垂带挡住，仍是白送的共面）。
+        const swI = sw / 2 + i * 0.015;
+        // 最下面一级 h-d 恰好为 0：原来照样吐出一个零高度的盒子（12 个退化三角面，
+        // 顶面与底面精确重合、彼此共面，等于白送 12 面 + 一堆共面重叠）。画面上它本来就不占像素。
+        if (h - d > 0.002) mb.box(-swI, swI, 0, h - d, zz0, zz1, 'stone', tag + '·踏跺');
+        if (det >= 3) {
+          // 踏跺也不能是一块整石：踏面按 0.4 m 分条石，立面每 0.4 m 一道暗缝。
+          // 但都不做成盒子了 —— 原来 12 mm 厚的踏面石盒、8 mm 宽的缝盒各 12 面，
+          // 一层台基光台阶就多出 500+ 面，而且盒底与踏面同高（共面）。现在只贴面：
+          // 踏面石是一张 2 面的板（抬 8 mm），缝是一张 2 面的竖板（4 mm 外贴）。
+          const topY = h - d;
+          let sx = -sw / 2;
+          let bi = 0;
+          while (sx < sw / 2 - 0.02) {
+            const ex = Math.min(sx + 0.4, sw / 2);
+            const a = sx, b = ex - 0.008;
+            if (b > a) {
+              mb.quad([a, topY + 0.008, zz1], [b, topY + 0.008, zz1],
+                      [b, topY + 0.008, zz0], [a, topY + 0.008, zz0], bi % 2 ? 'stone' : 'stoneB', tag + '·踏面石');
+            }
+            sx = ex; bi++;
+          }
+          const zFace = dirFront ? zz1 : zz0;
+          const zOut = zFace + sgn * 0.004;
+          for (let x = -sw / 2 + 0.4; x < sw / 2 - 0.02; x += 0.4) {
+            mb.quad([x - 0.004, 0.02, zOut], [x + 0.004, 0.02, zOut],
+                    [x + 0.004, Math.max(0.03, topY - 0.01), zOut], [x - 0.004, Math.max(0.03, topY - 0.01), zOut], 'stoneDark', tag + '·踏跺缝');
+          }
+        }
+        // 垂带：往台阶里多压 2 cm、两端各外放 1.2 cm。
+        // 原来垂带内侧与台阶侧面、前后与台阶立面完全共面，两张面就在这几条边上抢深度。
         for (const s of [-1, 1]) {
-          mb.box(s * sw / 2, s * (sw / 2 + 0.26), 0, h - d + 0.16, zz0, zz1, 'slab', tag + '·垂带');
+          mb.box(s * (swI - 0.02), s * (swI + 0.26), 0, h - d + 0.16, zz0 - sgn * 0.012, zz1 + sgn * 0.012, 'slab', tag + '·垂带');
         }
         // 御路石：三级以上踏跺居中铺一条通长的斜板。
         // 原来只在最上一级放一块 marble，结果台面上凭空多出一个白色矩形；
         // 现在每一级都铺，连成一条从台明直落到底的白色石带，最低一级加云纹。
+        // 石带四周各外放 1.2 cm：原来它与台阶的立/背立面同高同宽，两张面完全共面，
+        // 台阶正中那条白带会跟着视角闪 —— 现在它是一块压在台阶上的凸板。
         if (st >= 3) {
           const pw = Math.min(1.1, sw * 0.42);
-          mb.box(-pw / 2, pw / 2, 0.02, h - d + 0.035, zz0, zz1, 'marble', tag + '·御路石');
+          mb.box(-pw / 2, pw / 2, 0.02, h - d + 0.035, zz0 - 0.012, zz1 + 0.012, 'marble', tag + '·御路石');
           if (i === st - 1) {
             for (let k = 0; k < 3; k++) {
               const qa = Math.min(zz0 + 0.04 + k * 0.09, zz0 + 0.08 + k * 0.09);
-              mb.box(-pw / 2 + 0.06, pw / 2 - 0.06, h - d + 0.036, h - d + 0.052, qa, qa + 0.04, 'marbleB', tag + '·御路云纹');
+              mb.box(-pw / 2 + 0.06, pw / 2 - 0.06, h - d + 0.045, h - d + 0.061, qa, qa + 0.04, 'marbleB', tag + '·御路云纹');
             }
           }
         }

@@ -24,10 +24,23 @@
     return out;
   }
   function bldParts() {
-    // 多建筑院落：栏上给每一栋单独一张卡（id 来自 gf-build 的 mb.units），
-    // 这样点「东厢房」就只改东厢房，不再整院共用一套参数。
+    // 多建筑院落：先列每一栋；选中某栋后，再把这一栋拆成台基 / 屋身 / 屋面。
+    // 单栋建筑仍走原来的 台基 / 每层 / 屋面。
     const us = bldUnits();
-    if (us) return us.map((u) => ({ k: 'u:' + u.id, t: u.label || u.id }));
+    if (us) {
+      const out = us.map((u) => ({ k: 'u:' + u.id, t: u.label || u.id }));
+      const m = state.selPart && /^u:([^:]+)(?::(base|body|roof|doors|windows|columns|railing))?$/.exec(state.selPart.k);
+      if (m) {
+        const u = us.filter((x) => x.id === m[1])[0];
+        if (u && u.parts) {
+          const names = { base: '台基', body: '屋身', roof: '屋面', doors: '门', windows: '窗', columns: '廊柱', railing: '栏杆' };
+          Object.keys(names).forEach((k) => {
+            if (u.parts[k]) out.push({ k: 'u:' + u.id + ':' + k, t: names[k] });
+          });
+        }
+      }
+      return out;
+    }
     const hs = bldH();
     const parts = [{ k: 'base', t: '台基' }];
     hs.forEach((h, i) => parts.push({ k: 'f' + i, t: hs.length === 1 ? '屋身' : '第 ' + (i + 1) + ' 层' }));
@@ -83,6 +96,8 @@
   function paintBldBar() {
     const bar = $('#bldBar');
     if (!bar) return;
+    // 选中某一栋后要临时多出「台基 / 屋身 / 屋面」三张卡；只切换 on 不会把它们加进 DOM
+    if (bar.querySelectorAll('.comp-chip[data-k]').length !== bldParts().length) { buildBldBar(); return; }
     const cur = bldCur();
     bar.querySelectorAll('.comp-chip[data-k]').forEach((b) => {
       b.classList.toggle('on', b.dataset.k === cur.k);
@@ -100,6 +115,12 @@
       return bb ? { x0: bb.x0, x1: bb.x1, z0: bb.z0, z1: bb.z1, y0: 0, y1: bb.y1 } : null;
     }
     if (k && k.slice(0, 2) === 'u:') {
+      const m = /^u:([^:]+):(base|body|roof|doors|windows|columns|railing)$/.exec(k);
+      if (m) {
+        const u = (bldUnits() || []).filter((x) => x.id === m[1])[0];
+        const pb = u && u.parts && u.parts[m[2]];
+        return pb ? { x0: pb.x0, x1: pb.x1, z0: pb.z0, z1: pb.z1, y0: pb.y0, y1: pb.y1 } : null;
+      }
       const us = bldUnits() || [];
       const u = us.filter((x) => 'u:' + x.id === k)[0];
       if (!u) return null;
@@ -297,7 +318,65 @@
     const head = (t) => '<div class="cp-sub">' + t + '</div>';
     let body = '';
 
-    if (cur.k.slice(0, 2) === 'u:') {
+    if (/^u:[^:]+:(base|body|roof|doors|windows|columns|railing)$/.test(cur.k)) {
+      // —— 某一栋的构件级编辑：台基 / 屋身 / 屋面 / 门 / 窗 / 廊柱 / 栏杆
+      const pm = /^u:([^:]+):(base|body|roof|doors|windows|columns|railing)$/.exec(cur.k);
+      const id = pm[1], part = pm[2];
+      const us = bldUnits() || [];
+      const u = us.filter((x) => x.id === id)[0] || { W: 4, D: 3, topY: 4, baseH: 0.3 };
+      if (!r.units) r.units = {};
+      const ov = r.units[id] || (r.units[id] = {});
+      if (!ov.parts) ov.parts = {};
+      if (!ov.parts.hide) ov.parts.hide = {};
+      const p = 'units.' + id + '.';
+      const g = (key, dflt) => (ov[key] != null ? ov[key] : (r[key] != null ? r[key] : dflt));
+      const names = { base: '台基', body: '屋身', roof: '屋面', doors: '门', windows: '窗', columns: '廊柱', railing: '栏杆' };
+      body += head((u.label || id) + ' · ' + names[part]);
+      body += '<div class="cp-row cp-tip2">只改这一栋的' + names[part] + '；同院别的栋不受影响。</div>';
+      if (part === 'base') {
+        body += rng('台基高', p + 'baseH', 0.1, 1.4, 0.05, g('baseH', u.baseH || 0.3), 'm');
+        body += rng('踏跺级数', p + 'steps', 0, 6, 1, g('steps', 2));
+        body += sel('台基形制', p + 'pedestal', PED_NAMES, g('pedestal', 'xumizuo'));
+        body += tog('台基栏杆', p + 'railing', !!g('railing', false));
+        body += sel('栏杆样式', p + 'railStyle', RAILS, g('railStyle', 'wood'), !!g('railing', false));
+      } else if (part === 'body') {
+        body += rng('开间数', p + 'bays', 1, 7, 1, g('bays', 3));
+        body += rng('层数', p + 'floors', 1, 3, 1, g('floors', 1));
+        body += rng('层高', p + 'floorH', 2.0, 5.4, 0.05, g('floorH', 3.2), 'm');
+        body += sel('墙面材质', p + 'wallMat', WALL_MATS, g('wallMat', 'plaster'));
+        body += sel('立柱材质', p + 'colMat', COL_MATS, g('colMat', 'timber'));
+        body += tog('前廊', p + 'veranda', !!g('veranda', false));
+        body += sel('格心样式', p + 'winPattern', WINS, g('winPattern', 'step'));
+        body += rng('窗宽', p + 'winW', 0.6, 2.4, 0.05, g('winW', 1.2), 'm');
+        body += rng('窗高', p + 'winH', 0.7, 2.6, 0.05, g('winH', 1.4), 'm');
+        body += sel('门式', p + 'doorStyle', [{ v: 'leaf', t: '隔扇门' }, { v: 'panel', t: '板门' }], g('doorStyle', 'leaf'));
+        body += rng('门宽', p + 'doorW', 1.0, 3.0, 0.05, g('doorW', 1.8), 'm');
+        body += rng('门高', p + 'doorH', 1.8, 3.6, 0.05, g('doorH', 2.6), 'm');
+      } else if (part === 'doors') {
+        body += sel('门式', p + 'doorStyle', [{ v: 'leaf', t: '隔扇门' }, { v: 'panel', t: '板门' }], g('doorStyle', 'leaf'));
+        body += rng('门宽', p + 'doorW', 1.0, 3.0, 0.05, g('doorW', 1.8), 'm');
+        body += rng('门高', p + 'doorH', 1.8, 3.6, 0.05, g('doorH', 2.6), 'm');
+      } else if (part === 'windows') {
+        body += sel('格心样式', p + 'winPattern', WINS, g('winPattern', 'step'));
+        body += rng('窗宽', p + 'winW', 0.6, 2.4, 0.05, g('winW', 1.2), 'm');
+        body += rng('窗高', p + 'winH', 0.7, 2.6, 0.05, g('winH', 1.4), 'm');
+      } else if (part === 'columns') {
+        body += sel('立柱材质', p + 'colMat', COL_MATS, g('colMat', 'timber'));
+        body += tog('前廊', p + 'veranda', !!g('veranda', false));
+      } else if (part === 'railing') {
+        body += tog('栏杆', p + 'railing', !!g('railing', true));
+        body += sel('栏杆样式', p + 'railStyle', RAILS, g('railStyle', 'wood'), !!g('railing', true));
+      } else {
+        body += sel('屋顶形制', p + 'roofType', ROOF_TYPES, g('roofType', 'gable'));
+        body += sel('瓦色', p + 'tileColor', TILE_COLORS, g('tileColor', 'grey'));
+        body += rng('出檐', p + 'eave', 0.3, 2.0, 0.05, g('eave', 1.0), 'm');
+        body += rng('举折', p + 'slope', 0.32, 0.8, 0.01, g('slope', 0.5));
+        body += rng('起翘', p + 'upturn', 0, 0.7, 0.02, g('upturn', 0.4));
+        body += sel('正脊', p + 'ridgeStyle', [{ v: 'none', t: '无' }, { v: 'plain', t: '素脊' }, { v: 'ornate', t: '雕饰脊' }], g('ridgeStyle', 'plain'));
+        body += rng('脊兽数', p + 'beasts', 0, 5, 1, g('beasts', 0));
+      }
+      body += tog('隐藏此构件', p + 'parts.hide.' + part, !!ov.parts.hide[part]);
+    } else if (cur.k.slice(0, 2) === 'u:') {
       // —— 单体建筑编辑：只改这一栋（写 r.units[id]，构建时并回这一栋的配方）
       const id = cur.k.slice(2);
       const us = bldUnits() || [];

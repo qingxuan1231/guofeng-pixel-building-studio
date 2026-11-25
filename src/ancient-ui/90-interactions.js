@@ -169,7 +169,9 @@
     canvas.classList.remove('dragging');
     if (cameraMoved) {
       syncControls();
-      renderFullPreview();
+      // 320px/m 的完整帧是十几兆像素，拖完立刻重渲会明显卡住；
+      // 旋向/俯角操作只回到稳定的轻量轨道帧，完整精度留给导出与显式重建。
+      renderOrbit('视角');
     }
   });
   canvas.addEventListener('wheel', (e) => {

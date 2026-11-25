@@ -108,7 +108,7 @@
     // 新增件只进 env.items，预设件仍留在 env.auto，两段在面板里合起来排
     env.items.push({ k, x: +w.x.toFixed(2), z: +w.z.toFixed(2), y: 0, rot: 0, s: 1 });
     state.selItem = autoCount() + env.items.length - 1;
-    state.mesh = GF.build(state.recipe);
+    state.mesh = GF.build(state.recipe, { ppm: state.recipe.render.ppm });
     state.moves = state.mesh.moves || [];
     state.frame = GF.render(state.mesh, previewOpts());
     draw();

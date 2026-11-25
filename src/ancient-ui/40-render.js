@@ -32,9 +32,9 @@
   function fitExtentForPreview() {
     if (!state.mesh) return null;
     const r = state.recipe.render;
-    const key = [r.pitch, r.persp == null ? 0 : r.persp, state.mesh.triCount].join('|');
+    const key = [r.pitch, r.persp == null ? 0 : r.persp, ((r.yaw % 360) + 360) % 360, state.mesh.triCount].join('|');
     if (state.fitKey !== key) {
-      state.fitExtent = GF.fitExtents(state.mesh, { pitch: r.pitch, persp: r.persp == null ? 0 : r.persp });
+      state.fitExtent = GF.fitExtents(state.mesh, { pitch: r.pitch, persp: r.persp == null ? 0 : r.persp, yaw: r.yaw });
       state.fitKey = key;
     }
     return state.fitExtent;
@@ -42,7 +42,6 @@
   function previewOpts(extra) {
     return renderOpts(Object.assign({
       preview: true,
-      maxPixels: previewBudget(),
       gpu: state.gpu,
       gridMask: !!state.grid,
       viewport: [wrap.clientWidth || 1200, wrap.clientHeight || 800],
@@ -82,8 +81,11 @@
   function orbitOpts() {
     return previewOpts({
       orbit: true,
+      orbitFrame: state.lightFrame,
+      viewport: null,
       outline: false,
-      style: 'pixel'
+      style: 'pixel',
+      maxPixels: previewBudget()
     });
   }
 
@@ -95,10 +97,11 @@
 
   function rebuild(skipBld) {
     const r = state.recipe;
+    try { localStorage.setItem('gf.ppm', String(r.render.ppm)); } catch (e) {}
     if (state.playing) stopBuild(true);
     if (state.selItem != null && !envItems()[state.selItem]) state.selItem = null;
     try {
-      state.mesh = GF.build(r);
+      state.mesh = GF.build(r, { ppm: r.render.ppm });
       state.moves = state.mesh.moves || [];
       state.frame = GF.render(state.mesh, previewOpts());
       rememberViewFrame();

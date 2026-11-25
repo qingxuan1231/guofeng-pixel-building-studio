@@ -23,6 +23,13 @@
     grid: true
   };
 
+  // 像素密度是用户的出图设置，不属于配方内容：跨预设、刷新都保留，绝不回落到预设默认。
+  (function () {
+    let v = null;
+    try { v = Number(localStorage.getItem('gf.ppm')); } catch (e) {}
+    if (isFinite(v) && v >= 8 && v <= 320) state.recipe.render.ppm = v;
+  })();
+
   const $ = (s, el) => (el || document).querySelector(s);
   const canvas = $('#view');
   const ctx = canvas.getContext('2d');

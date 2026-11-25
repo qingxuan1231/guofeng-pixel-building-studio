@@ -9,7 +9,9 @@
       c.dataset.key = p.key;
       c.addEventListener('click', () => {
         state.viewCenter = null;
+        const ppm = state.recipe.render.ppm;
         state.recipe = GF.getPreset(p.key);
+        state.recipe.render.ppm = ppm;
         state.panX = state.panY = 0;
         state.view = 'all';
         state.refit = true;
@@ -60,7 +62,9 @@
 
     $('#btnRandom').addEventListener('click', () => {
       state.viewCenter = null;
+      const ppm = state.recipe.render.ppm;
       state.recipe = GF.randomRecipe(Date.now() % 1e9);
+      state.recipe.render.ppm = ppm;
       state.view = 'all';
       state.refit = true;
       markChip(null);
@@ -79,7 +83,9 @@
       fr.onload = () => {
         try {
           state.viewCenter = null;
+          const ppm = state.recipe.render.ppm;
           state.recipe = GF.normalize(JSON.parse(fr.result));
+          state.recipe.render.ppm = ppm;
           state.view = 'all';
           state.refit = true;
           markChip(null);
@@ -94,12 +100,12 @@
     $('#rotL').addEventListener('click', () => {
       if (lockView()) return;
       state.recipe.render.yaw = (state.recipe.render.yaw + 45) % 360;
-      updateCamInfo(); scheduleRender();
+      updateCamInfo(); renderOrbit('旋向');
     });
     $('#rotR').addEventListener('click', () => {
       if (lockView()) return;
       state.recipe.render.yaw = (state.recipe.render.yaw - 45 + 360) % 360;
-      updateCamInfo(); scheduleRender();
+      updateCamInfo(); renderOrbit('旋向');
     });
     $('#btnAxis').addEventListener('click', () => {
       if (lockView()) return;
@@ -109,7 +115,7 @@
       document.querySelectorAll('[data-view]').forEach((b) => b.classList.remove('on'));
       updateCamInfo();
       syncControls();
-      scheduleRender();
+      renderOrbit('中轴');
     });
     $('#btnBuild').addEventListener('click', playBuild);
     // 顶栏「像素密度」拉条：与面板里的 render.ppm 双向同步，拖动即重绘
