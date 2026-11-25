@@ -17,6 +17,16 @@
     water: 'water', waterB: 'water'
   };
 
+  // 转折压暗用的取整表：0.62/0.66 两个系数。用 Uint8ClampedArray 生成，
+  // 保证与「直接写进 Uint8ClampedArray」的取整（含 x.5 的银行家舍入）逐位一致。
+  const DIM62 = new Uint8Array(256);
+  const DIM66 = new Uint8Array(256);
+  (function () {
+    const t = new Uint8ClampedArray(1);
+    for (let i = 0; i < 256; i++) { t[0] = i * 0.62; DIM62[i] = t[0]; }
+    for (let i = 0; i < 256; i++) { t[0] = i * 0.66; DIM66[i] = t[0]; }
+  })();
+
   // 相机基向量：yaw 绕 Y 轴，pitch 俯视角
   function camera(yawDeg, pitchDeg) {
     const th = (yawDeg * Math.PI) / 180;
@@ -407,11 +417,18 @@
       oy = H * 0.5 - ccy * ppm;
     }
 
+    /* 像素风（绝大多数情况）不画水墨，只勾线 + 压暗转折：
+     * 这时不再分配 shadeIdx / 两张 W*H 遮罩，勾线直接单趟落墨。
+     * 大图（320 档能到 90M 像素）上这几张表就是 300 MB 级的白拿内存和一次全图扫描。 */
+    const style = o.style || 'pixel';
+    const amt = o.styleAmount == null ? 0.7 : o.styleAmount;
+    const stylizeOn = style !== 'pixel' && amt > 0.01;
+
     const depth = new Float32Array(W * H).fill(-1e9);
     const rgba = new Uint8ClampedArray(W * H * 4);
-    const matId = new Uint16Array(W * H);
-    const shadeIdx = new Uint8Array(W * H);
-    const groundMask = new Uint8Array(W * H);
+    const matId = new Uint8Array(W * H);            // 材质号 < 48，一个字节够
+    const shadeIdx = stylizeOn ? new Uint8Array(W * H) : null;
+    const groundMask = o.gridMask ? new Uint8Array(W * H) : null;
     if (!transparent && pal.bg) {
       const bg = GF.hex2rgb(pal.bg);
       for (let i = 0; i < W * H; i++) {
@@ -577,6 +594,8 @@
         (patKind === 'plaster' && Math.abs(ny) < 0.62) ||
         patKind === 'wood' ||
         (patKind === 'water' && Math.abs(ny) > 0.7));
+      // 砌筑/木纹的“横向”取 x 还是 z，只跟面法线有关，提到像素循环外
+      const patZ = Math.abs(nx) >= Math.abs(nz);
 
       const bx0 = Math.max(0, Math.floor(Math.min(x0, x1, x2)));
       const bx1 = Math.min(W - 1, Math.ceil(Math.max(x0, x1, x2)));
@@ -591,26 +610,33 @@
       // 通过之后才算重心权重与材质肌理（这段最贵）
       const zxa = w0a * (z0 - z2) + w1a * (z1 - z2);
       const zya = w0b * (z0 - z2) + w1b * (z1 - z2);
+      // 世界坐标也按 (x,y) 线性递推：肌理要用的 wy/wx/wz 每像素只加一次，
+      // 不再每像素 9 次乘法 + 6 次加法（这一段是纯光栅里最贵的一块）
+      const dWy0 = wy0 - wy2c, dWy1 = wy1 - wy2c;
+      const dWx0 = wx0 - wx2, dWx1 = wx1 - wx2;
+      const dWz0 = wz0 - wz2, dWz1 = wz1 - wz2;
+      const wyA = patOn ? w0a * dWy0 + w1a * dWy1 : 0, wyB = patOn ? w0b * dWy0 + w1b * dWy1 : 0;
+      const wxA = patOn ? w0a * dWx0 + w1a * dWx1 : 0, wxB = patOn ? w0b * dWx0 + w1b * dWx1 : 0;
+      const wzA = patOn ? w0a * dWz0 + w1a * dWz1 : 0, wzB = patOn ? w0b * dWz0 + w1b * dWz1 : 0;
       for (let y = by0; y <= by1; y++) {
         const yc = y + 0.5 - y2;
         let w0 = w0a * (bx0 + 0.5 - x2) + w0b * yc;
         let w1 = w1a * (bx0 + 0.5 - x2) + w1b * yc;
         let z = z2 + zxa * (bx0 + 0.5 - x2) + zya * yc;
+        let wy = patOn ? wy2c + w0 * dWy0 + w1 * dWy1 : 0;
+        let wxp2 = patOn ? wx2 + w0 * dWx0 + w1 * dWx1 : 0;
+        let wzp2 = patOn ? wz2 + w0 * dWz0 + w1 * dWz1 : 0;
         let p = y * W + bx0;
-        for (let x = bx0; x <= bx1; x++, w0 += w0a, w1 += w1a, z += zxa, p++) {
+        for (let x = bx0; x <= bx1; x++, w0 += w0a, w1 += w1a, z += zxa, p++, wy += wyA, wxp2 += wxA, wzp2 += wzA) {
           if (z <= depth[p]) continue;          // 早拒：这个像素已有更近的面
           const w2 = 1 - w0 - w1;
           if (w0 < -0.001 || w1 < -0.001 || w2 < -0.001) continue;
           depth[p] = z;
           matId[p] = mi + 1;
-          if (isGround) groundMask[p] = 1;
-          else groundMask[p] = 0;   // 后画的墙/屋顶盖在地面上时，这一格不再算“地面”
+          if (groundMask) { if (isGround) groundMask[p] = 1; else groundMask[p] = 0; }
           let c0 = cr, c1 = cg, c2 = cb;
           // 材质肌理：砌筑面走砖缝（横缝 + 错缝竖缝），木面走竖向木纹，地面已在下方单独处理
           if (patOn) {
-            const wy = w0 * wy0 + w1 * wy1 + w2 * wy2c;
-            const wxp2 = w0 * wx0 + w1 * wx1 + w2 * wx2;
-            const wzp2 = w0 * wz0 + w1 * wz1 + w2 * wz2;
             if (patKind === 'paving') {
               // 铺装是水平面：按 x/z 两个方向切条石，不跟着墙面只切一个方向。
               // 0.9m × 0.6m 的块在 44px/m 下是 40×26px，缝在像素上读得出来。
@@ -622,15 +648,17 @@
               if (dX < 0.03 || dZ < 0.03) { c0 *= 0.80; c1 *= 0.80; c2 *= 0.82; }
               else if (dX < 0.06 || dZ < 0.06) { c0 *= 0.94; c1 *= 0.94; c2 *= 0.95; }
             } else if (patKind === 'mason') {
-              const course = 0.33, jointW = 0.032, runW = 0.66;
-              const hor = Math.abs(nx) >= Math.abs(nz) ? wzp2 : wxp2;
-              const row = Math.floor(wy / course);
-              const fy = wy / course - row;
-              const fx = ((hor + (row % 2 ? runW * 0.5 : 0)) / runW) % 1;
-              const dY = Math.min(fy, 1 - fy) * course;
-              const dX = Math.min(fx, 1 - fx) * runW;
-              if (dY < jointW || dX < jointW) { c0 *= 0.80; c1 *= 0.80; c2 *= 0.82; }
-              else if (dY < jointW * 2.2) { c0 *= 0.94; c1 *= 0.94; c2 *= 0.95; }
+              const hor = patZ ? wzp2 : wxp2;
+              const row = wy / 0.33;
+              const rowI = Math.floor(row);
+              const fy = row - rowI;
+              // 错缝：奇数皮右移半块。省掉一个取模：直接把偏移算进 hor 再除以块宽
+              const fx2 = ((hor + ((rowI & 1) ? 0.33 : 0)) / 0.66) % 1;
+              const fx = fx2 < 0 ? fx2 + 1 : fx2;
+              const dY = Math.min(fy, 1 - fy) * 0.33;
+              const dX = Math.min(fx, 1 - fx) * 0.66;
+              if (dY < 0.032 || dX < 0.032) { c0 *= 0.80; c1 *= 0.80; c2 *= 0.82; }
+              else if (dY < 0.0704) { c0 *= 0.94; c1 *= 0.94; c2 *= 0.95; }
             } else if (patKind === 'plaster') {
               // 白粉墙：抹灰面平滑，只留极淡的水平分抹痕与斑驳
               const fy2 = (wy / 0.9) % 1;
@@ -638,9 +666,8 @@
               const blot = (Math.floor(wxp2 * 0.7) * 13 + Math.floor(wy * 0.7) * 7) % 5;
               if (blot === 0) { c0 *= 0.965; c1 *= 0.965; c2 *= 0.965; }
             } else if (patKind === 'wood') {
-              const period = 0.24;
-              const horW = Math.abs(nx) >= Math.abs(nz) ? wzp2 : wxp2;
-              const f = (horW / period) % 1;
+              const horW = patZ ? wzp2 : wxp2;
+              const f = (horW / 0.24) % 1;
               const k2 = 0.93 + 0.13 * f;
               c0 *= k2; c1 *= k2; c2 *= k2;
             } else if (patKind === 'water') {
@@ -667,7 +694,7 @@
           }
           const q = p * 4;
           rgba[q] = c0; rgba[q + 1] = c1; rgba[q + 2] = c2; rgba[q + 3] = 255;
-          shadeIdx[p] = idx;
+          if (shadeIdx) shadeIdx[p] = idx;
         }
       }
     }
@@ -675,23 +702,26 @@
     mark('raster');
 
     // 描边 + 内部转折线（先只标记，勾线交给风格化阶段，便于做“断笔/抖线”）
-    const edgeMask = new Uint8Array(W * H);
-    const innerMask = new Uint8Array(W * H);
-    if (outline) {
-      const at = (x, y) => y * W + x;
+    // 像素风不需要遮罩：直接在下一段单趟落墨，省掉两张 W*H 表和多一次全图扫描。
+    let edgeMask = null;
+    let innerMask = null;
+    if (stylizeOn) {
+      // 画风阶段要读这两张表（不勾线时也该是全零，不是 null），所以只在画风时分配
+      edgeMask = new Uint8Array(W * H);
+      innerMask = new Uint8Array(W * H);
+    }
+    if (outline && stylizeOn) {
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
-          const p = at(x, y);
+          const p = y * W + x;
           if (rgba[p * 4 + 3] === 0) continue;
           let isEdge = false;
           let inner = false;
-          const nb = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]];
-          for (const [nx2, ny2] of nb) {
-            if (nx2 < 0 || ny2 < 0 || nx2 >= W || ny2 >= H) continue;
-            const q = at(nx2, ny2);
-            if (rgba[q * 4 + 3] === 0) { isEdge = true; break; }
-            if (matId[q] !== matId[p] && Math.abs(depth[q] - depth[p]) > 0.35) inner = true;
-          }
+          const mp = matId[p], dp = depth[p];
+          if (x > 0) { const q = p - 1; if (rgba[q * 4 + 3] === 0) isEdge = true; else if (matId[q] !== mp && Math.abs(depth[q] - dp) > 0.35) inner = true; }
+          if (!isEdge && x < W - 1) { const q = p + 1; if (rgba[q * 4 + 3] === 0) isEdge = true; else if (matId[q] !== mp && Math.abs(depth[q] - dp) > 0.35) inner = true; }
+          if (!isEdge && y > 0) { const q = p - W; if (rgba[q * 4 + 3] === 0) isEdge = true; else if (matId[q] !== mp && Math.abs(depth[q] - dp) > 0.35) inner = true; }
+          if (!isEdge && y < H - 1) { const q = p + W; if (rgba[q * 4 + 3] === 0) isEdge = true; else if (matId[q] !== mp && Math.abs(depth[q] - dp) > 0.35) inner = true; }
           if (isEdge) edgeMask[p] = 1;
           else if (inner) innerMask[p] = 1;
         }
@@ -699,19 +729,26 @@
     }
 
     // 手绘风格化（水墨 / 枯笔 / 双色套印）
-    const style = o.style || 'pixel';
-    const amt = o.styleAmount == null ? 0.7 : o.styleAmount;
-    if (style !== 'pixel' && amt > 0.01) {
+    if (stylizeOn) {
       stylize(rgba, W, H, pal, shadeIdx, edgeMask, innerMask, style, amt, o.seed || 20261123, preview);
-    } else {
-      // 硬边像素风：纯墨勾线 + 转折处压暗
+    } else if (outline) {
+      // 硬边像素风：纯墨勾线 + 转折处压暗。判边与落墨同一趟，就地改写色值
+      // （邻域只看 alpha / 材质号 / 深度，这三样都不受改色影响，所以就地写是安全的）
       const ink = pal.ink;
-      for (let p = 0; p < W * H; p++) {
-        if (rgba[p * 4 + 3] === 0) continue;
-        if (edgeMask[p]) {
-          rgba[p * 4] = ink[0]; rgba[p * 4 + 1] = ink[1]; rgba[p * 4 + 2] = ink[2];
-        } else if (innerMask[p]) {
-          rgba[p * 4] *= 0.62; rgba[p * 4 + 1] *= 0.62; rgba[p * 4 + 2] *= 0.66;
+      const ir = ink[0], ig = ink[1], ib = ink[2];
+      for (let y = 0; y < H; y++) {
+        let p = y * W;
+        for (let x = 0; x < W; x++, p++) {
+          const q = p * 4;
+          if (rgba[q + 3] === 0) continue;
+          const mp = matId[p], dp = depth[p];
+          let isEdge = false, inner = false;
+          if (x > 0) { const n = p - 1; if (rgba[n * 4 + 3] === 0) isEdge = true; else if (matId[n] !== mp && Math.abs(depth[n] - dp) > 0.35) inner = true; }
+          if (!isEdge && x < W - 1) { const n = p + 1; if (rgba[n * 4 + 3] === 0) isEdge = true; else if (matId[n] !== mp && Math.abs(depth[n] - dp) > 0.35) inner = true; }
+          if (!isEdge && y > 0) { const n = p - W; if (rgba[n * 4 + 3] === 0) isEdge = true; else if (matId[n] !== mp && Math.abs(depth[n] - dp) > 0.35) inner = true; }
+          if (!isEdge && y < H - 1) { const n = p + W; if (rgba[n * 4 + 3] === 0) isEdge = true; else if (matId[n] !== mp && Math.abs(depth[n] - dp) > 0.35) inner = true; }
+          if (isEdge) { rgba[q] = ir; rgba[q + 1] = ig; rgba[q + 2] = ib; }
+          else if (inner) { rgba[q] = DIM62[rgba[q]]; rgba[q + 1] = DIM62[rgba[q + 1]]; rgba[q + 2] = DIM66[rgba[q + 2]]; }
         }
       }
     }
@@ -1302,6 +1339,8 @@
 
       /* 读回：颜色 + 元信息（材质、色阶、地面、16bit 深度） */
       const N = W * H;
+      const rowB = W * 4;
+      const zSpan = zmax - zmin;
       const bufC = new Uint8Array(N * 4);
       gl.readBuffer(gl.COLOR_ATTACHMENT0);
       gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, bufC);
@@ -1309,13 +1348,14 @@
       /* 轨道拖拽帧只做“颜色读回 + 上下翻行”：不读第二张信息缓冲、不做描边/画风/逐像素解包。
        * 拖拽时用户看的是角度变化，不是最终笔触；松手后再走完整预览。 */
       if (o.orbit) {
-        const rgba = new Uint8ClampedArray(N * 4);
-        const row = W * 4;
-        for (let y = 0; y < H; y++) {
-          rgba.set(bufC.subarray((H - 1 - y) * row, (H - y) * row), y * row);
+        for (let y = 0; y < (H >> 1); y++) {
+          const a = y * rowB, b2 = (H - 1 - y) * rowB;
+          const t = bufC.slice(a, a + rowB);
+          bufC.copyWithin(a, b2, b2 + rowB);
+          bufC.set(t, b2);
         }
         return {
-          w: W, h: H, rgba, gpu: true, orbit: true,
+          w: W, h: H, rgba: new Uint8ClampedArray(bufC.buffer, 0, N * 4), gpu: true, orbit: true,
           map: {
             right: cam.right, up: cam.up, view: cam.view,
             camC: ps ? ps.c : null, camD: ps ? ps.D : 1, persp: ps ? ps.p : 0,
@@ -1327,73 +1367,90 @@
       const bufI = new Uint8Array(N * 4);
       gl.readBuffer(gl.COLOR_ATTACHMENT1);
       gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, bufI);
+      const tRead = o.timing ? Date.now() : 0;
 
-      const rgba = new Uint8ClampedArray(N * 4);
-      const depth = new Float32Array(N).fill(-1e9);
-      const matId = new Uint16Array(N);
-      const shadeIdx = new Uint8Array(N);
-      const zSpan = zmax - zmin;
-      for (let y = 0; y < H; y++) {
-        // readPixels 原点在左下，按行翻回来
-        const s0 = (H - 1 - y) * W;
-        const dst0 = y * W;
-        for (let x = 0; x < W; x++) {
-          const s = (s0 + x) * 4, d = (dst0 + x) * 4;
-          const a = bufC[s + 3];
-          rgba[d] = bufC[s]; rgba[d + 1] = bufC[s + 1]; rgba[d + 2] = bufC[s + 2]; rgba[d + 3] = a;
-          if (a === 0) continue;
-          const info = bufI[s];
-          const gnd = info >= 32 ? 1 : 0;
-          matId[dst0 + x] = (gnd ? info - 32 : info);
-          shadeIdx[dst0 + x] = Math.round((bufI[s + 1] / 85) * 1);
-          const v16 = bufI[s + 3] * 256 + bufI[s + 2];
-          depth[dst0 + x] = zmin + (v16 / 65535) * zSpan;
+      /* 上下翻行：readPixels 原点在左下。成对交换原地做，不再另开两张 W*H*4 的副本
+         （320 档一张就是 376 MB，光这一项就够呛）。 */
+      if (H > 1) {
+        const tmpC = new Uint8Array(rowB), tmpI = new Uint8Array(rowB);
+        for (let y = 0; y < (H >> 1); y++) {
+          const a = y * rowB, b2 = (H - 1 - y) * rowB;
+          tmpC.set(bufC.subarray(a, a + rowB));
+          bufC.copyWithin(a, b2, b2 + rowB);
+          bufC.set(tmpC, b2);
+          tmpI.set(bufI.subarray(a, a + rowB));
+          bufI.copyWithin(a, b2, b2 + rowB);
+          bufI.set(tmpI, b2);
         }
       }
-      const tRaster = o.timing ? Date.now() : 0;
+      const rgba = new Uint8ClampedArray(bufC.buffer, 0, N * 4);
+      const tFlip = o.timing ? Date.now() : 0;
 
-      /* 描边 + 内部转折线（与 CPU 完全同一套判定） */
-      const edgeMask = new Uint8Array(N);
-      const innerMask = new Uint8Array(N);
-      if (outline) {
-        for (let y = 0; y < H; y++) {
-          for (let x = 0; x < W; x++) {
-            const p = y * W + x;
-            if (rgba[p * 4 + 3] === 0) continue;
-            let isEdge = false, inner = false;
-            const nb = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]];
-            for (let q2 = 0; q2 < 4; q2++) {
-              const nx2 = nb[q2][0], ny2 = nb[q2][1];
-              if (nx2 < 0 || ny2 < 0 || nx2 >= W || ny2 >= H) continue;
-              const qq = ny2 * W + nx2;
-              if (rgba[qq * 4 + 3] === 0) { isEdge = true; break; }
-              if (matId[qq] !== matId[p] && Math.abs(depth[qq] - depth[p]) > 0.35) inner = true;
-            }
-            if (isEdge) edgeMask[p] = 1;
-            else if (inner) innerMask[p] = 1;
-          }
-        }
-      }
-
+      /* 描边 + 内部转折线：与 CPU 完全同一套判定。
+       * 不再逐像素解包出 matId / depth / shadeIdx 三张全图数组：
+       * 材质号和 16bit 深度就在信息缓冲里，邻域直接按字节读；
+       * CPU 侧“深度差 > 0.35m”换算成 16bit 整数阈值，比较等价但不用浮点。
+       * 像素风勾线就地落墨，只有水墨/枯笔/双色才建遮罩。 */
       const style = o.style || 'pixel';
       const amt = o.styleAmount == null ? 0.7 : o.styleAmount;
-      if (style !== 'pixel' && amt > 0.01) {
-        stylize(rgba, W, H, pal, shadeIdx, edgeMask, innerMask, style, amt, o.seed || 20261123, preview);
-      } else {
-        const ink = pal.ink;
-        for (let p = 0; p < W * H; p++) {
-          if (rgba[p * 4 + 3] === 0) continue;
-          if (edgeMask[p]) {
-            rgba[p * 4] = ink[0]; rgba[p * 4 + 1] = ink[1]; rgba[p * 4 + 2] = ink[2];
-          } else if (innerMask[p]) {
-            rgba[p * 4] *= 0.62; rgba[p * 4 + 1] *= 0.62; rgba[p * 4 + 2] *= 0.66;
+      const stylizeOn = style !== 'pixel' && amt > 0.01;
+      const th16 = (0.35 / (zSpan > 0 ? zSpan : 1)) * 65535;
+      const ink = pal.ink;
+      let edgeMask = null, innerMask = null, shadeIdx = null;
+      if (stylizeOn) {
+        edgeMask = new Uint8Array(N);
+        innerMask = new Uint8Array(N);
+        shadeIdx = new Uint8Array(N);
+        for (let p = 0, q = 0; p < N; p++, q += 4) {
+          shadeIdx[p] = Math.round(bufI[q + 1] / 85);   // 与旧实现同式，后台像素会取到 3，保持一致
+        }
+      }
+      if (outline) {   // 与旧实现一致：不勾线时遮罩全零，画风阶段不额外补线
+        for (let y = 0; y < H; y++) {
+          const cRow = y * rowB;
+          for (let x = 0; x < W; x++) {
+            const c = cRow + x * 4;
+            if (bufC[c + 3] === 0) continue;
+            const ip = bufI[c];                       // 两张缓冲现在同向，索引可直接共用
+            const mp = ip >= 32 ? ip - 32 : ip;
+            const zp = bufI[c + 3] * 256 + bufI[c + 2];
+            let isEdge = false, inner = false;
+            if (x > 0) { const q = c - 4;
+              if (bufC[q + 3] === 0) isEdge = true;
+              else { const iq = bufI[q]; const mq = iq >= 32 ? iq - 32 : iq;
+                if (mq !== mp && Math.abs((bufI[q + 3] * 256 + bufI[q + 2]) - zp) > th16) inner = true; } }
+            if (!isEdge && x < W - 1) { const q = c + 4;
+              if (bufC[q + 3] === 0) isEdge = true;
+              else { const iq = bufI[q]; const mq = iq >= 32 ? iq - 32 : iq;
+                if (mq !== mp && Math.abs((bufI[q + 3] * 256 + bufI[q + 2]) - zp) > th16) inner = true; } }
+            if (!isEdge && y > 0) { const q = c - rowB;
+              if (bufC[q + 3] === 0) isEdge = true;
+              else { const iq = bufI[q]; const mq = iq >= 32 ? iq - 32 : iq;
+                if (mq !== mp && Math.abs((bufI[q + 3] * 256 + bufI[q + 2]) - zp) > th16) inner = true; } }
+            if (!isEdge && y < H - 1) { const q = c + rowB;
+              if (bufC[q + 3] === 0) isEdge = true;
+              else { const iq = bufI[q]; const mq = iq >= 32 ? iq - 32 : iq;
+                if (mq !== mp && Math.abs((bufI[q + 3] * 256 + bufI[q + 2]) - zp) > th16) inner = true; } }
+            if (isEdge) {
+              if (stylizeOn) edgeMask[y * W + x] = 1;
+              else { bufC[c] = ink[0]; bufC[c + 1] = ink[1]; bufC[c + 2] = ink[2]; }
+            } else if (inner) {
+              if (stylizeOn) innerMask[y * W + x] = 1;
+              else { bufC[c] = DIM62[bufC[c]]; bufC[c + 1] = DIM62[bufC[c + 1]]; bufC[c + 2] = DIM66[bufC[c + 2]]; }
+            }
           }
         }
+      }
+      const tInk = o.timing ? Date.now() : 0;
+
+      if (stylizeOn) {
+        stylize(rgba, W, H, pal, shadeIdx, edgeMask, innerMask, style, amt, o.seed || 20261123, preview);
       }
 
       if (o.timing) {
-        console.log('[gpu ' + (preview ? 'preview' : 'full') + '] setup ' + (tRaster ? '' : '') +
-          (Date.now() - tAll) + 'ms | total ' + (Date.now() - tAll) + 'ms · ' + W + 'x' + H);
+        console.log('[gpu ' + (preview ? 'preview' : 'full') + '] ' + W + 'x' + H +
+          ' · read ' + (tRead - tAll) + 'ms | flip ' + (tFlip - tRead) +
+          'ms | 勾线 ' + (tInk - tFlip) + 'ms | total ' + (Date.now() - tAll) + 'ms');
       }
       return {
         w: W, h: H, rgba, gpu: true, debug: dbg,
@@ -1461,17 +1518,15 @@
     const W = cols * (maxW + pad) + pad;
     const H = rows * (maxH + pad) + pad;
     const rgba = new Uint8ClampedArray(W * H * 4);
-    frames.forEach((f, i) => {
+      frames.forEach((f, i) => {
       const c = i % cols, r2 = Math.floor(i / cols);
       const ox = pad + c * (maxW + pad) + Math.floor((maxW - f.w) / 2);
       const oy = pad + r2 * (maxH + pad) + (maxH - f.h); // 底部对齐
+      // 逐行整拷：8 方向精灵表在高像素密度下是几亿个像素，逐像素赋色会白烧几十秒
+      const rowBytes = f.w * 4;
+      const src = f.rgba;
       for (let y = 0; y < f.h; y++) {
-        for (let x = 0; x < f.w; x++) {
-          const s = (y * f.w + x) * 4;
-          const d = ((oy + y) * W + (ox + x)) * 4;
-          rgba[d] = f.rgba[s]; rgba[d + 1] = f.rgba[s + 1];
-          rgba[d + 2] = f.rgba[s + 2]; rgba[d + 3] = f.rgba[s + 3];
-        }
+        rgba.set(src.subarray(y * rowBytes, y * rowBytes + rowBytes), ((oy + y) * W + ox) * 4);
       }
     });
     return { w: W, h: H, rgba };

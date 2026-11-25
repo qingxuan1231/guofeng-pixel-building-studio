@@ -150,8 +150,11 @@
       this.quad(s[0], s[1], s[2], s[3], mat, tag); // 底 (-y)
       this.quad(t[3], t[2], t[1], t[0], mat, tag); // 顶 (+y)
     }
-    /** 竖向圆柱（多边形棱柱） */
-    cyl(cx, cz, r, y0, y1, n, mat, tag, rot) {
+    /** 竖向圆柱（多边形棱柱）。noCap=true 时不出顶底扇面：
+     *  檐柱顶上被额枋/斗栱盖住、底上埋进柱础，这两片扇面平时看不见，
+     *  但只要柱子贴着墙面（柱皮与墙皮只差 1~2 cm），扇面就会从墙缝里露出一角，
+     *  在屏幕上就是柱身上那几块“红色半圆/钩子”——斜视转视角还会抖。 */
+    cyl(cx, cz, r, y0, y1, n, mat, tag, rot, noCap) {
       const a0 = rot || 0;
       const pts = [];
       for (let i = 0; i < n; i++) {
@@ -168,6 +171,7 @@
           mat, tag
         );
       }
+      if (noCap) return;
       const top = [cx, y1, cz], bot = [cx, y0, cz];
       for (let i = 0; i < n; i++) {
         const p = pts[i], q = pts[(i + 1) % n];
@@ -182,16 +186,16 @@
         const p = points[i], q = points[(i + 1) % n];
         this.quad([p[0], y0, p[1]], [q[0], y0, q[1]], [q[0], y1, q[1]], [p[0], y1, p[1]], mat, tag);
       }
-      // 顶底扇面（双面都铺：多边形顺序不定，单面会有背面剔除导致的“透空”）
+      // 顶底扇面：每种朝向只铺一次。这里以前正反两套都铺（当年为躲背面剔除），
+      // 但两条渲染路径都关背面剔除、法线还会朝相机翻正，反的那套纯属白画，
+      // 而且与正的那套严格同面 —— 塔的平座铺板就这么叠出 91 m² 共面（转视角闪）和 2× 面数。
       let cx = 0, cz = 0;
       for (const p of points) { cx += p[0]; cz += p[1]; }
       cx /= n; cz /= n;
       for (let i = 0; i < n; i++) {
         const p = points[i], q = points[(i + 1) % n];
         this.tri([cx, y1, cz], [p[0], y1, p[1]], [q[0], y1, q[1]], mat, tag);
-        this.tri([cx, y1, cz], [q[0], y1, q[1]], [p[0], y1, p[1]], mat, tag);
         this.tri([cx, y0, cz], [q[0], y0, q[1]], [p[0], y0, p[1]], mat, tag);
-        this.tri([cx, y0, cz], [p[0], y0, p[1]], [q[0], y0, q[1]], mat, tag);
       }
     }
     /** 旋转体：profile 为 [半径, 高度] 序列，自下而上 */
@@ -356,7 +360,7 @@
     glazeGD:  ['#1f4232', '#2c5f47', '#42805f'], // 绿琉璃·暗垄
     glazeBD:  ['#1e3546', '#2a4f66', '#3b6c84'], // 蓝琉璃·暗垄
     stone:    ['#666257', '#827e72', '#9d998d'], // 石
-    marble:   ['#8f8c83', '#b0ad a3', '#d2cfc4'], // 汉白玉
+    marble:   ['#8f8c83', '#b0ada3', '#d2cfc4'], // 汉白玉
     brick:    ['#454d54', '#5b646c', '#74808a'], // 青砖
     plaster:  ['#aaa495', '#cdc7b6', '#e7e1cf'], // 白粉墙
     wood:     ['#4f3021', '#6d412c', '#8a573c'], // 木构

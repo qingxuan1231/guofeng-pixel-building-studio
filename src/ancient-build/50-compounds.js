@@ -195,7 +195,11 @@
     const gateX = CW / 4, gateW = 2.4;
     mb.box(-CW / 2, gateX - gateW / 2, 0, wallH, zF - 0.15, zF + 0.15, 'plaster', '院墙·前');
     mb.box(gateX + gateW / 2, CW / 2, 0, wallH, zF - 0.15, zF + 0.15, 'plaster', '院墙·前');
-    mb.box(-CW / 2, CW / 2, wallH, wallH + 0.16, zF - 0.23, zF + 0.23, 'tile', '院墙·压顶');
+    // 压顶与瓦脊由 courtWall 统一出（body:false 只出压顶/脊）：
+    // 这里自己再建一条压顶，会与 courtWall 那条同面叠着，整条 20 m² 转到侧面就闪。
+    P.courtWall(mb, {
+      x0: -CW / 2, x1: CW / 2, z0: zB, z1: zF, y: wallH, body: false, windows: null
+    });
     mb.box(-CW / 2, CW / 2, 0, wallH, zB - 0.15, zB + 0.15, 'plaster', '院墙·后');
     mb.box(-CW / 2 - 0.15, -CW / 2 + 0.15, 0, wallH, zB, zF, 'plaster', '院墙·左');
     mb.box(CW / 2 - 0.15, CW / 2 + 0.15, 0, wallH, zB, zF, 'plaster', '院墙·右');

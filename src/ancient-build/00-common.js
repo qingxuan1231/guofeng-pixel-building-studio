@@ -159,7 +159,9 @@
         const cx = x0 + i * bayW;
         for (const cz of [z0 + 0.2, z1 - 0.2]) {
           mb.boxC(cx, cz, 0.18, 0.18, yb, yb + 0.12, 'stone', '柱础');
-          mb.cyl(cx, cz, colR, yb + 0.1, yt, 8, o.colMat, '檐柱');
+          // 檐柱不出顶底扇面：柱轴与墙中轴只差 0.1 m，柱皮几乎贴着墙皮，
+          // 两片扇面会从墙面缝里露出一角（用户圈的那种“红色半圆/钩子”），斜视还闪。
+          mb.cyl(cx, cz, colR, yb + 0.1, yt, 8, o.colMat, '檐柱', 0, true);
         }
       }
       // 前后墙（带门窗洞）
@@ -219,13 +221,15 @@
       }
 
       // 阶条石（勒脚）：首层墙脚压一道条石，二层以上做腰线，避免“墙直接插进台基”
+      // 石面比墙面外挑 5 mm：原来的石面与墙皮严格同面，转视角时整圈勒脚都在闪。
       {
-        const b0 = f === 0 ? yb : yb - 0.02;
+        const b0 = f === 0 ? yb - 0.006 : yb - 0.02;   // 底面压进台基 6 mm：原来石底与墙底同面
         const b1 = f === 0 ? yb + 0.2 : yb + 0.12;
-        if (!cut.front) mb.box(x0, x1, b0, b1, z1 - 0.26, z1 + 0.04, 'stone', f === 0 ? '墙脚石·前' : '腰线·前');
-        if (!cut.back) mb.box(x0, x1, b0, b1, z0 - 0.04, z0 + 0.26, 'stone', f === 0 ? '墙脚石·后' : '腰线·后');
-        if (!cut.left) mb.box(x0 - 0.04, x0 + 0.26, b0, b1, z0, z1, 'stone', f === 0 ? '墙脚石·左' : '腰线·左');
-        if (!cut.right) mb.box(x1 - 0.26, x1 + 0.04, b0, b1, z0, z1, 'stone', f === 0 ? '墙脚石·右' : '腰线·右');
+        const out = 0.045;   // 外挑量（原 0.04 与墙皮同面）
+        if (!cut.front) mb.box(x0, x1, b0, b1, z1 - 0.26, z1 + out, 'stone', f === 0 ? '墙脚石·前' : '腰线·前');
+        if (!cut.back) mb.box(x0, x1, b0, b1, z0 - out, z0 + 0.26, 'stone', f === 0 ? '墙脚石·后' : '腰线·后');
+        if (!cut.left) mb.box(x0 - out, x0 + 0.26, b0, b1, z0, z1, 'stone', f === 0 ? '墙脚石·左' : '腰线·左');
+        if (!cut.right) mb.box(x1 - 0.26, x1 + out, b0, b1, z0, z1, 'stone', f === 0 ? '墙脚石·右' : '腰线·右');
       }
 
       // 朝代做法：阑额断面、普拍枋有无与断面、斗栱密度与大小都按朝代定
@@ -288,15 +292,18 @@
         const stk = 0.38 * dgS;
         const gmat = (era === 'han' || era === 'tang' || era === 'song') ? 'plaster' : 'paintGreen';
         const b1 = y1g - 0.12 * dgS, b2 = y1g - stk;
+        // 三层之间各压进 4 mm：原来是整层叠整层，层间分界处上下两张面严格同面，
+        // 320 档转视角时这圈檐下会闪成一片。
+        const lap = 0.004;
         if (!cut.front) {
-          mb.box(x0 - 0.02, x1 + 0.02, y0g, b2, z1 - 0.15, z1 - 0.05, 'woodDark', '栱眼壁·前垫板');
-          mb.box(x0 - 0.02, x1 + 0.02, b2, b1, z1 - 0.15, z1 - 0.05, gmat, '栱眼壁·前');
-          mb.box(x0 - 0.02, x1 + 0.02, b1, y1g, z1 - 0.18, z1 - 0.02, 'paintGreen', '柱头枋·前');
+          mb.box(x0 - 0.02, x1 + 0.02, y0g - lap, b2, z1 - 0.15, z1 - 0.05, 'woodDark', '栱眼壁·前垫板');
+          mb.box(x0 - 0.02, x1 + 0.02, b2 - lap, b1, z1 - 0.15, z1 - 0.05, gmat, '栱眼壁·前');
+          mb.box(x0 - 0.02, x1 + 0.02, b1 - lap, y1g, z1 - 0.18, z1 - 0.02, 'paintGreen', '柱头枋·前');
         }
         if (!cut.back) {
-          mb.box(x0 - 0.02, x1 + 0.02, y0g, b2, z0 + 0.05, z0 + 0.15, 'woodDark', '栱眼壁·后垫板');
-          mb.box(x0 - 0.02, x1 + 0.02, b2, b1, z0 + 0.05, z0 + 0.15, gmat, '栱眼壁·后');
-          mb.box(x0 - 0.02, x1 + 0.02, b1, y1g, z0 + 0.02, z0 + 0.18, 'paintGreen', '柱头枋·后');
+          mb.box(x0 - 0.02, x1 + 0.02, y0g - lap, b2, z0 + 0.05, z0 + 0.15, 'woodDark', '栱眼壁·后垫板');
+          mb.box(x0 - 0.02, x1 + 0.02, b2 - lap, b1, z0 + 0.05, z0 + 0.15, gmat, '栱眼壁·后');
+          mb.box(x0 - 0.02, x1 + 0.02, b1 - lap, y1g, z0 + 0.02, z0 + 0.18, 'paintGreen', '柱头枋·后');
         }
         // 栱眼壁雕饰（开关 dgEye）：在素壁外再加一层分间透雕板 + 竖棂，与整片素壁区分得出来
         if (o.dgEye) {

@@ -52,8 +52,10 @@
     const z = o.z, x0 = o.x0, x1 = o.x1, tag = o.tag || '隔墙';
     mb.box(x0, -g / 2 - d / 2, 0, h, z - d / 2, z + d / 2, 'plaster', tag);
     mb.box(g / 2 + d / 2, x1, 0, h, z - d / 2, z + d / 2, 'plaster', tag);
-    mb.box(x0, x1, h, h + 0.16, z - d / 2 - 0.08, z + d / 2 + 0.08, 'tile', tag + '·压顶');
-    mb.box(x0, x1, h + 0.16, h + 0.28, z - 0.08, z + 0.08, 'tileEnd', tag + '·脊');
+    // 压顶压进墙顶 8 mm、脊再压进压顶 8 mm：这两处原来都是上下两层严格同面
+    // （院墙整圈 20 m² + 11 m²），斜视/转视角时墙顶会闪成一道花边。
+    mb.box(x0, x1, h - 0.008, h + 0.16, z - d / 2 - 0.08, z + d / 2 + 0.08, 'tile', tag + '·压顶');
+    mb.box(x0, x1, h + 0.16 - 0.008, h + 0.28, z - 0.08, z + 0.08, 'tileEnd', tag + '·脊');
     // 门框 + 门扇
     for (const sx of [-1, 1]) {
       mb.box(sx * g / 2 - 0.1, sx * g / 2 + 0.1, 0.1, o.gateH || 2.5, z - d / 2 - 0.06, z + d / 2 + 0.06, 'woodDark', tag + '·门框');

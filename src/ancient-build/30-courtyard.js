@@ -8,14 +8,20 @@
     const wallH = 3.0;
     const style = r.courtStyle || 'siheyuan';
     // 院墙（前檐正中开门；园林用月洞门，墙上开漏窗）
-    P.courtWall(mb, {
-      x0: -CW / 2, x1: CW / 2, z0: -CD / 2, z1: CD / 2, y: wallH,
-      gate: { side: 'front', w: style === 'garden' ? 2.4 : 2.6, h: 2.7, shape: style === 'garden' ? 'round' : 'rect' },
-      windows: style === 'garden'
-        ? [{ dir: 'right', u: 1.6, v: 1.5 }, { dir: 'left', u: 1.6, v: 1.5 }, { dir: 'right', u: -3.0, v: 1.5 }]
-        : null,
-      windowPattern: r.winPattern
-    });
+    // 布局类（进数/轴线的 temple5、daoguan、wujin、langyuan、jiafu）各自砌外围墙，
+    // 这里再砌一圈就是两圈 0.3 m 厚的墙严格同面叠着（四合院整圈 437 m²），转到侧面必闪。
+    const SELF_WALL = style === 'temple5' || style === 'daoguan' || style === 'wujin'
+      || style === 'langyuan' || style === 'jiafu';
+    if (!SELF_WALL) {
+      P.courtWall(mb, {
+        x0: -CW / 2, x1: CW / 2, z0: -CD / 2, z1: CD / 2, y: wallH,
+        gate: { side: 'front', w: style === 'garden' ? 2.4 : 2.6, h: 2.7, shape: style === 'garden' ? 'round' : 'rect' },
+        windows: style === 'garden'
+          ? [{ dir: 'right', u: 1.6, v: 1.5 }, { dir: 'left', u: 1.6, v: 1.5 }, { dir: 'right', u: -3.0, v: 1.5 }]
+          : null,
+        windowPattern: r.winPattern
+      });
+    }
     const ctx = { CW, CD, wallH, jin };
     if (style === 'garden') return courtyardGarden(mb, r, ctx);
     if (style === 'temple') return courtyardTemple(mb, r, ctx);
