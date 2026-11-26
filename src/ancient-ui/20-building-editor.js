@@ -3,7 +3,7 @@
   // 思路：把一栋楼拆成「台基 / 第 N 层 / 屋面」几件，点栏上的卡就选中那一段，
   // 画布上给那一段画一个金色线框；右侧（可拖动的）编辑器只动这一段对应的配方字段。
   const ROOF_NAMES = [
-    { v: 'gable', t: '悬山 / 硬山' }, { v: 'gableHip', t: '歇山' }, { v: 'hip', t: '庑殿' },
+    { v: 'gable', t: '悬山' }, { v: 'gableHard', t: '硬山' }, { v: 'gableHip', t: '歇山' }, { v: 'hip', t: '庑殿' },
     { v: 'pyramid', t: '攒尖' }, { v: 'roll', t: '卷棚' }, { v: 'cross', t: '十字歇山' }
   ];
   const PED_NAMES = [{ v: 'xumizuo', t: '须弥座' }, { v: 'plain', t: '直台基' }, { v: 'stone', t: '毛石台' }];

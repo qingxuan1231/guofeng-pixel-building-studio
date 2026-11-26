@@ -30,10 +30,10 @@
     { v: 'celadon', t: '绿琉璃' }, { v: 'blue', t: '孔雀蓝琉璃' }
   ];
   const ROOF_TYPES = [
-    { v: 'gable', t: '悬山 / 硬山' }, { v: 'gableHip', t: '歇山' },
-    { v: 'hip', t: '庑殿' }, { v: 'pyramid', t: '攒尖' },
-    { v: 'roll', t: '卷棚（元宝脊）' }, { v: 'cross', t: '十字歇山' },
-    { v: 'lu', t: '盝顶' }
+    { v: 'gable', t: '悬山' }, { v: 'gableHard', t: '硬山' },
+    { v: 'gableHip', t: '歇山' }, { v: 'hip', t: '庑殿' },
+    { v: 'pyramid', t: '攒尖' }, { v: 'roll', t: '卷棚（元宝脊）' },
+    { v: 'cross', t: '十字歇山' }, { v: 'lu', t: '盝顶' }
   ];
   const WINS = [
     { v: 'step', t: '步步锦' }, { v: 'straight', t: '直棂' },

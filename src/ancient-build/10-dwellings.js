@@ -123,6 +123,9 @@
 
     const eo = r.eave;
     const rise = r.slope * (D / 2 + eo);
+    const hardG = r.roofType === 'gableHard' || r.roofHard === true;
+    // 硬山：屋面沿 x 只出到墙体外皮（W/2），并微出 6 cm，与山墙外皮错开，避免封山板与墙身共面
+    const hwG = hardG ? (r.wallHW != null ? r.wallHW : W / 2 + 0.06) : undefined;
     if (!r.cut.roof) {
       // 重檐：下檐 + 上层身 + 上檐
       if (r.tiers === 2) {
@@ -143,7 +146,8 @@
           yb: top.roofY + 0.2, rise: rise * 0.85,
           type: r.roofType === 'cross' ? 'cross'
             : r.roofType === 'lu' ? 'lu'
-            : (r.roofType === 'gable' || r.roofType === 'gableHip') ? 'gableHip' : 'hip',
+            : (r.roofType === 'gable' || r.roofType === 'gableHard' || r.roofType === 'gableHip') ? 'gableHip' : 'hip',
+          hard: hardG, wallHW: hwG,
           tile: r.tile, tileB: r.tileB, upturn: r.upturn,
           ridgeStyle: r.ridgeStyle, beasts: r.beasts, finial: r.finial,
           trim: r.trimMat, xuanYu: r.xuanYu, windDuo: r.windDuo,
@@ -154,6 +158,7 @@
           cx: 0, cz: 0,
           x0: -W / 2 - eo, x1: W / 2 + eo, z0: -D / 2 - eo, z1: D / 2 + eo,
           yb: top.roofY, rise, type: r.roofType,
+          hard: hardG, wallHW: hwG,
           tile: r.tile, tileB: r.tileB, upturn: r.upturn,
           ridgeStyle: r.ridgeStyle, beasts: r.beasts, finial: r.finial,
           trim: r.trimMat, xuanYu: r.xuanYu, windDuo: r.windDuo,
@@ -227,10 +232,13 @@
     if (!r.cut.roof) {
       const eo = r.eave;
       const rise = r.slope * (D / 2 + eo);
+      const hardG = r.roofType === 'gableHard' || r.roofHard === true;
+      const hwG = hardG ? (r.wallHW != null ? r.wallHW : W / 2 + 0.06) : undefined;
       GF.roofs.build(mb, {
         cx: 0, cz: 0,
         x0: -W / 2 - eo, x1: W / 2 + eo, z0: -D / 2 - eo, z1: D / 2 + eo,
         yb: top.topY, rise, type: r.roofType || 'gable',
+        hard: hardG, wallHW: hwG,
         tile: r.tile, tileB: r.tileB, upturn: r.upturn * 0.7,
         ridgeStyle: r.ridgeStyle, beasts: r.beasts || 0, finial: !!r.finial,
         trim: r.trimMat, xuanYu: r.xuanYu, windDuo: r.windDuo,
@@ -555,4 +563,3 @@
       }
     }
   }
-

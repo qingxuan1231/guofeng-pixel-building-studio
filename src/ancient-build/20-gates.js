@@ -326,12 +326,15 @@
       P.furniture(kbBody, it.kind, it.x, it.z, it.s || 1, 0, '陈设·' + it.kind);
     });
     if (!o.noRoof && !(o.cut || r.cut).roof) {
+      const hardG = o.roofType === 'gableHard' || o.roofHard === true;
+      const hwG = hardG ? (o.wallHW != null ? o.wallHW : W / 2 + 0.06) : undefined;
       GF.roofs.build(kbRoof, {
         cx: 0, cz: 0,
         x0: -W / 2 - eo, x1: W / 2 + eo,
         z0: -D / 2 - eo, z1: D / 2 + eo,
         yb: top.roofY, rise: r.slope * (D / 2 + eo),
         type: o.roofType || 'gable',
+        hard: hardG, wallHW: hwG,
         tile: r.tile, tileB: r.tileB, upturn: r.upturn * 0.8,
         plain: o.plain || o.cheap,
         ridgeStyle: 'plain', beasts: 0, gableMat: r.wallMat, tag: '屋面'
@@ -374,4 +377,3 @@
       }
     };
   }
-

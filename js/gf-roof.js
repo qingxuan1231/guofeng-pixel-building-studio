@@ -458,14 +458,19 @@
   }
 
   /* ------------------------------ 悬山/硬山顶 ------------------------------ */
+  // 悬山：屋面两端挑出山墙，山面用山花板（墙料/木料）封闭，沿瓦面边线走博风板、梁头下挂悬鱼。
+  // 硬山：屋面两端不挑出山墙，屋面沿 x 方向只出到墙体外皮（需传入 wallHW = W/2 + 墙厚/2），
+  // 山墙直接顶到屋面封山，不出博风板、不挂悬鱼。
   function gableRoof(mb, o) {
     const { cx, cz, x0, x1, z0, z1, yb, rise } = o;
     const xe = (x1 - x0) / 2, ze = (z1 - z0) / 2;
-    const nu = bands(xe * 2), nv = 6;
     const up = o.upturn == null ? 0.3 : o.upturn;
+    const hard = o.hard || o.type === 'gableHard';
+    const xg = (hard && o.wallHW != null) ? Math.max(0.3, o.wallHW) : xe;
+    const nu = bands(xg * 2), nv = 6;
 
     const slope = (sign) => (u, v) => {
-      const x = -xe + 2 * xe * u;
+      const x = -xg + 2 * xg * u;
       const z = sign * ze * (1 - v);
       const y = yb + rise * curve(v) + up * cornerLift(u) * Math.pow(1 - v, 1.5);
       return [cx + x, y, cz + z];
@@ -484,7 +489,7 @@
     const gableMat = o.gableMat || 'plaster';
     const GS = 6;
     for (const s of [-1, 1]) {
-      const x = cx + s * xe;
+      const x = cx + s * xg;
       const u = s > 0 ? 1 : 0;
       const T = [x, yb + rise, cz];
       // 轮廓：前坡边线（檐 → 脊）→ 脊点 → 后坡边线（脊 → 檐）
@@ -504,13 +509,15 @@
       if (up > 0.02) {
         mb.quad(pA, pB, [x, yb, cz - ze], [x, yb, cz + ze], gableMat, o.tag + '·山花');
       }
-      // 博风板：沿同一条边线串成短梁，起翘处自动一起抬
-      if (up < 0.02) {
-        GF.beamBetween(mb, [x, yb, cz - ze], T, 0.12, 0.2, 'wood', o.tag + '·博风');
-        GF.beamBetween(mb, [x, yb, cz + ze], T, 0.12, 0.2, 'wood', o.tag + '·博风');
-      } else {
-        for (let i = 0; i < outline.length - 1; i++) {
-          if (i === 0) ribbon(mb, outline, 0, 0.12, 0.2, 'wood', o.tag + '·博风', 0);   // 整条一次成型，不再逐段各一根梁
+      // 博风板：悬山沿同一条边线串成短梁，起翘处自动一起抬；硬山封山不出博风
+      if (!hard) {
+        if (up < 0.02) {
+          GF.beamBetween(mb, [x, yb, cz - ze], T, 0.12, 0.2, 'wood', o.tag + '·博风');
+          GF.beamBetween(mb, [x, yb, cz + ze], T, 0.12, 0.2, 'wood', o.tag + '·博风');
+        } else {
+          for (let i = 0; i < outline.length - 1; i++) {
+            if (i === 0) ribbon(mb, outline, 0, 0.12, 0.2, 'wood', o.tag + '·博风', 0);   // 整条一次成型，不再逐段各一根梁
+          }
         }
       }
     }
@@ -518,21 +525,21 @@
     const eavePts = [];
     for (let i = 0; i <= 8; i++) {
       const t = i / 8;
-      eavePts.push([cx + (-xe + 2 * xe * t), yb + up * cornerLift(t), cz + ze]);
+      eavePts.push([cx + (-xg + 2 * xg * t), yb + up * cornerLift(t), cz + ze]);
     }
     addEaveTiles(mb, eavePts, o);
     const eavePts2 = [];
     for (let i = 0; i <= 8; i++) {
       const t = i / 8;
-      eavePts2.push([cx + (-xe + 2 * xe * t), yb + up * cornerLift(t), cz - ze]);
+      eavePts2.push([cx + (-xg + 2 * xg * t), yb + up * cornerLift(t), cz - ze]);
     }
     addEaveTiles(mb, eavePts2, o);
 
-    if (o.xuanYu) {
-      for (const s of [-1, 1]) addXuanYu(mb, cx + s * xe, cz, yb + rise, o.tag);
+    if (o.xuanYu && !hard) {
+      for (const s of [-1, 1]) addXuanYu(mb, cx + s * xg, cz, yb + rise, o.tag);
     }
-    if (o.windDuo) windDuoAtCorners(mb, cx, cz, xe, ze, yb + up, o.tag);
-    addRidge(mb, cx, cz, xe, xe, yb, rise, o);
+    if (o.windDuo) windDuoAtCorners(mb, cx, cz, xg, ze, yb + up, o.tag);
+    addRidge(mb, cx, cz, xg, xg, yb, rise, o);
   }
 
   /* ------------------------------ 卷棚顶 ------------------------------ */
@@ -541,17 +548,19 @@
     const { cx, cz, x0, x1, z0, z1, yb, rise } = o;
     const xe = (x1 - x0) / 2, ze = (z1 - z0) / 2;
     const up = o.upturn == null ? 0.3 : o.upturn;
+    const hard = o.hard || o.type === 'gableHard';
+    const xg = (hard && o.wallHW != null) ? Math.max(0.3, o.wallHW) : xe;
     const rr = Math.min(0.36, Math.max(0.18, rise * 0.4));
     const yApex = yb + rise - rr;
 
     const slope = (sign) => (u, v) => {
-      const x = -xe + 2 * xe * u;
+      const x = -xg + 2 * xg * u;
       const z = sign * (rr + (ze - rr) * (1 - v));
       const y = yb + (yApex - yb) * curve(v) + up * cornerLift(u) * Math.pow(1 - v, 1.6);
       return [cx + x, y, cz + z];
     };
-    patch(mb, bands(xe * 2), 6, slope(1), o.tile, o.tileB, o.tag + '·前坡');
-    patch(mb, bands(xe * 2), 6, slope(-1), o.tile, o.tileB, o.tag + '·后坡');
+    patch(mb, bands(xg * 2), 6, slope(1), o.tile, o.tileB, o.tag + '·前坡');
+    patch(mb, bands(xg * 2), 6, slope(-1), o.tile, o.tileB, o.tag + '·后坡');
     // 檐下木作：卷棚前后两坡各排一溜椽
     rafterBandUV(mb, slope(1), o, o.tag + '·前檐椽');
     rafterBandUV(mb, slope(-1), o, o.tag + '·后檐椽');
@@ -563,9 +572,9 @@
       const a = Math.PI * (1 - k / arcSeg);
       rowPts.push([cz + Math.cos(a) * rr, yApex + Math.sin(a) * rr]);
     }
-    const X = bands(xe * 2);
+    const X = bands(xg * 2);
     for (let i = 0; i < X; i++) {
-      const xa = cx - xe + (2 * xe * i) / X, xb = cx - xe + (2 * xe * (i + 1)) / X;
+      const xa = cx - xg + (2 * xg * i) / X, xb = cx - xg + (2 * xg * (i + 1)) / X;
       for (let k = 0; k < arcSeg; k++) {
         const p = rowPts[k], q = rowPts[k + 1];
         mb.quad([xa, p[1], p[0]], [xb, p[1], p[0]], [xb, q[1], q[0]], [xa, q[1], q[0]],
@@ -573,32 +582,43 @@
       }
     }
     if (o.ridgeStyle === 'ornate') {
-      mb.box(cx - xe, cx + xe, yApex + rr - 0.03, yApex + rr + 0.03, cz - 0.08, cz + 0.08, 'gold', o.tag + '·罗锅脊');
+      mb.box(cx - xg, cx + xg, yApex + rr - 0.03, yApex + rr + 0.03, cz - 0.08, cz + 0.08, 'gold', o.tag + '·罗锅脊');
     }
 
-    // 山面（木山花：轮廓必须贴着卷棚的凹曲屋面，不能是一刀平的三角形）
-    const gMat = o.gableMat || 'wood';
+    // 山面（轮廓必须贴着卷棚的凹曲屋面，不能是一刀平的三角形）：
+    // 悬山为木山花 + 博风 + 悬鱼；硬山为砖砌山墙，封山只到墙体外皮，不出博风/悬鱼
+    const gMat = o.gableMat || (hard ? 'plaster' : 'wood');
+    const GS = 6;
     for (const s of [-1, 1]) {
-      const x = cx + s * xe;
-      const gp = [[x, yb + up, cz - ze]];
-      const VS = 6;
-      for (let k = 1; k <= VS; k++) {
-        const v = k / VS;
-        gp.push([x, yb + (yApex - yb) * curve(v) + up * Math.pow(1 - v, 1.6), cz - (rr + (ze - rr) * (1 - v))]);
+      const x = cx + s * xg;
+      const outline = [];
+      for (let k = 0; k < GS; k++) {
+        const v = k / GS;
+        outline.push([x, yb + (yApex - yb) * curve(v) + up * Math.pow(1 - v, 1.6), cz - (rr + (ze - rr) * (1 - v))]);
       }
-      const T = [x, yApex + rr, cz];
-      for (let k = VS; k >= 1; k--) {
-        const v = k / VS;
-        gp.push([x, yb + (yApex - yb) * curve(v) + up * Math.pow(1 - v, 1.6), cz + (rr + (ze - rr) * (1 - v))]);
+      outline.push([x, yApex + rr, cz]);
+      for (let k = GS - 1; k >= 0; k--) {
+        const v = k / GS;
+        outline.push([x, yb + (yApex - yb) * curve(v) + up * Math.pow(1 - v, 1.6), cz + (rr + (ze - rr) * (1 - v))]);
       }
-      gp.push([x, yb + up, cz + ze]);
-      for (let i = 0; i < gp.length - 1; i++) {
+      // outline 首尾就是檐角点（y=yb+up），不要再另造 pL/pR，否则同一坐标重复出一对零面积三角
+      const crown = [x, yApex + rr, cz];
+      for (let i = 0; i < outline.length - 1; i++) {
+        const p = outline[i], q = outline[i + 1];
+        if (p === crown || q === crown) continue;
         // 只铺一面：另一面（反绕向）与它严格同面，渲染器本来就不做背面剔除、法线朝相机翻正
-        mb.tri(gp[i], gp[i + 1], T, gMat, o.tag + '·山花');
+        mb.tri(p, q, crown, gMat, o.tag + '·山花');
       }
-      GF.beamBetween(mb, [x, yb + up, cz - ze], [x, yb + (yApex - yb) * 0.6 + up * 0.4, cz - rr], 0.12, 0.18, 'wood', o.tag + '·博风');
-      GF.beamBetween(mb, [x, yb + up, cz + ze], [x, yb + (yApex - yb) * 0.6 + up * 0.4, cz + rr], 0.12, 0.18, 'wood', o.tag + '·博风');
-      if (o.xuanYu) addXuanYu(mb, x, cz, yApex + rr - 0.05, o.tag);
+      // 檐角起翘后，檐口（yb+up）与墙顶（yb）之间那条带卷棚此前没补，屋角山面留一条亮缝
+      if (up > 0.02) {
+        const pL = outline[0], pR = outline[outline.length - 1];
+        mb.quad(pL, pR, [x, yb, cz - ze], [x, yb, cz + ze], gMat, o.tag + '·山花');
+      }
+      // 博风板沿整条山面轮廓走（原来两根短梁只到弧顶的半路，檐角一起翘就露空）；硬山封山不出博风
+      if (!hard) {
+        ribbon(mb, outline, 0, 0.12, 0.18, 'wood', o.tag + '·博风', 0);
+        if (o.xuanYu) addXuanYu(mb, x, cz, yApex + rr - 0.05, o.tag);
+      }
     }
 
     // 檐口瓦当
@@ -606,11 +626,11 @@
       const pts = [];
       for (let i = 0; i <= 8; i++) {
         const t = i / 8;
-        pts.push([cx + (-xe + 2 * xe * t), yb + up * cornerLift(t), cz + sz * ze]);
+        pts.push([cx + (-xg + 2 * xg * t), yb + up * cornerLift(t), cz + sz * ze]);
       }
       addEaveTiles(mb, pts, o);
     }
-    if (o.windDuo) windDuoAtCorners(mb, cx, cz, xe, ze, yb + up, o.tag);
+    if (o.windDuo) windDuoAtCorners(mb, cx, cz, xg, ze, yb + up, o.tag);
   }
 
   /* ------------------------------ 盝顶 ------------------------------ */
@@ -701,13 +721,26 @@
     patch(mb, bands(xi * 2), 4, slope(1), o.tile, o.tileB, o.tag + '·上檐前');
     patch(mb, bands(xi * 2), 4, slope(-1), o.tile, o.tileB, o.tag + '·上檐后');
 
-    // 山花（三角形）
+    // 山花 + 博风板：贴着上檐瓦面的边线收口。
+    // 老版本一刀平三角：山花/博风是直边，而上檐是凹曲举折（v^1.45），
+    // 中段山花会从屋面里戳出来、博风悬在半空；改为沿举折边线采样成三角扇，
+    // 博风沿同一条边线走，与悬山/卷棚同一套收口逻辑。
+    const GS = 6;
     for (const s of [-1, 1]) {
       const x = cx + s * xi;
       if (!o.bare) {
-        mb.tri([x, y1, cz - zi], [x, y1, cz + zi], [x, yb + rise, cz], 'wood', o.tag + '·山花');
-        GF.beamBetween(mb, [x, y1, cz - zi], [x, yb + rise, cz], 0.12, 0.18, 'wood', o.tag + '·博风');
-        GF.beamBetween(mb, [x, y1, cz + zi], [x, yb + rise, cz], 0.12, 0.18, 'wood', o.tag + '·博风');
+        const u = s > 0 ? 1 : 0;
+        const T = [x, yb + rise, cz];
+        const outline = [];
+        for (let k = 0; k < GS; k++) outline.push(slope(1)(u, k / GS));
+        outline.push(T);
+        for (let k = GS - 1; k >= 0; k--) outline.push(slope(-1)(u, k / GS));
+        for (let i = 0; i < outline.length - 1; i++) {
+          const p = outline[i], q = outline[i + 1];
+          if (p === T || q === T) continue;
+          mb.tri(p, q, T, 'wood', o.tag + '·山花');
+        }
+        ribbon(mb, outline, 0, 0.12, 0.18, 'wood', o.tag + '·博风', 0);
       }
     }
 
@@ -1028,5 +1061,3 @@
     cross: crossRoof
   };
 })(typeof window !== 'undefined' ? window : globalThis);
-
-

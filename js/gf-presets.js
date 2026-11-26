@@ -302,7 +302,7 @@
       bays: 3, bayW: 2.9, depth: 6.0, floors: 2, floorH: 3.0,
       baseH: 0.35, steps: 2, wallMat: 'plaster', colMat: 'wood',
       tileColor: 'grey', eave: 0.7, slope: 0.5, upturn: 0.18,
-      roofType: 'gable', winPattern: 'lantern', winW: 1.1, winH: 1.2,
+      roofType: 'gableHard', winPattern: 'lantern', winW: 1.1, winH: 1.2,
       doorW: 1.5, doorH: 2.3, plaque: false, lanterns: true,
       interior: [{ kind: 'table', x: 0, z: 0.6 }, { kind: 'stool', x: 0.9, z: 0.6 }, { kind: 'stool', x: -0.9, z: 0.6 }, { kind: 'shelf', x: -2.2, z: -1.6 }],
       env: { ground: 'stone', groundSize: 12, trees: ['willow', 'plum'], rocks: 1, pond: { x: 4.6, z: 4.2, w: 3.2, d: 2.2 }, banners: 0, path: true }
@@ -312,7 +312,7 @@
       bays: 3, bayW: 2.6, depth: 5.2, floors: 2, floorH: 2.9,
       baseH: 0.3, steps: 2, wallMat: 'plaster', colMat: 'wood',
       tileColor: 'grey', eave: 0.5, slope: 0.45, upturn: 0.12,
-      roofType: 'gable', winPattern: 'straight', winW: 1.0, winH: 1.1,
+      roofType: 'gableHard', winPattern: 'straight', winW: 1.0, winH: 1.1,
       doorW: 1.4, doorH: 2.2, plaque: true, horseWall: true, lanterns: true,
       interior: [{ kind: 'table', x: 0, z: 0 }, { kind: 'altar', x: 0, z: -1.6 }, { kind: 'bench' , x: 1.6, z: 0.4 }],
       env: { ground: 'stone', groundSize: 12, trees: ['bamboo', 'plum'], rocks: 2, pond: null, banners: 0, path: true }
@@ -976,11 +976,3 @@
     return GF.normalize(base);
   };
 })(typeof window !== 'undefined' ? window : globalThis);
-
-
-
-
-
-
-
-
