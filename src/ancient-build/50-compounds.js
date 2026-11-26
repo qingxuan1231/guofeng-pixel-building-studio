@@ -52,9 +52,14 @@
     const mz = -3.2, mW = 9.6, mD = 5.4, mBase = 0.75;
     const msh = unitShift(r, '大雄宝殿');
     const baseMesh = new GF.Mesh();
-    // 月台：贴殿身正前方的石台，顶面比须弥座台面高 5 cm（避免与台基台面共面）；走断面环，不再 box 叠面
-    const mtW = mW * 0.72, mtD = 1.8, mtCz = mz + mD / 2 + mtD / 2;
-    const mtTop = mBase + 0.05;
+    // 月台：殿前平阶（露台），贴台基南立面之外 2 cm，顶面与须弥座台面等高 ——
+    // 两件在同一水平面相接，恢复古建「台基 + 月台」一体形制，不再有叠置感；
+    // 走断面环，不再 box 叠面；面阔 / 进深可被「月台」部件单独调整
+    const mtOv = (r.units && r.units['大雄宝殿']) || {};
+    const mtW = mtOv.terraceW != null ? +mtOv.terraceW : mW * 0.72;
+    const mtD = mtOv.terraceD != null ? +mtOv.terraceD : 1.8;
+    const mtCz = mz + mD / 2 + 0.5 + 0.02 + mtD / 2;
+    const mtTop = mBase;
     P.loftRect(baseMesh, 0, mtCz, [
       { y: 0, w: mtW, d: mtD },
       { y: mtTop, w: mtW, d: mtD, m: 'stoneDark' },
@@ -70,21 +75,19 @@
     P.railing(baseMesh, { a: [mtW / 2, mtCz + mtD / 2], b: [mtW / 2, mtCz - mtD / 2], y: mtTop, style: 'marble', tag: '月台栏' });
     // 台基跟殿身共用同一份 unitShift：拖动大雄宝殿时台基、月台、踏跺、栏杆一起走
     baseMesh.translate(msh.dx, 0, msh.dz);
-    const baseHide = !!(r.units && r.units['大雄宝殿'] && r.units['大雄宝殿'].parts && r.units['大雄宝殿'].parts.hide && r.units['大雄宝殿'].parts.hide.base);
-    if (!baseHide) mb.merge(baseMesh);
+    // 月台显隐：隐藏台基时月台一并隐藏（一体台基），也可用「月台」开关单独隐藏
+    const mtBlk = (r.units && r.units['大雄宝殿'] && r.units['大雄宝殿'].parts && r.units['大雄宝殿'].parts.hide) || {};
+    if (!mtBlk.base && !mtBlk.terrace) mb.merge(baseMesh);
     axisUnit(mb, r, {
       tag: '大雄宝殿', z: mz, statBaseH: mBase,
       r: { baseH: mBase, steps: 0, railing: false, dougong: true, dgScale: 0.9, dgStyle: 'full' },
       unit: { W: mW, D: mD, bays: 5, roofType: 'hip', eave: 1.2, veranda: true, partition: 1.2 }
     });
-    // 把月台并进「大雄宝殿」的台基构件：选中 / 隐藏台基时连月台一起处理
+    // 月台注册为独立构件「月台」：自带选中框，不再并入台基包围盒，可单独选中 / 调尺寸 / 隐藏
     const bigBase = baseMesh.triCount ? baseMesh.bounds() : null;
     const su = mb.units && mb.units[mb.units.length - 1];
-    if (bigBase && su && su.id === '大雄宝殿' && su.parts && su.parts.base) {
-      const pb = su.parts.base;
-      pb.x0 = Math.min(pb.x0, bigBase.x0); pb.x1 = Math.max(pb.x1, bigBase.x1);
-      pb.z0 = Math.min(pb.z0, bigBase.z0); pb.z1 = Math.max(pb.z1, bigBase.z1);
-      pb.y0 = Math.min(pb.y0, bigBase.y0); pb.y1 = Math.max(pb.y1, bigBase.y1);
+    if (bigBase && su && su.id === '大雄宝殿' && su.parts) {
+      su.parts.terrace = bigBase;
     }
     P.censer(mb, 0, mz + mD / 2 + 2.4, 1.3, '香炉');
     for (const sx of [-1, 1]) P.lion(mb, sx * (mW / 2 + 0.9), mz + mD / 2 + 1.6, 1.0, '石狮');
@@ -157,8 +160,11 @@
     const mz = -1.8, mW = 8.4, mD = 5.0, mBase = 0.7;
     const msh = unitShift(r, '三清殿');
     const baseMesh = new GF.Mesh();
-    const mtTop = mBase + 0.05;
-    const mtW = mW * 0.68, mtD = 1.6, mtCz = mz + mD / 2 + mtD / 2;
+    const mtOv = (r.units && r.units['三清殿']) || {};
+    const mtW = mtOv.terraceW != null ? +mtOv.terraceW : mW * 0.68;
+    const mtD = mtOv.terraceD != null ? +mtOv.terraceD : 1.6;
+    const mtTop = mBase;
+    const mtCz = mz + mD / 2 + 0.5 + 0.02 + mtD / 2;
     P.loftRect(baseMesh, 0, mtCz, [
       { y: 0, w: mtW, d: mtD },
       { y: mtTop, w: mtW, d: mtD, m: 'stoneDark' },
@@ -166,20 +172,19 @@
     ], '三清月台');
     P.capRect(baseMesh, 0, mtCz, mtW - 0.08, mtD - 0.08, mtTop, 'slabTop', '月台台面');
     baseMesh.translate(msh.dx, 0, msh.dz);
-    const baseHide = !!(r.units && r.units['三清殿'] && r.units['三清殿'].parts && r.units['三清殿'].parts.hide && r.units['三清殿'].parts.hide.base);
-    if (!baseHide) mb.merge(baseMesh);
+    // 月台显隐：隐藏台基时月台一并隐藏（一体台基），也可用「月台」开关单独隐藏
+    const mtBlk = (r.units && r.units['三清殿'] && r.units['三清殿'].parts && r.units['三清殿'].parts.hide) || {};
+    if (!mtBlk.base && !mtBlk.terrace) mb.merge(baseMesh);
     axisUnit(mb, r, {
       tag: '三清殿', z: mz, statBaseH: mBase,
       r: { baseH: mBase, steps: 0, railing: false, dougong: true, dgScale: 0.85, dgStyle: 'full' },
       unit: { W: mW, D: mD, bays: 5, roofType: 'gableHip', eave: 1.1, veranda: true, partition: 1.2 }
     });
+    // 月台注册为独立构件「月台」：自带选中框，不再并入台基包围盒，可单独选中 / 调尺寸 / 隐藏
     const bigBase = baseMesh.triCount ? baseMesh.bounds() : null;
     const su = mb.units && mb.units[mb.units.length - 1];
-    if (bigBase && su && su.id === '三清殿' && su.parts && su.parts.base) {
-      const pb = su.parts.base;
-      pb.x0 = Math.min(pb.x0, bigBase.x0); pb.x1 = Math.max(pb.x1, bigBase.x1);
-      pb.z0 = Math.min(pb.z0, bigBase.z0); pb.z1 = Math.max(pb.z1, bigBase.z1);
-      pb.y0 = Math.min(pb.y0, bigBase.y0); pb.y1 = Math.max(pb.y1, bigBase.y1);
+    if (bigBase && su && su.id === '三清殿' && su.parts) {
+      su.parts.terrace = bigBase;
     }
     P.censer(mb, 0, mz + mD / 2 + 2.0, 1.2, '香炉');
 

@@ -316,6 +316,10 @@ canvas#view.dragging { cursor: grabbing; }
 .bld-bar { bottom: 30px; }
 .bld-bar .comp-chip { border-color: #cfc3ab; }
 .bld-bar .comp-chip.on { border-color: #c9962e; background: #fff2d2; color: #7a4f12; font-weight: 600; }
+/* 部件选择条：贴在建筑条上方，只在选中某一栋时出现；面板随之再上移一档避让 */
+.part-bar { bottom: 66px; max-width: calc(100% - 26px); }
+.part-bar .comp-glabel { color: #a3927a; }
+body.has-bld-part .bld-panel { bottom: 108px; }
 .bld-panel { bottom: 72px; width: 340px; }
 .bld-panel .cp-head b { color: #7a4f12; }
 .cp-head { cursor: move; user-select: none; }
