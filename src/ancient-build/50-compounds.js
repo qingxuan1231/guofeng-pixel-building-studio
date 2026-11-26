@@ -48,47 +48,54 @@
 
     // 大雄宝殿：全寺最高最大，须弥座台基 + 月台 + 庑殿
     // 台基由 axisUnit 走标准 platform 三档形制（须弥座），以殿身中心 (0, mz) 为心生成；
-    // 月台为殿前附属石台，独立一件 —— 不再用 tieredTerrace 三层叠台 + 殿身自带须弥座两套台基叠置。
+    // 台基自带中央踏跺（steps:3，与法堂同制），台基与台阶天然合成 parts.base 一件；
+    // 月台改为殿前两翼露台，分列中央踏跺两侧，贴台基南立面之外 2 cm，顶面与须弥座台面等高，
+    // 两翼各自成件仍独立可调，恢复古建「台基 + 台阶一体、月台翼出」形制。
     const mz = -3.2, mW = 9.6, mD = 5.4, mBase = 0.75;
-    const msh = unitShift(r, '大雄宝殿');
     const baseMesh = new GF.Mesh();
-    // 月台：殿前平阶（露台），贴台基南立面之外 2 cm，顶面与须弥座台面等高 ——
-    // 两件在同一水平面相接，恢复古建「台基 + 月台」一体形制，不再有叠置感；
-    // 走断面环，不再 box 叠面；面阔 / 进深可被「月台」部件单独调整
+    // 月台：殿前两翼露台（走断面环，不再 box 叠面；面阔 / 进深可被「月台」部件单独调整）
+    // 整体在殿身本地坐标系里生成（殿身中心为原点，台基前缘 z=mD/2=2.7），
+    // 由 axisUnit 连带殿身一起平移、一起登记进『u:大雄宝殿』拖动区间，
+    // 拖动大雄宝殿时台基、两翼露台、踏跺、栏杆作为一个整体移动，不再留下悬空件。
     const mtOv = (r.units && r.units['大雄宝殿']) || {};
-    const mtW = mtOv.terraceW != null ? +mtOv.terraceW : mW * 0.72;
-    const mtD = mtOv.terraceD != null ? +mtOv.terraceD : 1.8;
-    const mtCz = mz + mD / 2 + 0.5 + 0.02 + mtD / 2;
-    const mtTop = mBase;
-    P.loftRect(baseMesh, 0, mtCz, [
-      { y: 0, w: mtW, d: mtD },
-      { y: mtTop, w: mtW, d: mtD, m: 'stoneDark' },
-      { y: mtTop, w: mtW - 0.04, d: mtD - 0.04, m: 'stoneDark' }
-    ], '大雄月台');
-    P.capRect(baseMesh, 0, mtCz, mtW - 0.08, mtD - 0.08, mtTop, 'slabTop', '月台台面');
-    // 月台前踏跺：自月台前缘向外 3 级，最后一级高度为零所以只建前两级
-    for (let i = 0; i < 2; i++) {
-      const d = (i + 1) * mBase / 3;
-      baseMesh.box(-1.6, 1.6, 0, mBase - d, mtCz + mtD / 2 + i * 0.3, mtCz + mtD / 2 + (i + 1) * 0.3, 'stone', '月台踏跺');
+    // 面阔默认取殿身全宽 + 0.4 m，覆盖到最外两间檐廊柱（柱在 x=±mW/2）
+    const mtW = mtOv.terraceW != null ? +mtOv.terraceW : mW + 0.4;
+    const mtD = mtOv.terraceD != null ? +mtOv.terraceD : 1.4;
+    // 露台顶面必须跟台基实际高度走（台基高可被「台基」部件覆盖）：
+    // 与 axisUnit 同一套覆盖规则算出台基有效高度，台多高露台就多高。
+    const govB = unitOverride(r, '大雄宝殿');
+    const grrB = Object.assign({}, unitRecipe(r, govB), { railing: false }, { baseH: mBase });
+    if (govB) UNIT_RECIPE.forEach((k) => { if (govB[k] != null) grrB[k] = govB[k]; });
+    const mtTop = grrB.baseH;
+    // 本地坐标系以殿身中心为原点；台基台明四周各外放 0.5 m，前立面在 z=mD/2+0.5：
+    // 两翼露台贴台基前立面之外 2 cm 起，向前 → +z 方向翼出，与中央踏跺同制。
+    const z0 = mD / 2 + 0.5 + 0.02, z1 = z0 + mtD;
+    const stairHalf = 1.94, halfW = Math.max(mtW / 2, stairHalf + 0.15);
+    for (const sg of [-1, 1]) {
+      const xa = sg * stairHalf, xb = sg * halfW;
+      const x0 = Math.min(xa, xb), x1 = Math.max(xa, xb), w = x1 - x0;
+      P.loftRect(baseMesh, (x0 + x1) / 2, (z0 + z1) / 2, [
+        { y: 0, w: w, d: mtD },
+        { y: mtTop, w: w, d: mtD, m: 'stoneDark' },
+        { y: mtTop, w: w - 0.04, d: mtD - 0.04, m: 'stoneDark' }
+      ], '大雄月台');
+      P.capRect(baseMesh, (x0 + x1) / 2, (z0 + z1) / 2, w - 0.08, mtD - 0.08, mtTop, 'slabTop', '月台台面');
+      // 两翼栏杆：外缘竖边 + 前缘横边各一段（内缘贴踏跺留口）
+      P.railing(baseMesh, { a: [x1, z0], b: [x1, z1], y: mtTop, style: 'marble', tag: '月台栏' });
+      P.railing(baseMesh, { a: [x0, z1], b: [x1, z1], y: mtTop, style: 'marble', tag: '月台栏' });
     }
-    P.railing(baseMesh, { a: [-mtW / 2, mtCz + mtD / 2], b: [-mtW / 2, mtCz - mtD / 2], y: mtTop, style: 'marble', tag: '月台栏' });
-    P.railing(baseMesh, { a: [mtW / 2, mtCz + mtD / 2], b: [mtW / 2, mtCz - mtD / 2], y: mtTop, style: 'marble', tag: '月台栏' });
-    // 台基跟殿身共用同一份 unitShift：拖动大雄宝殿时台基、月台、踏跺、栏杆一起走
-    baseMesh.translate(msh.dx, 0, msh.dz);
-    // 月台显隐：隐藏台基时月台一并隐藏（一体台基），也可用「月台」开关单独隐藏
+    // 月台显隐：隐藏台基时月台一并隐藏（一体台基），也可用「月台」开关单独隐藏；
+    // 无论显隐都登记 parts.terrace 包围盒，部件条上「月台」仍可选中 / 调尺寸。
     const mtBlk = (r.units && r.units['大雄宝殿'] && r.units['大雄宝殿'].parts && r.units['大雄宝殿'].parts.hide) || {};
-    if (!mtBlk.base && !mtBlk.terrace) mb.merge(baseMesh);
+    const showMt = !mtBlk.base && !mtBlk.terrace;
+    const bigBase = baseMesh.triCount ? baseMesh.bounds() : null;
     axisUnit(mb, r, {
       tag: '大雄宝殿', z: mz, statBaseH: mBase,
-      r: { baseH: mBase, steps: 0, railing: false, dougong: true, dgScale: 0.9, dgStyle: 'full' },
+      extraMesh: showMt ? baseMesh : null,
+      extraParts: bigBase ? { terrace: bigBase } : null,
+      r: { baseH: mBase, steps: 3, railing: false, dougong: true, dgScale: 0.9, dgStyle: 'full' },
       unit: { W: mW, D: mD, bays: 5, roofType: 'hip', eave: 1.2, veranda: true, partition: 1.2 }
     });
-    // 月台注册为独立构件「月台」：自带选中框，不再并入台基包围盒，可单独选中 / 调尺寸 / 隐藏
-    const bigBase = baseMesh.triCount ? baseMesh.bounds() : null;
-    const su = mb.units && mb.units[mb.units.length - 1];
-    if (bigBase && su && su.id === '大雄宝殿' && su.parts) {
-      su.parts.terrace = bigBase;
-    }
     P.censer(mb, 0, mz + mD / 2 + 2.4, 1.3, '香炉');
     for (const sx of [-1, 1]) P.lion(mb, sx * (mW / 2 + 0.9), mz + mD / 2 + 1.6, 1.0, '石狮');
 

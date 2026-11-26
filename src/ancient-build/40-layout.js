@@ -13,10 +13,15 @@
     if (r.axisRaise === false && o.statBaseH == null) rr.baseH = ru.baseH;
     const unit = unitGeom(o.unit, ov);
     const u = houseUnit(rr, unit);
+    // 附属石台（主殿月台两翼 / 月台）：先在殿身本地坐标系里并入同一张网格，
+    // 再随殿身一起平移，最后登记进『u:<tag>』拖动区间，拖动单体时不分离、不悬空。
+    if (o.extraMesh) u.mesh.merge(o.extraMesh);
     const sh = unitShift(r, o.tag);
     const ux = (o.x || 0) + sh.dx, uz = (o.z || 0) + sh.dz;
     u.mesh.translate(ux, o.y || 0, uz);
     mb.merge(u.mesh, 'u:' + o.tag);
+    // 附属部件包围盒（仍按 compose 各自登记，随 regUnit 一起换算到世界坐标）
+    if (o.extraParts) u.parts = Object.assign(u.parts || {}, o.extraParts);
     regUnit(mb, o.tag, o.tag, ux, uz, unit.W, unit.D, 0, u.topY + (o.y || 0), rr.baseH, false, u.parts, o.y || 0);
     const bh = o.statBaseH != null ? o.statBaseH : rr.baseH;
     layStats(mb).axis.push({

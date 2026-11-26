@@ -622,18 +622,22 @@
       // 320 px/m 时 0.1 m 的线脚收分就是 32 px，盒子叠不出这层转折，但棱台叠棱台
       // 会在每道接缝处多一对同高盖面 —— 那就是原来条纹闪烁的来源，现在整条断面
       // 一气贯通，接缝处一张盖面也没有。
-      const yb = Math.max(0.5, h - 0.32);
+      // 剖面线脚按 0.6 m 基准高设计（圭脚 0.12 / 下枋 0.26 / 下枭 0.33 / 莲花带 0.40 / 束腰 / 上枭 / 上枋）。
+      // 台基高被改到 0.6 m 以下时，原固定数值会把上枭/上枋顶出台面之上（台基“看起来更高”），
+      // 这正是“台基矮了露台反而高”的由来：统一按 h/0.6 比例压缩剖面，越低越矮，
+      // h ≥ 0.6 m 时 s=1，所有线脚与旧版完全一致，不影响任何既有形制。
+      const s = Math.min(1, h / 0.6), yb = s === 1 ? Math.max(0.5, h - 0.32) : 0.5 * s;
       const rings = [
         { y: 0, w: W, d: D },                                   // 圭脚底（落地不封底）
-        { y: 0.12, w: W, d: D, m: 'stoneDark' },                 // 圭脚
-        { y: 0.12, w: W - 0.02, d: D - 0.02, m: 'stoneDark' },    // 圭脚压边
-        { y: 0.26, w: W - 0.10, d: D - 0.10, m: 'stone' },        // 下枋
-        { y: 0.33, w: W - 0.20, d: D - 0.20, m: 'stone' },        // 下枭
+        { y: 0.12 * s, w: W, d: D, m: 'stoneDark' },             // 圭脚
+        { y: 0.12 * s, w: W - 0.02, d: D - 0.02, m: 'stoneDark' },// 圭脚压边
+        { y: 0.26 * s, w: W - 0.10, d: D - 0.10, m: 'stone' },    // 下枋
+        { y: 0.33 * s, w: W - 0.20, d: D - 0.20, m: 'stone' },    // 下枭
         // 下枭收这一段：低档兼作莲瓣带（原来是一排 26 cm 宽、2 cm 深的浅浮雕小盒，
         // 40 档只有 0.8 px，纯属亚像素噪点），改成一圈浅色线脚，读起来是同一层意思。
-        { y: 0.40, w: W - 0.34, d: D - 0.34, m: (o.lotus && det < 2) ? 'marble' : 'stoneDark' },
+        { y: 0.40 * s, w: W - 0.34, d: D - 0.34, m: (o.lotus && det < 2) ? 'marble' : 'stoneDark' },
         { y: yb, w: W - 0.34, d: D - 0.34, m: 'stoneDark' },      // 束腰（退进去的暗带）
-        { y: yb + 0.1, w: W - 0.16, d: D - 0.16, m: 'stone' },    // 上枭
+        { y: yb + 0.1 * s, w: W - 0.16, d: D - 0.16, m: 'stone' },// 上枭
         { y: h, w: W - 0.06, d: D - 0.06, m: 'marble' }           // 上枋
       ];
       loftRect(mb, cx, cz, rings, tag);
@@ -646,7 +650,7 @@
         // 束腰玛瑙柱：每 1.6 m 一道竖线。原来凸出 1.5 cm（12 面/根，常规密度 0.6 px），
         // 改成贴面一张竖板（2 面），靠颜色读，不靠那点凹凸。
         const xw = W / 2 - 0.34, zw = D / 2 - 0.34, off = 0.004, hw = 0.05;
-        const ya2 = 0.44, yb2 = yb - 0.04;
+        const ya2 = 0.44 * s, yb2 = yb - 0.04 * s;
         for (let x = o.x0 + 0.6; x <= o.x1 - 0.6; x += 1.6) {
           mb.quad([x - hw, ya2, cz + zw + off], [x + hw, ya2, cz + zw + off],
                   [x + hw, yb2, cz + zw + off], [x - hw, yb2, cz + zw + off], 'stone', tag + '·玛瑙柱');
@@ -666,11 +670,11 @@
           for (const sz of [-1, 1]) {
             const px = cx + sx * xw, pz = cz + sz * zw;
             const u0 = px - sx * pw;
-            mb.quad([u0, 0.40, pz + sz * cOff], [px, 0.40, pz + sz * cOff],
-                    [px, yb + 0.02, pz + sz * cOff], [u0, yb + 0.02, pz + sz * cOff], 'marble', tag + '·角柱');
+            mb.quad([u0, 0.40 * s, pz + sz * cOff], [px, 0.40 * s, pz + sz * cOff],
+                    [px, yb + 0.02 * s, pz + sz * cOff], [u0, yb + 0.02 * s, pz + sz * cOff], 'marble', tag + '·角柱');
             const v0 = pz - sz * pw;
-            mb.quad([px + sx * cOff, 0.40, v0], [px + sx * cOff, 0.40, pz],
-                    [px + sx * cOff, yb + 0.02, pz], [px + sx * cOff, yb + 0.02, v0], 'marble', tag + '·角柱');
+            mb.quad([px + sx * cOff, 0.40 * s, v0], [px + sx * cOff, 0.40 * s, pz],
+                    [px + sx * cOff, yb + 0.02 * s, pz], [px + sx * cOff, yb + 0.02 * s, v0], 'marble', tag + '·角柱');
           }
         }
       }
@@ -722,8 +726,10 @@
         }
         // 垂带：往台阶里多压 2 cm、两端各外放 1.2 cm。
         // 原来垂带内侧与台阶侧面、前后与台阶立面完全共面，两张面就在这几条边上抢深度。
+        // 顶段抬高 0.16 本是让它压在踏面上；台基低时这会把垂带顶出台面之上（baseH=0.35 时
+        // 顶段 peaking 到 0.393，比台面还高）——上缘一律按不超过台面收口。
         for (const s of [-1, 1]) {
-          mb.box(s * (swI - 0.02), s * (swI + 0.26), 0, h - d + 0.16, zz0 - sgn * 0.012, zz1 + sgn * 0.012, 'slab', tag + '·垂带');
+          mb.box(s * (swI - 0.02), s * (swI + 0.26), 0, Math.min(h - d + 0.16, h - 0.02), zz0 - sgn * 0.012, zz1 + sgn * 0.012, 'slab', tag + '·垂带');
         }
         // 御路石：三级以上踏跺居中铺一条通长的斜板。
         // 原来只在最上一级放一块 marble，结果台面上凭空多出一个白色矩形；
