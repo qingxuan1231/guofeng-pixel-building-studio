@@ -220,22 +220,44 @@
     const { CW, CD } = ctx;
     const rng = new GF.RNG(r.seed + 23);
     const zF = CD / 2, zB = -CD / 2, wallH = 3.0;
-    // 外围墙：东南隅开门（前墙东侧留门洞）
+    // 外围墙：东南隅开门（前墙东侧留门洞）。墙身走 wallWithHoles 0.22m 细分，
+    // 不再四张整面大 box（原来 20m 长墙一张大 quad，像素风下成大三角/大方框）。
     const gateX = CW / 4, gateW = 2.4;
-    mb.box(-CW / 2, gateX - gateW / 2, 0, wallH, zF - 0.15, zF + 0.15, 'plaster', '院墙·前');
-    mb.box(gateX + gateW / 2, CW / 2, 0, wallH, zF - 0.15, zF + 0.15, 'plaster', '院墙·前');
+    P.wallWithHoles(mb, {
+      dir: 'front', at: zF, u0: -CW / 2, u1: CW / 2, y0: 0, y1: wallH,
+      holes: [{ u0: gateX - gateW / 2, u1: gateX + gateW / 2, v0: 0, v1: 2.5 }],
+      thickness: 0.3, mat: 'plaster', tag: '院墙·前'
+    });
     // 压顶与瓦脊由 courtWall 统一出（body:false 只出压顶/脊）：
     // 这里自己再建一条压顶，会与 courtWall 那条同面叠着，整条 20 m² 转到侧面就闪。
     P.courtWall(mb, {
       x0: -CW / 2, x1: CW / 2, z0: zB, z1: zF, y: wallH, body: false, windows: null
     });
-    mb.box(-CW / 2, CW / 2, 0, wallH, zB - 0.15, zB + 0.15, 'plaster', '院墙·后');
-    mb.box(-CW / 2 - 0.15, -CW / 2 + 0.15, 0, wallH, zB, zF, 'plaster', '院墙·左');
-    mb.box(CW / 2 - 0.15, CW / 2 + 0.15, 0, wallH, zB, zF, 'plaster', '院墙·右');
-    // 宅门（东南角）
-    for (const sx of [-1, 1]) mb.box(gateX + sx * gateW / 2 - 0.1, gateX + sx * gateW / 2 + 0.1, 0.1, 2.5, zF - 0.2, zF + 0.2, 'woodDark', '宅门·框');
-    mb.box(gateX - gateW / 2 + 0.05, gateX - 0.03, 0.1, 2.3, zF - 0.06, zF + 0.06, 'zhu', '宅门·扇');
-    mb.box(gateX + 0.03, gateX + gateW / 2 - 0.05, 0.1, 2.3, zF - 0.06, zF + 0.06, 'zhu', '宅门·扇');
+    P.wallWithHoles(mb, { dir: 'back', at: zB, u0: -CW / 2, u1: CW / 2, y0: 0, y1: wallH, holes: [], thickness: 0.3, mat: 'plaster', tag: '院墙·后' });
+    P.wallWithHoles(mb, { dir: 'left', at: -CW / 2, u0: zB, u1: zF, y0: 0, y1: wallH, holes: [], thickness: 0.3, mat: 'plaster', tag: '院墙·左' });
+    P.wallWithHoles(mb, { dir: 'right', at: CW / 2, u0: -zF, u1: -zB, y0: 0, y1: wallH, holes: [], thickness: 0.3, mat: 'plaster', tag: '院墙·右' });
+    // 宅门（东南角）：门框按 0.22m 竖向细分，门扇按双向网格细分
+    for (const sx of [-1, 1]) {
+      const qa = gateX + sx * gateW / 2 - 0.1, qb = gateX + sx * gateW / 2 + 0.1;
+      const w0 = Math.min(qa, qb), w1 = Math.max(qa, qb);
+      const nq = Math.min(Math.max(1, Math.ceil(2.4 / 0.22)), 220);
+      for (let qy = 0; qy < nq; qy++) {
+        mb.box(w0, w1, 0.1 + 2.4 * qy / nq, 0.1 + 2.4 * (qy + 1) / nq, zF - 0.2, zF + 0.2, 'woodDark', '宅门·框');
+      }
+    }
+    for (const sx of [-1, 1]) {
+      const f0 = gateX + sx * (gateW / 2 - 0.05), f1 = gateX + sx * 0.03;
+      const fa = Math.min(f0, f1), fb = Math.max(f0, f1);
+      const nx = Math.min(Math.max(1, Math.ceil((fb - fa) / 0.22)), 220);
+      const ny = Math.min(Math.max(1, Math.ceil(2.2 / 0.22)), 220);
+      for (let bx = 0; bx < nx; bx++) {
+        for (let by = 0; by < ny; by++) {
+          const a = fa + (fb - fa) * bx / nx, c = fa + (fb - fa) * (bx + 1) / nx;
+          const y0 = 0.1 + 2.2 * by / ny, y1 = 0.1 + 2.2 * (by + 1) / ny;
+          mb.box(a, c, y0, y1, zF - 0.06, zF + 0.06, 'zhu', '宅门·扇');
+        }
+      }
+    }
     if (!r.cut.roof) {
       GF.roofs.build(mb, {
         cx: gateX, cz: zF, x0: gateX - gateW / 2 - 0.7, x1: gateX + gateW / 2 + 0.7, z0: zF - 0.9, z1: zF + 0.9,

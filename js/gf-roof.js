@@ -67,6 +67,11 @@
         let mat = (GF.detail(2) || tileIdx % 2 === 0) ? matA : matB;
         if (TRIM && j === 0) mat = TRIM;
         mb.quad(a, b, c, d, mat, tag);
+        if (GF._dbgPatch && /下檐/.test(tag)) {
+          const E = (p,q) => Math.hypot(p[0]-q[0],p[1]-q[1],p[2]-q[2]);
+          if (Math.max(E(a,b),E(b,c),E(c,d),E(d,a),E(a,c),E(b,d)) > 0.5)
+            console.error(`PATCH ${tag}: cx=${GF._dbgCX} cz=${GF._dbgCZ} xe=${GF._dbgXE} ze=${GF._dbgZE} nu=${nu} nv=${nv} per=${per} amp=${amp} TRIM=${TRIM} NU=${NU} i=${i} j=${j} vs=${vs[j].toFixed(3)},${vs[j+1].toFixed(3)} Eaxc=${E(a,c).toFixed(3)} quad=[${[a,b,c,d].map(p=>p.map(v2=>v2.toFixed(2)).join(',')).join(' | ')}]`);
+        }
       }
     }
   }
@@ -123,6 +128,113 @@
     return GF.clamp(Math.round(width / 0.2), 8, 96);
   }
 
+  // 檐口采样：沿 x 跨度按 0.22 m/段加密。老版固定 8/9 段，20 m 长厦下一段连檐就是 2.5 m
+  // 整条（瓦当间距另在 addEaveTiles 里按累距排 pitch 0.33 m），像素风读成大长条。
+  function eaveSamples(fn, span) {
+    const nx = Math.max(2, Math.round(span / 0.22));
+    const pts = [];
+    for (let i = 0; i <= nx; i++) pts.push(fn(i / nx));
+    return pts;
+  }
+
+  /* ------------------------------ 山花三角面（统一） ------------------------------ */
+  // 悬山/硬山/卷棚/歇山上檐共用同一套路：
+  // 沿前后坡边线采样成“横向行带”网格，行列均按 0.22 m 步距细分：
+  //   行 = 同一档高度处前坡点→后坡点的横弦，每行再按实长 0.22 m 分格；
+  //   相邻两行按 max(行格数) 缝合，网格行列边长全 ≤ ~0.31 m（含对角）。
+  // 彻底取代老版“以脊顶为扇心的三角扇”：扇形的底边（前檐角→后檐角，
+  // 门顶/长屋脊下可达 1.8 m）与扇心斜边（脊顶→檐角）都是大长边，
+  // 像素风下会读成一个整块大三角。行带网格把整面切成 0.2 m 级小格，无大三角。
+  // 卷棚（元宝脊）两坡顶不收敛到一点，顶线之上再叠一层圆弧顶行带；
+  // 檐角起翘时补充檐口→墙顶的竖向条带（同网格密度），山面从墙顶一路闭合到屋檐。
+  // 返回“檐→脊→檐”的轮廓折线，供博风板 ribbon 复用同一批顶点，不产生错缝。
+  function gablePanel(mb, s) {
+    const apex = s.apex, yFloor = s.yFloor;
+    // 行数按斜坡弧长 0.22 m/行（与瓦面 bands 同密度，不再硬编码固定段数）
+    const nv = GF.clamp(Math.round(s.edgeL / 0.22), 4, 48);
+    const fpts = [], bpts = [];
+    for (let k = 0; k <= nv; k++) {
+      const v = k / nv;
+      fpts.push(s.fwd(v));
+      bpts.push(s.bwd(v));
+    }
+    const dist = (p, q) => Math.hypot(p[0]-q[0], p[1]-q[1], p[2]-q[2]);
+    const rows = [];
+    // 檐角起翘 → 檐口高于墙顶：先补竖向条带（逐段细分到墙顶，与横向网格同密度）。
+    // 老版条带每条横跨整条底边（门顶下 1.8 m），也会读成大方框，这里整带入网格统一按 0.22 m 分格。
+    const eA = fpts[0], eB = bpts[0];
+    const lift = Math.min(eA[1], eB[1]) - yFloor;
+    if (lift > 0.02) {
+      // 竖向条带按 0.22 m/行 从墙顶(yFloor)细分到檐口高度，填补墙顶→起翘檐口的梯形区。
+      // 顶部不推到檐口行本身：檐口行已由主网格的第 0 行（fpts[0]→bpts[0]）铺出，
+      // 这里只铺到“差一格”，最后缝合到檐口行闭合，避免零高度折叠面。
+      const bs = Math.max(Math.round(lift / 0.22), 1);
+      for (let r = 0; r < bs; r++) {
+        const y = yFloor + lift * (r / bs);
+        rows.push([[eA[0], y, eA[2]], [eB[0], y, eB[2]]]);
+      }
+    }
+    // 主体行带：前坡点→后坡点（v=0 檐口 → v=1 脊端/弧底）
+    for (let k = 0; k <= nv; k++) rows.push([fpts[k], bpts[k]]);
+    // 卷棚圆弧顶：fwd(1)/bwd(1) 是弧底两端、脊顶（apex）在弧心正上方，
+    // 再叠一层半圆弧弦行带；弦按 0.22 m 分格，弧顶行退化为顶点走扇形收口。
+    const fTop = fpts[nv], bTop = bpts[nv];
+    const topGap = dist(fTop, bTop);
+    const arcOutline = [];   // 博风板轮廓的弧上中间点（不含弧底两端，那两点已在 fpts/bpts 里）
+    let capCX = 0, capCY = 0, capCZ = 0;
+    if (topGap > 1e-6) {
+      capCX = (fTop[0] + bTop[0]) / 2;
+      capCY = (fTop[1] + bTop[1]) / 2;
+      capCZ = (fTop[2] + bTop[2]) / 2;
+      const na = GF.clamp(Math.round((Math.PI * topGap / 2) / 0.22), 2, 12);
+      for (let a = 1; a <= na; a++) {
+        const t = a / na;   // 0=弧底 → 1=脊顶
+        const hw = topGap / 2 * Math.cos(t * Math.PI / 2);
+        const y = capCY + (apex[1] - capCY) * Math.sin(t * Math.PI / 2);
+        rows.push([[capCX, y, capCZ - hw], [capCX, y, capCZ + hw]]);
+      }
+      for (let a = 1; a < na; a++) {
+        const th = Math.PI * (1 - a / na);
+        arcOutline.push([capCX, capCY + (apex[1] - capCY) * Math.sin(th), capCZ + topGap / 2 * Math.cos(th)]);
+      }
+    }
+    // 行带缝合：相邻两行按 max(行宽/0.22) 统一分格数（无 T 型缝、无 0.22 m 以上格边）；
+    // 顶行退化为顶点时改扇形收口（最后一小行很窄，扇心斜边 ≤ ~0.31 m）。
+    for (let r = 0; r < rows.length - 1; r++) {
+      const A = rows[r], B = rows[r + 1];
+      const lenA = dist(A[0], A[1]), lenB = dist(B[0], B[1]);
+      const nA = GF.clamp(Math.round(lenA / 0.22), 1, 220);
+      const nB = GF.clamp(Math.round(lenB / 0.22), 1, 220);
+      if (lenB < 1e-6) {
+        const pa = [];
+        for (let i = 0; i <= nA; i++) {
+          const t = i / nA;
+          pa.push([A[0][0]+(A[1][0]-A[0][0])*t, A[0][1]+(A[1][1]-A[0][1])*t, A[0][2]+(A[1][2]-A[0][2])*t]);
+        }
+        for (let i = 0; i < nA; i++) mb.tri(pa[i], pa[i + 1], B[0], s.mat, s.tag);
+      } else {
+        // 相邻两行统一取 max(行格数) 缝合：每行重新按 0.22 m 采样（不共用上一行的点，
+        // 两端点锚定），逐格出一个四边形，行列全 ≤0.22 m，无 T 型缝。
+        const n = Math.max(nA, nB);
+        const pa = [], pb = [];
+        for (let i = 0; i <= n; i++) {
+          const t = i / n;
+          pa.push([A[0][0]+(A[1][0]-A[0][0])*t, A[0][1]+(A[1][1]-A[0][1])*t, A[0][2]+(A[1][2]-A[0][2])*t]);
+          pb.push([B[0][0]+(B[1][0]-B[0][0])*t, B[0][1]+(B[1][1]-B[0][1])*t, B[0][2]+(B[1][2]-B[0][2])*t]);
+        }
+        for (let i = 0; i < n; i++) mb.quad(pa[i], pa[i + 1], pb[i + 1], pb[i], s.mat, s.tag);
+      }
+    }
+    // 博风轮廓：前坡边线（檐→脊/弧底）→ 圆弧顶中间点 → 后坡边线（弧底/脊→檐）。
+    // 首尾就是檐角点（y=yb+up），与山花网格共用同一批顶点，不产生错缝。
+    // 卷棚时再附加弧上的中间点（arcOutline），端点 fTop/bTop 已含在 fpts/bpts 里。
+    const outline = [];
+    for (let k = 0; k < fpts.length; k++) outline.push(fpts[k]);
+    if (topGap > 1e-6) for (let k = 0; k < arcOutline.length; k++) outline.push(arcOutline[k]);
+    for (let k = bpts.length - 1; k >= 0; k--) outline.push(bpts[k]);
+    return outline;
+  }
+
   /* ------------------------------ 正脊 ------------------------------ */
   function addRidge(mb, cx, cz, xe, xr, yb, rise, o) {
     const RD = ridgeOf(o);
@@ -132,9 +244,19 @@
     const rh = style === 'ornate' ? 0.34 : 0.22;
     const rw = style === 'ornate' ? 0.36 : 0.26;
     const y = yb + rise;
+    // 全局细分步距：正脊沿 x 是整条长构件，门顶/长屋脊下 320 档会读成一条大方框。
+    // 与院墙/隔墙/山花同密度（0.22m 一条）沿 x 切段；相邻段盒盖同高，错开 0~2mm 防共面闪烁。
+    const RSP = 0.22, RMAX = 220;
+    const rbox = (x0, x1, y0, y1, z0, z1, mat, tagLabel) => {
+      const nx = Math.min(Math.max(1, Math.ceil((x1 - x0) / RSP)), RMAX);
+      for (let k = 0; k < nx; k++) {
+        const a = x0 + (x1 - x0) * k / nx, b = x0 + (x1 - x0) * (k + 1) / nx;
+        mb.box(a, b, y0, y1, z0, z1, mat, tagLabel);
+      }
+    };
     if (det >= 2) {
       // 三道线脚的正脊断面：脊座（出檐小挑）→ 脊筒（收分）→ 脊帽（出唇）
-      mb.box(cx - xr - 0.14, cx + xr + 0.14, y - rh * 0.62, y - rh * 0.34, cz - (rw + 0.14) / 2, cz + (rw + 0.14) / 2, RD, o.tag + '·脊座');
+      rbox(cx - xr - 0.14, cx + xr + 0.14, y - rh * 0.62, y - rh * 0.34, cz - (rw + 0.14) / 2, cz + (rw + 0.14) / 2, RD, o.tag + '·脊座');
       // 脊筒拆成三段收分：原来一整段只有上下两个断面，中段在 320 档看是一块平板。
       // 三段按 rh 的 0.50/0.44/0.32 分段，每段底比上段顶压进 4 mm，接缝处不会出现同尺寸盖面。
       mb.taper(cx, cz, rw + 0.020, rw + 0.020, rw + 0.002, rw + 0.002, y - rh * 0.500, y - rh * 0.060, RD, o.tag + '·脊筒下');
@@ -147,14 +269,14 @@
       for (const dy of [0.06, 0.16]) {
         const y0 = y + rh * dy - (dy > 0.1 ? 0.005 : 0) + 0.003;   // 整体抬 3 mm：原来瓦条某一面正落在脊筒上的盖面高度上
         const wz = rw / 2 + (dy > 0.1 ? 0.006 : 0.010);   // 两道瓦条进深错开 4 mm：原来两者 cz 两侧面完全同面
-        mb.box(cx - xr - 0.02, cx + xr + 0.02, y0, y0 + 0.022, cz - wz, cz + wz, RD, o.tag + '·瓦条');
+        rbox(cx - xr - 0.02, cx + xr + 0.02, y0, y0 + 0.022, cz - wz, cz + wz, RD, o.tag + '·瓦条');
       }
     } else {
-      mb.box(cx - xr - 0.1, cx + xr + 0.1, y - rh * 0.5, y + rh, cz - rw / 2, cz + rw / 2, RD, o.tag + '·正脊');
+      rbox(cx - xr - 0.1, cx + xr + 0.1, y - rh * 0.5, y + rh, cz - rw / 2, cz + rw / 2, RD, o.tag + '·正脊');
     }
     // 脊上线条（金/白）
     if (style === 'ornate') {
-      mb.box(cx - xr - 0.06, cx + xr + 0.06, y + rh * 0.514, y + rh * 0.52 + 0.08, cz - rw * 0.28, cz + rw * 0.28, 'gold', o.tag + '·脊线');
+      rbox(cx - xr - 0.06, cx + xr + 0.06, y + rh * 0.514, y + rh * 0.52 + 0.08, cz - rw * 0.28, cz + rw * 0.28, 'gold', o.tag + '·脊线');
     }
     // 两端鸱吻（吞口朝内、卷尾朝外挑）：四段叠出剪影，而不是两个方盒子
     const beastN = o.beasts || 0;
@@ -196,9 +318,11 @@
     const RD = ridgeOf(o);
     const det = GF.detailLevel();
     // 沿四条斜脊铺细石条（简化：把檐角到脊端的折线串起来）
+    // 步数按脊长 0.22 m 动态计算，避免固定 5 段在长脊上产生 >0.55m 大段
     const ptsAlong = (sx, sz) => {
       const out = [];
-      const steps = 5;
+      const rLen = Math.max(0.3, Math.hypot(xe - xr, ze, rise));
+      const steps = Math.max(3, Math.round(rLen / 0.22));
       for (let i = 0; i <= steps; i++) {
         const t = i / steps;
         const x = sx * V.lerp(xe, xr, t);
@@ -212,7 +336,7 @@
       for (const sz of [-1, 1]) {
         const pts = ptsAlong(sx, sz);
         for (let i = 0; i < pts.length - 1; i++) {
-          GF.beamBetween(mb, pts[i], pts[i + 1], 0.16, 0.12, RD, o.tag + '·垂脊');
+          GF.beamBetween(mb, pts[i], pts[i + 1], 0.16, 0.12, RD, o.tag + '·垂脊', i === 0 ? 'both' : 'end');
         }
         // 檐角套兽：包住角梁头的兽面，微微向下颌
         const tip = pts[0];
@@ -404,8 +528,11 @@
     const { cx, cz, x0, x1, z0, z1, yb, rise } = o;
     const xe = (x1 - x0) / 2, ze = (z1 - z0) / 2;
     const xr = Math.max(0.2, xe - ze); // 45° 斜脊
-    const nu = bands(xe * 2), nv = 6;
     const up = o.upturn == null ? 0.35 : o.upturn;
+    // 瓦面坡长（沿 v 坡向，含斜脊水平分量）：按 0.22 m/行细分，不再固定 6 行
+    // （大屋面 rise 2m+、ze 2m+，六行每行就 0.6m 级，320 档读成整块大三角）。
+    const nv = GF.clamp(Math.round(Math.hypot(rise, ze * Math.SQRT2) / 0.22), 4, 40);
+    const nu = bands(xe * 2);
 
     const slopeZ = (sign) => (u, v) => {
       const x = V.lerp(-xe + 2 * xe * u, -xr + 2 * xr * u, v);
@@ -432,23 +559,9 @@
     rafterBandUV(mb, slopeX(-1), o, o.tag + '·左檐椽');
 
     // 檐口瓦当
-    const eave = (u) => {
-      const vals = [];
-      const seg = 8;
-      for (let i = 0; i < seg; i++) {
-        const t = i / seg;
-        vals.push([
-          cx + (-xe + 2 * xe * t), yb + up * cornerLift(t), cz + ze
-        ]);
-      }
-      return vals;
-    };
-    addEaveTiles(mb, eave(), o);
-    const eaveB = [];
-    for (let i = 0; i <= 8; i++) {
-      const t = i / 8;
-      eaveB.push([cx + (-xe + 2 * xe * t), yb + up * cornerLift(t), cz - ze]);
-    }
+    const eavePtsF = eaveSamples((t) => [cx + (-xe + 2 * xe * t), yb + up * cornerLift(t), cz + ze], 2 * xe);
+    addEaveTiles(mb, eavePtsF, o);
+    const eaveB = eaveSamples((t) => [cx + (-xe + 2 * xe * t), yb + up * cornerLift(t), cz - ze], 2 * xe);
     addEaveTiles(mb, eaveB, o);
 
     addHipRidges(mb, cx, cz, xe, ze, xr, yb, rise, o);
@@ -467,7 +580,9 @@
     const up = o.upturn == null ? 0.3 : o.upturn;
     const hard = o.hard || o.type === 'gableHard';
     const xg = (hard && o.wallHW != null) ? Math.max(0.3, o.wallHW) : xe;
-    const nu = bands(xg * 2), nv = 6;
+    // 坡长按 0.22 m/行细分（与瓦垄 bands / 山花同密度）
+    const nv = GF.clamp(Math.round(Math.hypot(rise, ze) / 0.22), 4, 40);
+    const nu = bands(xg * 2);
 
     const slope = (sign) => (u, v) => {
       const x = -xg + 2 * xg * u;
@@ -487,52 +602,36 @@
     // 老版本按平标高 yb 画三角，檐角起翘 0.7 m 时屋面翘了、山花与博风还压在 yb 上，
     // 于是转角只剩瓦面一边起翘，山面/博风一侧是平的 —— 即“连接处只有一边翘”。
     const gableMat = o.gableMat || 'plaster';
-    const GS = 6;
+    const edgeL = Math.hypot(rise, ze);
     for (const s of [-1, 1]) {
       const x = cx + s * xg;
       const u = s > 0 ? 1 : 0;
       const T = [x, yb + rise, cz];
-      // 轮廓：前坡边线（檐 → 脊）→ 脊点 → 后坡边线（脊 → 檐）
-      const outline = [];
-      for (let k = 0; k < GS; k++) outline.push(slope(1)(u, k / GS));
-      outline.push(T);
-      for (let k = GS - 1; k >= 0; k--) outline.push(slope(-1)(u, k / GS));
-      // 上片：以脊点为心向两侧边线做三角扇（边线是鼓的，不能把底角也算进扇心，否则面会自交）
-      for (let i = 0; i < outline.length - 1; i++) {
-        const p = outline[i], q = outline[i + 1];
-        if (p === T || q === T) continue;
-        mb.tri(p, q, T, gableMat, o.tag + '·山花');
-      }
-      // 下片：檐角起翘后，檐口(8.7)与墙顶(8.0)之间那条带宽 0.7 m，用一块矩形补齐，
-      // 这样既不会在山面留缝，也不会为了补缝把山花做成自交的扇面
-      const pA = outline[0], pB = outline[outline.length - 1];
-      if (up > 0.02) {
-        mb.quad(pA, pB, [x, yb, cz - ze], [x, yb, cz + ze], gableMat, o.tag + '·山花');
-      }
+      // 统一轮廓：前坡边线（檐→脊）→ 脊点 → 后坡边线（脊→檐）。
+      // 采样密度按轮廓弧长 0.22 m/段（与瓦面 bands 同密度），不再是固定 6 段。
+      const outline = gablePanel(mb, {
+        apex: T,
+        yFloor: yb,
+        edgeL,
+        fwd: (v) => slope(1)(u, v),
+        bwd: (v) => slope(-1)(u, v),
+        mat: gableMat,
+        tag: o.tag + '·山花'
+      });
       // 博风板：悬山沿同一条边线串成短梁，起翘处自动一起抬；硬山封山不出博风
       if (!hard) {
         if (up < 0.02) {
           GF.beamBetween(mb, [x, yb, cz - ze], T, 0.12, 0.2, 'wood', o.tag + '·博风');
           GF.beamBetween(mb, [x, yb, cz + ze], T, 0.12, 0.2, 'wood', o.tag + '·博风');
         } else {
-          for (let i = 0; i < outline.length - 1; i++) {
-            if (i === 0) ribbon(mb, outline, 0, 0.12, 0.2, 'wood', o.tag + '·博风', 0);   // 整条一次成型，不再逐段各一根梁
-          }
+          ribbon(mb, outline, 0, 0.12, 0.2, 'wood', o.tag + '·博风', 0);   // 整条一次成型，不再逐段各一根梁
         }
       }
     }
 
-    const eavePts = [];
-    for (let i = 0; i <= 8; i++) {
-      const t = i / 8;
-      eavePts.push([cx + (-xg + 2 * xg * t), yb + up * cornerLift(t), cz + ze]);
-    }
+    const eavePts = eaveSamples((t) => [cx + (-xg + 2 * xg * t), yb + up * cornerLift(t), cz + ze], 2 * xg);
     addEaveTiles(mb, eavePts, o);
-    const eavePts2 = [];
-    for (let i = 0; i <= 8; i++) {
-      const t = i / 8;
-      eavePts2.push([cx + (-xg + 2 * xg * t), yb + up * cornerLift(t), cz - ze]);
-    }
+    const eavePts2 = eaveSamples((t) => [cx + (-xg + 2 * xg * t), yb + up * cornerLift(t), cz - ze], 2 * xg);
     addEaveTiles(mb, eavePts2, o);
 
     if (o.xuanYu && !hard) {
@@ -552,6 +651,8 @@
     const xg = (hard && o.wallHW != null) ? Math.max(0.3, o.wallHW) : xe;
     const rr = Math.min(0.36, Math.max(0.18, rise * 0.4));
     const yApex = yb + rise - rr;
+    // 坡长按 0.22 m/行细分（卷棚坡长略短：从檐口到弧底，去除圆弧顶的 rr）
+    const nv = GF.clamp(Math.round(Math.hypot(rise - rr, ze - rr) / 0.22), 4, 40);
 
     const slope = (sign) => (u, v) => {
       const x = -xg + 2 * xg * u;
@@ -559,8 +660,8 @@
       const y = yb + (yApex - yb) * curve(v) + up * cornerLift(u) * Math.pow(1 - v, 1.6);
       return [cx + x, y, cz + z];
     };
-    patch(mb, bands(xg * 2), 6, slope(1), o.tile, o.tileB, o.tag + '·前坡');
-    patch(mb, bands(xg * 2), 6, slope(-1), o.tile, o.tileB, o.tag + '·后坡');
+    patch(mb, bands(xg * 2), nv, slope(1), o.tile, o.tileB, o.tag + '·前坡');
+    patch(mb, bands(xg * 2), nv, slope(-1), o.tile, o.tileB, o.tag + '·后坡');
     // 檐下木作：卷棚前后两坡各排一溜椽
     rafterBandUV(mb, slope(1), o, o.tag + '·前檐椽');
     rafterBandUV(mb, slope(-1), o, o.tag + '·后檐椽');
@@ -588,32 +689,21 @@
     // 山面（轮廓必须贴着卷棚的凹曲屋面，不能是一刀平的三角形）：
     // 悬山为木山花 + 博风 + 悬鱼；硬山为砖砌山墙，封山只到墙体外皮，不出博风/悬鱼
     const gMat = o.gableMat || (hard ? 'plaster' : 'wood');
-    const GS = 6;
+    const edgeL = Math.hypot(yApex - yb + up, ze);
     for (const s of [-1, 1]) {
       const x = cx + s * xg;
-      const outline = [];
-      for (let k = 0; k < GS; k++) {
-        const v = k / GS;
-        outline.push([x, yb + (yApex - yb) * curve(v) + up * Math.pow(1 - v, 1.6), cz - (rr + (ze - rr) * (1 - v))]);
-      }
-      outline.push([x, yApex + rr, cz]);
-      for (let k = GS - 1; k >= 0; k--) {
-        const v = k / GS;
-        outline.push([x, yb + (yApex - yb) * curve(v) + up * Math.pow(1 - v, 1.6), cz + (rr + (ze - rr) * (1 - v))]);
-      }
-      // outline 首尾就是檐角点（y=yb+up），不要再另造 pL/pR，否则同一坐标重复出一对零面积三角
-      const crown = [x, yApex + rr, cz];
-      for (let i = 0; i < outline.length - 1; i++) {
-        const p = outline[i], q = outline[i + 1];
-        if (p === crown || q === crown) continue;
-        // 只铺一面：另一面（反绕向）与它严格同面，渲染器本来就不做背面剔除、法线朝相机翻正
-        mb.tri(p, q, crown, gMat, o.tag + '·山花');
-      }
-      // 檐角起翘后，檐口（yb+up）与墙顶（yb）之间那条带卷棚此前没补，屋角山面留一条亮缝
-      if (up > 0.02) {
-        const pL = outline[0], pR = outline[outline.length - 1];
-        mb.quad(pL, pR, [x, yb, cz - ze], [x, yb, cz + ze], gMat, o.tag + '·山花');
-      }
+      // 轮廓必须贴着卷棚的凹曲屋面：前坡边线（檐→弧顶）→ 凸脊顶点 → 后坡边线（弧顶→檐）。
+      // 采样密度按轮廓弧长 0.22 m/段（与瓦面 bands 同密度），不再是固定 6 段。
+      const outline = gablePanel(mb, {
+        apex: [x, yApex + rr, cz],
+        yFloor: yb,
+        edgeL,
+        fwd: (v) => [x, yb + (yApex - yb) * curve(v) + up * Math.pow(1 - v, 1.6), cz - (rr + (ze - rr) * (1 - v))],
+        bwd: (v) => [x, yb + (yApex - yb) * curve(v) + up * Math.pow(1 - v, 1.6), cz + (rr + (ze - rr) * (1 - v))],
+        mat: gMat,
+        tag: o.tag + '·山花'
+      });
+      // outline 首尾就是檐角点（y=yb+up），不要再多造一套重复点（零面积三角的根源）。
       // 博风板沿整条山面轮廓走（原来两根短梁只到弧顶的半路，檐角一起翘就露空）；硬山封山不出博风
       if (!hard) {
         ribbon(mb, outline, 0, 0.12, 0.18, 'wood', o.tag + '·博风', 0);
@@ -623,12 +713,7 @@
 
     // 檐口瓦当
     for (const sz of [1, -1]) {
-      const pts = [];
-      for (let i = 0; i <= 8; i++) {
-        const t = i / 8;
-        pts.push([cx + (-xg + 2 * xg * t), yb + up * cornerLift(t), cz + sz * ze]);
-      }
-      addEaveTiles(mb, pts, o);
+      addEaveTiles(mb, eaveSamples((t) => [cx + (-xg + 2 * xg * t), yb + up * cornerLift(t), cz + sz * ze], 2 * xg), o);
     }
     if (o.windDuo) windDuoAtCorners(mb, cx, cz, xg, ze, yb + up, o.tag);
   }
@@ -687,6 +772,8 @@
     // 下檐：四坡收进到内矩形
     const xi = xe * 0.56, zi = ze * 0.5;
     const y1 = yb + rise * 0.46;
+    // 下檐坡长（外檐角到收山线）按 0.22 m/行细分，不再固定 4 行
+    const nvLow = GF.clamp(Math.round(Math.hypot(y1 - yb, Math.hypot(xe - xi, ze - zi)) / 0.22), 4, 40);
 
     const lowZ = (sign) => (u, v) => {
       const x = V.lerp(-xe + 2 * xe * u, -xi + 2 * xi * u, v);
@@ -700,10 +787,10 @@
       const y = yb + (y1 - yb) * curve(v) + up * cornerLift(u) * Math.pow(1 - v, 1.5);
       return [cx + x, y, cz + z];
     };
-    patch(mb, bands(xe * 2), 4, lowZ(1), o.tile, o.tileB, o.tag + '·下檐前');
-    patch(mb, bands(xe * 2), 4, lowZ(-1), o.tile, o.tileB, o.tag + '·下檐后');
-    patch(mb, bands(ze * 2), 4, lowX(1), o.tile, o.tileB, o.tag + '·下檐右');
-    patch(mb, bands(ze * 2), 4, lowX(-1), o.tile, o.tileB, o.tag + '·下檐左');
+    patch(mb, bands(xe * 2), nvLow, lowZ(1), o.tile, o.tileB, o.tag + '·下檐前');
+    patch(mb, bands(xe * 2), nvLow, lowZ(-1), o.tile, o.tileB, o.tag + '·下檐后');
+    patch(mb, bands(ze * 2), nvLow, lowX(1), o.tile, o.tileB, o.tag + '·下檐右');
+    patch(mb, bands(ze * 2), nvLow, lowX(-1), o.tile, o.tileB, o.tag + '·下檐左');
     // 下檐檐下木作：四坡各排椽（上檐坐在收山线以内，檐下看不见，不排）
     rafterBandUV(mb, lowZ(1), o, o.tag + '·下檐前椽');
     rafterBandUV(mb, lowZ(-1), o, o.tag + '·下檐后椽');
@@ -718,44 +805,39 @@
       const y = y1 + (yb + rise - y1) * curve(v);
       return [cx + x, y, cz + z];
     };
-    patch(mb, bands(xi * 2), 4, slope(1), o.tile, o.tileB, o.tag + '·上檐前');
-    patch(mb, bands(xi * 2), 4, slope(-1), o.tile, o.tileB, o.tag + '·上檐后');
+    const nvTop = GF.clamp(Math.round(Math.hypot(yb + rise - y1, zi) / 0.22), 4, 40);
+    patch(mb, bands(xi * 2), nvTop, slope(1), o.tile, o.tileB, o.tag + '·上檐前');
+    patch(mb, bands(xi * 2), nvTop, slope(-1), o.tile, o.tileB, o.tag + '·上檐后');
 
     // 山花 + 博风板：贴着上檐瓦面的边线收口。
     // 老版本一刀平三角：山花/博风是直边，而上檐是凹曲举折（v^1.45），
     // 中段山花会从屋面里戳出来、博风悬在半空；改为沿举折边线采样成三角扇，
     // 博风沿同一条边线走，与悬山/卷棚同一套收口逻辑。
-    const GS = 6;
+    // 采样密度按上檐斜边弧长 0.22 m/段（与瓦面 bands / 围墙同密度），不再是固定 6 段。
+    const edgeL = Math.hypot(zi, yb + rise - y1);
     for (const s of [-1, 1]) {
       const x = cx + s * xi;
       if (!o.bare) {
         const u = s > 0 ? 1 : 0;
-        const T = [x, yb + rise, cz];
-        const outline = [];
-        for (let k = 0; k < GS; k++) outline.push(slope(1)(u, k / GS));
-        outline.push(T);
-        for (let k = GS - 1; k >= 0; k--) outline.push(slope(-1)(u, k / GS));
-        for (let i = 0; i < outline.length - 1; i++) {
-          const p = outline[i], q = outline[i + 1];
-          if (p === T || q === T) continue;
-          mb.tri(p, q, T, 'wood', o.tag + '·山花');
-        }
+        // 山花底部坐在下檐瓦面上（y1），顶部在正脊（yb+rise）——歇山两坡向中间收，
+        // 因此扇心取脊心；yFloor=y1 使 lift=0，不误补竖向条带
+        const outline = gablePanel(mb, {
+          apex: [x, yb + rise, cz],
+          yFloor: y1,
+          edgeL,
+          fwd: (v) => slope(1)(u, v),
+          bwd: (v) => slope(-1)(u, v),
+          mat: 'wood',
+          tag: o.tag + '·山花'
+        });
         ribbon(mb, outline, 0, 0.12, 0.18, 'wood', o.tag + '·博风', 0);
       }
     }
 
     // 下檐檐口瓦当
-    const eavePts = [];
-    for (let i = 0; i <= 8; i++) {
-      const t = i / 8;
-      eavePts.push([cx + (-xe + 2 * xe * t), yb + up * cornerLift(t), cz + ze]);
-    }
+    const eavePts = eaveSamples((t) => [cx + (-xe + 2 * xe * t), yb + up * cornerLift(t), cz + ze], 2 * xe);
     addEaveTiles(mb, eavePts, o);
-    const e2 = [];
-    for (let i = 0; i <= 8; i++) {
-      const t = i / 8;
-      e2.push([cx + (-xe + 2 * xe * t), yb + up * cornerLift(t), cz - ze]);
-    }
+    const e2 = eaveSamples((t) => [cx + (-xe + 2 * xe * t), yb + up * cornerLift(t), cz - ze], 2 * xe);
     addEaveTiles(mb, e2, o);
 
     addHipRidges(mb, cx, cz, xe, ze, xi, yb, y1 - yb, o);
@@ -781,9 +863,21 @@
     cz + Math.sin((1 / sides) * Math.PI * 2 + (o.rot || 0)) * ze];
     const edgeLen = Math.max(Math.hypot(cB[0] - cA[0], cB[1] - cA[1]), 0.3);
     const tilesPerEdge = Math.max(2, Math.round(edgeLen / TILE_PITCH));
+    // 低档没有瓦垄起伏，只按 0.22 m 定每边点数，杜绝长边大三角形
+    // 角部起翘是幂 6 曲线，起翘集中在前 ~6% 边长内；固定档数时角点到邻点
+    // 一段会有 0.45 m 垂直落差（连檐实测 0.51 m 斜边），须按角部第一段
+    // 三维距离 ≤0.26 m 再加密每边点数，让起翘被连续细分吃掉。
+    let perLow = Math.max(sides * 2, Math.round(edgeLen / 0.22));
+    if (!GF.detail(2)) {
+      for (; perLow <= 320; perLow++) {
+        const hor = edgeLen / perLow;
+        const liftDrop = up * (1 - Math.pow(1 - 2 / perLow, 6));
+        if (Math.hypot(hor, liftDrop) <= 0.26) break;
+      }
+    }
     const per = GF.detail(2)
       ? Math.max(4, Math.min(320, tilesPerEdge * 5))
-      : Math.max(2, sides);
+      : Math.max(2, Math.min(320, perLow));
 
     // 由多边形底边向顶点收敛；u 为所在边的归一位置，用来只抬角、不抬整圈檐口
     const ringPts = (s, dy) => {
@@ -807,7 +901,8 @@
     // 瓦面分“垄”与“筒”：沿坡向按一垄瓦的长度分皮，每皮之间起 1.2 cm 叠压唇口，
     // 唇口用暗瓦色画一条横线——屋面才有横向的瓦皮节奏，不再是一整块垂布。
     const slant = Math.hypot(rise, edgeLen / 2);
-    const nC = GF.detail(2) ? Math.max(3, Math.min(26, Math.round(slant / 0.32))) : 4;
+    const nC = GF.detail(2) ? Math.max(3, Math.min(26, Math.round(slant / 0.32)))
+      : Math.max(3, Math.min(32, Math.round(slant / 0.22)));
     const LIP = 0.012;
     const rows = [];
     const pushR = (pts, k) => rows.push({ p: pts, k });
@@ -829,18 +924,21 @@
     if (o.rafters !== false) rafterBand(mb, rows[0].p, ringPts(0.18, 0), o, o.tag + '·檐椽');
 
     // 垂脊（每条棱）：沿举折曲线折线连到宝顶，不再是角点到顶点的直线（凹曲屋面上会悬空）
+    // 檐口起翘 up 只抬角点，若 k=0 一次性加满、k=1 归零，第一段垂直落差 0.5 m 会出超长三角；
+    // 起翘量沿前 ceil(up/0.22) 段线性衰减，每段落差 ≤0.22 m
+    const hipN = Math.max(4, Math.round(Math.hypot(xe, ze, rise) / 0.22));
+    const kup = Math.max(2, Math.ceil(up / 0.22));
     for (let i = 0; i < sides; i++) {
       const a = (i / sides) * Math.PI * 2 + (o.rot || 0);
-      const steps = 6;
       let prev = null;
-      for (let k = 0; k <= steps; k++) {
-        const s = k / steps;
+      for (let k = 0; k <= hipN; k++) {
+        const s = k / hipN;
         const p = [
           cx + Math.cos(a) * Math.max(0.02, xe * (1 - s)),
-          yb + rise * curve(s) + (k === 0 ? up : 0) + 0.03,
+          yb + rise * curve(s) + up * Math.max(0, 1 - k / kup) + 0.03,
           cz + Math.sin(a) * Math.max(0.02, ze * (1 - s))
         ];
-        if (prev) GF.beamBetween(mb, prev, p, 0.14, 0.12, RD, o.tag + '·垂脊');
+        if (prev) GF.beamBetween(mb, prev, p, 0.14, 0.12, RD, o.tag + '·垂脊', k === 1 ? 'both' : 'end');
         prev = p;
       }
       if (o.windDuo) addWindDuo(mb, cx + Math.cos(a) * xe, yb + up, cz + Math.sin(a) * ze, o.tag);
@@ -865,10 +963,15 @@
     const up = o.upturn == null ? 0.3 : o.upturn;
     const rings = 4;
     const yTop = ytop == null ? yb + 1.2 : ytop;
-    // 檐面细分：原来每边固定 8 段（33 m 宽的重檐，一段就是 4 m），
+    // 檐面细分：原来低档固定每边 8 段（33 m 宽的重檐，一段就是 4 m），
     // 320 档下整圈是折线、也没有瓦垄。按边长定段数，再沿周长叠瓦垄起伏。
-    const perX = GF.detail(2) ? Math.max(8, Math.min(320, Math.round(2 * xe / TILE_PITCH * 5))) : 8;
-    const perZ = GF.detail(2) ? Math.max(8, Math.min(320, Math.round(2 * ze / TILE_PITCH * 5))) : 8;
+    // 高档沿每股保留 5 点瓦垄断面；低档无瓦垄，也按 0.22 m/段加密，杜绝大框。
+    const perX = GF.detail(2)
+      ? Math.max(8, Math.min(320, Math.round(2 * xe / TILE_PITCH * 5)))
+      : Math.max(8, Math.min(320, Math.round(2 * xe / 0.22)));
+    const perZ = GF.detail(2)
+      ? Math.max(8, Math.min(320, Math.round(2 * ze / TILE_PITCH * 5)))
+      : Math.max(8, Math.min(320, Math.round(2 * ze / 0.22)));
     const tilesX = Math.max(2, Math.round(2 * xe / TILE_PITCH));
     const tilesZ = Math.max(2, Math.round(2 * ze / TILE_PITCH));
 
@@ -899,7 +1002,9 @@
     };
 
     const slant = Math.hypot(yTop - yb, Math.max(xe - xi, ze - zi)) * 1.2;
-    const nC = GF.detail(2) ? Math.max(3, Math.min(24, Math.round(slant / 0.32))) : 4;
+    const nC = GF.detail(2)
+      ? Math.max(3, Math.min(24, Math.round(slant / 0.32)))
+      : Math.max(3, Math.min(24, Math.round(slant / 0.22)));
     const LIPS = 0.012;
     const rows = [];
     const pushR = (pts, k) => rows.push({ p: pts, k });
@@ -922,17 +1027,19 @@
     if (o.rafters === true) rafterBand(mb, rows[0].p, ring(0.22), o, o.tag + '·檐椽');
     // 四条垂脊：沿举折曲线从外角走到内角，中段才贴住瓦面
     if (GF.detail(2)) {
+      const hipN = Math.max(3, Math.round(Math.hypot(xe - xi, ze - zi, yTop - yb) / 0.22));
+      const kup2 = Math.max(2, Math.ceil(up * 0.5 / 0.22));
       for (const sx of [-1, 1]) {
         for (const sz of [-1, 1]) {
           let prev = null;
-          for (let k = 0; k <= 5; k++) {
-            const s = k / 5;
+          for (let k = 0; k <= hipN; k++) {
+            const s = k / hipN;
             const p = [
               cx + sx * V.lerp(xe, xi, s),
-              yb + (yTop - yb) * curve(s) + (k === 0 ? up * 0.5 : 0) + 0.02,
+              yb + (yTop - yb) * curve(s) + up * 0.5 * Math.max(0, 1 - k / kup2) + 0.02,
               cz + sz * V.lerp(ze, zi, s)
             ];
-            if (prev) GF.beamBetween(mb, prev, p, 0.13, 0.11, RD, o.tag + '·垂脊');
+            if (prev) GF.beamBetween(mb, prev, p, 0.13, 0.11, RD, o.tag + '·垂脊', k === 1 ? 'both' : 'end');
             prev = p;
           }
         }
@@ -958,7 +1065,11 @@
     const yb = o.yb, ytop = o.ytop == null ? yb + 0.8 : o.ytop;
     const edgeLen = 2 * rOut * Math.sin(Math.PI / sides);
     const tilesPerEdge = Math.max(2, Math.round(edgeLen / TILE_PITCH));
-    const per = GF.detail(2) ? Math.max(4, Math.min(200, tilesPerEdge * 5)) : 2;
+    // 低档没有瓦垄起伏，只按 0.22 m 定每边点数，杜绝长边大三角形
+    const perLowC = Math.max(sides, Math.round(edgeLen / 0.22));
+    const per = GF.detail(2)
+      ? Math.max(4, Math.min(200, tilesPerEdge * 5))
+      : Math.max(4, Math.min(200, perLowC));
     const shrinkRib = (s) => 1 - 0.4 * s;
 
     const ringAt = (s, dy) => {
@@ -976,7 +1087,8 @@
     };
 
     const slant = Math.hypot(ytop - yb, rOut - rIn) * 1.15;
-    const nC = GF.detail(2) ? Math.max(2, Math.min(14, Math.round(slant / 0.34))) : 2;
+    const nC = GF.detail(2) ? Math.max(2, Math.min(14, Math.round(slant / 0.34)))
+      : Math.max(2, Math.min(20, Math.round(slant / 0.22)));
     const LIPC = 0.012;
     const rows = [];
     const pushR = (pts, k) => rows.push({ p: pts, k });
@@ -1020,12 +1132,11 @@
       const oo = withDefaults(o);
       const type = oo.type || 'hip';
       TRIM = oo.trim || null;
-      // LOD plain：后进 / 跨院 / 廊顶省瓦垄起伏与分档（纯增量开关，默认关闭）
-      const savedRib = RIB; let savedBands = null;
+      // LOD plain：后进 / 跨院 / 廊顶省瓦垄起伏（纯增量开关，默认关闭）
+      // 注：不再对 bands 减半——0.22m 分段本就满足边长标准，减半会造出 >0.55m 大三角
+      const savedRib = RIB;
       if (oo.plain) {
         RIB = 0;
-        savedBands = bands;
-        bands = (w) => Math.max(4, Math.round(savedBands(w) / 2));
       }
       try {
         if (type === 'roll' || oo.roll) rollRoof(mb, oo);
@@ -1040,7 +1151,6 @@
         else hipRoof(mb, oo);
       } finally {
         RIB = savedRib;
-        if (savedBands) bands = savedBands;
       }
       TRIM = null;
     },

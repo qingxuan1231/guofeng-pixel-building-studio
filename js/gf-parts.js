@@ -79,10 +79,26 @@
     const mat = o.mat || 'plaster';
     const tag = o.tag || '墙';
     const holes = o.holes || [];
-    const us = [o.u0, o.u1];
-    const vs = [o.y0, o.y1];
-    holes.forEach((h) => { us.push(h.u0, h.u1); vs.push(h.v0, h.v1); });
-    us.sort((a, b) => a - b); vs.sort((a, b) => a - b);
+    // 网格细分密度：全局按 0.22 m 一条（与瓦面 bands / 山花同密度）。
+    // 过去只按“洞口边界 + 墙边”切，整段无洞的墙只有 [u0,u1]×[y0,y1] 一对大 quad，
+    // 面级颗粒按整面取同一哈希色，像素风下就成大三角/大方框；
+    // 现在无洞长段也均匀细分到步距 ≤0.22 m，块面密度均匀不再有巨面。
+    const SPLIT = 0.22, MAXC = 220;
+    const densify = (bp) => {
+      const out = [bp[0]];
+      for (let k = 0; k < bp.length - 1; k++) {
+        const a = bp[k], b = bp[k + 1];
+        const span = b - a;
+        if (span > SPLIT + 1e-6) {
+          const n = Math.min(Math.ceil(span / SPLIT), MAXC);
+          for (let s = 1; s < n; s++) out.push(a + (span * s) / n);
+        }
+        out.push(b);
+      }
+      return out;
+    };
+    const us = densify([o.u0, o.u1].concat(holes.map((h) => h.u0)).concat(holes.map((h) => h.u1)).sort((p, q) => p - q));
+    const vs = densify([o.y0, o.y1].concat(holes.map((h) => h.v0)).concat(holes.map((h) => h.v1)).sort((p, q) => p - q));
     const inHole = (u, v) => holes.some((h) => u > h.u0 - 1e-6 && u < h.u1 + 1e-6 && v > h.v0 - 1e-6 && v < h.v1 + 1e-6);
     // 这一点上有没有墙（在墙范围内且不在洞口）
     const solid = (u, v) => u > o.u0 - 1e-6 && u < o.u1 + 1e-6 && v > o.y0 - 1e-6 && v < o.y1 + 1e-6 && !inHole(u, v);
@@ -104,10 +120,12 @@
         skin(u0, u1, v0, v1, t);
         skin(u0, u1, v0, v1, -t);
         // 侧壁只在“真边界”上出现：墙端、洞口边、墙顶墙脚。栅格内部的切缝两侧都有墙，不出面。
-        if (u0 <= o.u0 + 1e-9 || !solid(u0 - 0.002, cv)) sideU(u0, v0, v1);
-        if (u1 >= o.u1 - 1e-9 || !solid(u1 + 0.002, cv)) sideU(u1, v0, v1);
-        if (v0 <= o.y0 + 1e-9 || !solid(cu, v0 - 0.002)) sideV(u0, u1, v0);
-        if (v1 >= o.y1 - 1e-9 || !solid(cu, v1 + 0.002)) sideV(u0, u1, v1);
+        // 且必须本侧自身仍有实体：洞口 v0 可低于墙脚 y0，会引入 v∈[v0,y0) 的一行“虚格”，
+        // 该行全墙并没有实体，若不校验 solid 则每根格线两侧各画一次侧壁 → 完全重复。
+        if (solid(u0 + 1e-4, cv) && (u0 <= o.u0 + 1e-9 || !solid(u0 - 0.002, cv))) sideU(u0, v0, v1);
+        if (solid(u1 - 1e-4, cv) && (u1 >= o.u1 - 1e-9 || !solid(u1 + 0.002, cv))) sideU(u1, v0, v1);
+        if (solid(cu, v0 + 1e-4) && (v0 <= o.y0 + 1e-9 || !solid(cu, v0 - 0.002))) sideV(u0, u1, v0);
+        if (solid(cu, v1 - 1e-4) && (v1 >= o.y1 - 1e-9 || !solid(cu, v1 + 0.002))) sideV(u0, u1, v1);
       }
     }
   }
@@ -544,24 +562,62 @@
 
   // 断面环 loft：rings 自下而上，相邻两环之间只出 4 条侧板，上下盖面一刀不封。
   // 两环同高、只收进尺寸时，这 4 条侧板就是一道水平压边，断面不会断开。
+  // 长边（环向弧长 + 竖向落差）沿 0.22 m 细分，杜绝整条十几米的长侧板大三角。
   function loftRect(mb, cx, cz, rings, tag) {
+    const SPLIT = 0.22;
     for (let i = 1; i < rings.length; i++) {
       const a = rings[i - 1], b = rings[i];
       if (a.y === b.y && a.w === b.w && a.d === b.d) continue;
       const s = rectRing(cx, cz, a.w, a.d, a.y);
       const t = rectRing(cx, cz, b.w, b.d, b.y);
       const mat = b.m || a.m || 'stone';
+      const rise = b.y - a.y;
       for (let k = 0; k < 4; k++) {
         const j = (k + 1) % 4;
-        mb.quad(s[k], s[j], t[j], t[k], mat, tag);
+        // 每一块侧板：下边 s[k]→s[j]、上边 t[k]→t[j]、落差 rise
+        const span = Math.hypot(s[j][0] - s[k][0], s[j][2] - s[k][2]);
+        const n = Math.max(1, Math.ceil(span / SPLIT));
+        const ny = Math.max(1, Math.ceil(rise / SPLIT));
+        // 环向顶点：沿 e∈[0,1] 线性插值上下边（下边落 a.y、上边落 b.y）
+        const ptsB = [], ptsT = [];
+        for (let v = 0; v <= n; v++) {
+          const e = v / n;
+          ptsB.push([s[k][0] + (s[j][0] - s[k][0]) * e, a.y, s[k][2] + (s[j][2] - s[k][2]) * e]);
+          ptsT.push([t[k][0] + (t[j][0] - t[k][0]) * e, b.y, t[k][2] + (t[j][2] - t[k][2]) * e]);
+        }
+        // 每小格四角：环向 v/v+1 × 竖向 f0/f1（竖向在上下边之间线性过渡）
+        for (let v = 0; v < n; v++) {
+          for (let w = 0; w < ny; w++) {
+            const f0 = w / ny, f1 = (w + 1) / ny;
+            const pt = (v2, f) => [
+              ptsB[v2][0] * (1 - f) + ptsT[v2][0] * f,
+              a.y + rise * f,
+              ptsB[v2][2] * (1 - f) + ptsT[v2][2] * f
+            ];
+            mb.quad(pt(v, f0), pt(v + 1, f0), pt(v + 1, f1), pt(v, f1), mat, tag);
+          }
+        }
       }
     }
   }
 
-  // 顶面一张板：2 个三角面，不用 box 的 6 个面
+  // 顶面一张板：2 个三角面，不用 box 的 6 个面。
+  // 长边沿 0.22 m 细分，避免整块大台面成为「一块大方框」。
   function capRect(mb, cx, cz, w, d, y, mat, tag) {
     const x0 = cx - w / 2, x1 = cx + w / 2, z0 = cz - d / 2, z1 = cz + d / 2;
-    mb.quad([x0, y, z1], [x1, y, z1], [x1, y, z0], [x0, y, z0], mat, tag);
+    const SPLIT = 0.22;
+    const nw = Math.max(1, Math.ceil(w / SPLIT)), nd = Math.max(1, Math.ceil(d / SPLIT));
+    if (nw === 1 && nd === 1) {
+      mb.quad([x0, y, z1], [x1, y, z1], [x1, y, z0], [x0, y, z0], mat, tag);
+      return;
+    }
+    for (let i = 0; i < nw; i++) {
+      const xa = x0 + (w * i) / nw, xb = x0 + (w * (i + 1)) / nw;
+      for (let j = 0; j < nd; j++) {
+        const za = z0 + (d * j) / nd, zb = z0 + (d * (j + 1)) / nd;
+        mb.quad([xa, y, zb], [xb, y, zb], [xb, y, za], [xa, y, za], mat, tag);
+      }
+    }
   }
 
   function platform(mb, o) {
@@ -817,8 +873,11 @@
         mb.taper(x, z, rr, rr, 0.149, 0.149, y, y + 0.56, 'marble', tag + '·望柱');
         mb.lathe(x, z, [[0.001, 0], [0.09, 0.005], [0.125, 0.05], [0.115, 0.1], [0.07, 0.15], [0.02, 0.18], [0.001, 0.2]], 8, 'marble', tag + '·柱头');
       } else {
-        mb.boxC(x, z, 0.16, 0.16, y, y + 0.62, 'marble', tag + '·望柱');
-        mb.boxC(x, z, 0.2, 0.2, y + 0.62, y + 0.68, 'marble', tag + '·柱头');
+        // 转角双柱去重（低档 boxC 同款哈希微差）：不同 run 的柱宽差 0–4 mm，
+        // 转角两条 run 共享角点时不再生成完全相同的柱（完全重复三角形）
+        const wk = ((Math.round((a[0] + a[1] + b[0] * 1.3 + b[1] * 1.7) * 997) % 3 + 3) % 3) * 0.002;
+        mb.boxC(x, z, 0.16 - wk, 0.16 - wk, y, y + 0.62, 'marble', tag + '·望柱');
+        mb.boxC(x, z, 0.2 - wk, 0.2 - wk, y + 0.62, y + 0.68, 'marble', tag + '·柱头');
       }
       if (i < n) {
         const t2 = (i + 0.5) / n;
@@ -856,18 +915,46 @@
     const d = o.depth || 0.28, tag = '马头墙';
     const steps = o.steps || 3;
     const span = o.halfLen / steps;
+    const SPLIT = 0.22;
+    const nSeg = (a, b) => Math.min(Math.max(1, Math.ceil((b - a) / SPLIT)), 220);
+    // 分段 box：一段墙 face 只跨 ≤0.22m，面级颗粒不再整级一色（不是大方框）
+    const dbody = (x0, x1, y0, y1, z0, z1, mat, tagLabel) => {
+      const lx = Math.min(x0, x1), rx = Math.max(x0, x1);
+      const ly = Math.min(y0, y1), ry = Math.max(y0, y1);
+      const nx = nSeg(lx, rx), ny = nSeg(ly, ry);
+      for (let gx = 0; gx < nx; gx++) {
+        for (let gy = 0; gy < ny; gy++) {
+          mb.box(lx + (rx - lx) * gx / nx, lx + (rx - lx) * (gx + 1) / nx,
+                 ly + (ry - ly) * gy / ny, ly + (ry - ly) * (gy + 1) / ny,
+                 z0, z1, mat, tagLabel);
+        }
+      }
+    };
+    // 两边阶梯墙身 + 各阶压顶（悬挑收窄到 0.045，与院墙同密度）
     for (let i = 0; i < steps; i++) {
       const w = o.halfLen - i * span;
       const yTo = o.y0 + (o.yTop - o.y0) * ((i + 1) / steps);
       for (const s of [-1, 1]) {
-        mb.box(o.cx + s * (o.halfLen - w), o.cx + s * (o.halfLen - w + span), o.y0, yTo, o.z - d / 2, o.z + d / 2, 'plaster', tag);
-        // 压顶瓦
-        mb.box(o.cx + s * (o.halfLen - w) - 0.08, o.cx + s * (o.halfLen - w + span) + 0.08, yTo, yTo + 0.16, o.z - d / 2 - 0.1, o.z + d / 2 + 0.1, 'tile', tag + '·压顶');
+        const x0 = o.cx + s * (o.halfLen - w), x1 = o.cx + s * (o.halfLen - w + span);
+        dbody(x0, x1, o.y0, yTo, o.z - d / 2, o.z + d / 2, 'plaster', tag);
+        const c0 = Math.min(x0, x1) - 0.045, c1 = Math.max(x0, x1) + 0.045;
+        const nc = nSeg(c0, c1);
+        for (let k = 0; k < nc; k++) {
+          const a = c0 + (c1 - c0) * k / nc, b = c0 + (c1 - c0) * (k + 1) / nc;
+          mb.box(a, b, yTo, yTo + 0.16, o.z - d / 2 - 0.045, o.z + d / 2 + 0.045, 'tile', tag + '·压顶');
+        }
       }
     }
-    // 中间高起的墙垛
-    mb.box(o.cx - span / 2, o.cx + span / 2, o.y0, o.yTop + 0.2, o.z - d / 2, o.z + d / 2, 'plaster', tag);
-    mb.box(o.cx - span / 2 - 0.08, o.cx + span / 2 + 0.08, o.yTop + 0.2, o.yTop + 0.36, o.z - d / 2 - 0.1, o.z + d / 2 + 0.1, 'tile', tag + '·压顶');
+    // 中间高起的墙垛（墙身细分；顶上加一小段瓦盖）
+    const m0 = o.cx - span / 2, m1 = o.cx + span / 2;
+    const myY1 = o.yTop + 0.2;
+    dbody(m0, m1, o.y0, myY1, o.z - d / 2, o.z + d / 2, 'plaster', tag);
+    const c0 = m0 - 0.045, c1 = m1 + 0.045;
+    const nc = nSeg(c0, c1);
+    for (let k = 0; k < nc; k++) {
+      const a = c0 + (c1 - c0) * k / nc, b = c0 + (c1 - c0) * (k + 1) / nc;
+      mb.box(a, b, myY1, myY1 + 0.16, o.z - d / 2 - 0.045, o.z + d / 2 + 0.045, 'tile', tag + '·压顶');
+    }
   }
 
   /* ------------------------------ 院墙 ------------------------------ */
@@ -920,12 +1007,25 @@
       const jz = isX ? 0.0104 : 0.0092;   // 左右条底面上抬 1.2 mm
       const hsh = ((Math.round((Math.min(ax, bx) * 1.3 + Math.min(az, bz) * 1.7) * 997) % 4 + 4) % 4);
       const jt = (isX ? 0 : 0.0012) + hsh * 0.0006;        // 顶面下压 1.2 mm
-      if (isX) {
-        mb.box(Math.min(ax, bx) - 0.06, Math.max(ax, bx) + 0.06, y - lp - hsh * 0.0008, y + 0.16 - jt, az - d / 2 - hsh * 0.0008, az + d / 2 + hsh * 0.0008, 'tile', tag + '·压顶');
-        mb.box(Math.min(ax, bx) - 0.06, Math.max(ax, bx) + 0.06, y + 0.16 - lp, y + rh - jt, az - 0.08, az + 0.08, 'tileEnd', tag + '·脊');
-      } else {
-        mb.box(ax - d / 2 - 0.08, ax + d / 2 + 0.08, y - jz + 0.0012, y + 0.16 - jt, Math.min(az, bz) - 0.06, Math.max(az, bz) + 0.06, 'tile', tag + '·压顶');
-        mb.box(ax - 0.08, ax + 0.08, y + 0.16 - lp, y + rh - jt, Math.min(az, bz) - 0.06, Math.max(az, bz) + 0.06, 'tileEnd', tag + '·脊');
+      // 压顶/脊沿墙长方向按 0.22 m 均匀切段：整段 18 m 长 box 的顶面
+      // 是一张连续大平面，面级颗粒按整面取同一哈希色，像素风下成大方框；
+      // 切段后每段独立取色并带 sub-mm 微差，长条带不再有巨形块面。
+      const loCap = isX ? Math.min(ax, bx) - 0.06 : Math.min(az, bz) - 0.06;
+      const hiCap = isX ? Math.max(ax, bx) + 0.06 : Math.max(az, bz) + 0.06;
+      const nCap = Math.min(Math.max(1, Math.ceil((hiCap - loCap) / 0.22)), 220);
+      for (let k = 0; k < nCap; k++) {
+        const a = loCap + (hiCap - loCap) * k / nCap;
+        const b = loCap + (hiCap - loCap) * (k + 1) / nCap;
+        const dj = ((k * 37) % 5) * 0.0005;                  // 相邻段顶面错开 0~2 mm，不与邻段共面
+        if (isX) {
+          mb.box(a, b, y - lp - hsh * 0.0008, y + 0.16 - jt + dj, az - d / 2 - hsh * 0.0008, az + d / 2 + hsh * 0.0008, 'tile', tag + '·压顶');
+          mb.box(a, b, y + 0.16 - lp + dj, y + rh - jt + dj, az - 0.08, az + 0.08, 'tileEnd', tag + '·脊');
+        } else {
+          // 左右条压顶横截面宽 = d + 2×0.045 = 0.39m，0.39×0.22 段面对角 0.45m，
+          // 顶到 0.45 目标；原来悬挑 0.08m（横截面 0.46m）会留 0.51m 大三角。
+          mb.box(ax - d / 2 - 0.045, ax + d / 2 + 0.045, y - jz + 0.0012, y + 0.16 - jt + dj, a, b, 'tile', tag + '·压顶');
+          mb.box(ax - 0.08, ax + 0.08, y + 0.16 - lp + dj, y + rh - jt + dj, a, b, 'tileEnd', tag + '·脊');
+        }
       }
       const mp = mapper(s.dir, s.at);
       // 月洞门石券：下部两侧立框（0 → 直段顶），上部沿半圆铺券石（圆心在直段顶）
@@ -962,14 +1062,56 @@
   function yingbi(mb, o) {
     const w = o.w || 3.2, h = o.h || 2.4, tag = '影壁';
     const x = o.cx, z = o.cz;
-    mb.box(x - w / 2, x + w / 2, 0, 0.3, z - 0.2, z + 0.2, 'stoneDark', tag + '·座');
-    mb.box(x - w / 2 + 0.1, x + w / 2 - 0.1, 0.3, h, z - 0.16, z + 0.16, 'brick', tag);
-    // 中心琉璃团花
-    mb.box(x - 0.5, x + 0.5, h * 0.5, h * 0.78, z + 0.16, z + 0.22, 'glazeG', tag + '·团花');
-    mb.box(x - 0.32, x + 0.32, h * 0.58, h * 0.7, z + 0.22, z + 0.26, 'gold', tag + '·团花心');
-    // 瓦顶
-    mb.box(x - w / 2 - 0.2, x + w / 2 + 0.2, h, h + 0.14, z - 0.26, z + 0.26, 'tile', tag + '·顶');
-    mb.box(x - w / 2 - 0.2, x + w / 2 + 0.2, h + 0.14, h + 0.24, z - 0.08, z + 0.08, 'tileEnd', tag + '·脊');
+    const SPLIT = 0.22;
+    const nSeg = (a, b) => Math.min(Math.max(1, Math.ceil((b - a) / SPLIT)), 220);
+    // 影壁墙身 / 座 / 顶 / 脊全部按 0.22m 切段：整块砖面与 3.6m 长压顶在像素风下
+    // 会成大方框 / 长条巨面，切段后每格独立取色，颗粒与院墙/隔墙同密度。
+    const dbox = (x0, x1, y0, y1, z0, z1, mat, tagLabel) => {
+      const lx = Math.min(x0, x1), rx = Math.max(x0, x1);
+      const ly = Math.min(y0, y1), ry = Math.max(y0, y1);
+      const nx = nSeg(lx, rx), ny = nSeg(ly, ry);
+      for (let gx = 0; gx < nx; gx++) {
+        for (let gy = 0; gy < ny; gy++) {
+          mb.box(lx + (rx - lx) * gx / nx, lx + (rx - lx) * (gx + 1) / nx,
+                 ly + (ry - ly) * gy / ny, ly + (ry - ly) * (gy + 1) / ny,
+                 z0, z1, mat, tagLabel);
+        }
+      }
+    };
+    dbox(x - w / 2, x + w / 2, 0, 0.3, z - 0.2, z + 0.2, 'stoneDark', tag + '·座');
+    dbox(x - w / 2 + 0.1, x + w / 2 - 0.1, 0.3, h, z - 0.16, z + 0.16, 'brick', tag);
+    // 中心琉璃团花是凸出于墙面的装饰，整体横 1.0m×竖 0.67m 在像素风里仍是整块大面。
+    // 沿横向 0.22m / 竖向按 0.22m 拆分，让每一格独立哈希取色，呈现琉璃拼格而非一块平镜。
+    const tc0 = x - 0.5, tc1 = x + 0.5, tcY0 = h * 0.5, tcY1 = h * 0.78;
+    const tcN = Math.max(1, Math.ceil((tc1 - tc0) / 0.22)), tcM = Math.max(1, Math.ceil((tcY1 - tcY0) / 0.22));
+    for (let gx = 0; gx < tcN; gx++) {
+      for (let gy = 0; gy < tcM; gy++) {
+        const a = tc0 + (tc1 - tc0) * gx / tcN, b = tc0 + (tc1 - tc0) * (gx + 1) / tcN;
+        const c = tcY0 + (tcY1 - tcY0) * gy / tcM, d = tcY0 + (tcY1 - tcY0) * (gy + 1) / tcM;
+        mb.box(a, b, c, d, z + 0.16, z + 0.20, 'glazeG', tag + '·团花');
+        // 心只铺中间一小块金（0.64m 宽 × 0.12m 高，也拆两格）
+        if (b >= x - 0.32 && a <= x + 0.32 && d >= h * 0.58 && c <= h * 0.7) {
+          mb.box(Math.max(a, x - 0.32), Math.min(b, x + 0.32), Math.max(c, h * 0.58), Math.min(d, h * 0.7),
+                 z + 0.20, z + 0.24, 'gold', tag + '·团花心');
+        }
+      }
+    }
+    // 瓦顶 + 脊：沿墙长方向 0.22m 切段，瓦顶横向也细分（0.52m 深 / 0.22m ≈ 3 格），
+    // 每块小面还带 sub-mm 微差，不再整条 3.6m 巨面，也不与墙顶共面。
+    const e0 = x - w / 2 - 0.2, e1 = x + w / 2 + 0.2;
+    const ne = Math.min(Math.max(1, Math.ceil((e1 - e0) / 0.22)), 220);
+    const z0e = z - 0.26, z1e = z + 0.26;
+    const nz = Math.min(Math.max(1, Math.ceil((z1e - z0e) / 0.22)), 220);
+    for (let k = 0; k < ne; k++) {
+      const a = e0 + (e1 - e0) * k / ne, b = e0 + (e1 - e0) * (k + 1) / ne;
+      const dj = ((k * 37) % 5) * 0.0005;
+      for (let gz = 0; gz < nz; gz++) {
+        const c = z0e + (z1e - z0e) * gz / nz, d0 = z0e + (z1e - z0e) * (gz + 1) / nz;
+        const dzj = ((gz * 41 + k * 37) % 5) * 0.0005;
+        mb.box(a, b, h - 0.008 + dj + dzj, h + 0.14 + dj + dzj, c, d0, 'tile', tag + '·顶');
+      }
+      mb.box(a, b, h + 0.14 - 0.008 + dj, h + 0.24 + dj, z - 0.08, z + 0.08, 'tileEnd', tag + '·脊');
+    }
   }
 
   /* ------------------------------ 石狮 ------------------------------ */
@@ -1109,14 +1251,33 @@
       const perX = -Math.sin(az), perZ = Math.cos(az);
       const mid = [p[0] + Math.cos(az) * L * 0.55 * ce, p[1] + se * L * 0.62, p[2] + Math.sin(az) * L * 0.55 * ce];
       const end = [p[0] + Math.cos(az) * L * 1.05 * ce, p[1] + se * L * 1.15, p[2] + Math.sin(az) * L * 1.05 * ce];
-      const A = [p[0] - perX * w, p[1], p[2] - perZ * w];
-      const B = [p[0] + perX * w, p[1], p[2] + perZ * w];
-      const C = [mid[0] + perX * w * 0.5, mid[1], mid[2] + perZ * w * 0.5];
-      const D = [mid[0] - perX * w * 0.5, mid[1], mid[2] - perZ * w * 0.5];
-      mb.tri(A, B, C, 'pine', tag);
-      mb.tri(A, C, D, 'pine', tag);
-      mb.tri(D, C, end, 'pine', tag);
-      mb.tri(C, B, end, 'pine', tag);
+      // 针叶沿折线 p→mid→end 按弧长均分 3 段、4 个截面，横向线性收窄；
+      // 原来只分 2 段，尖端一段就有 0.46 m 长边，实测超出 0.45 m 阈值。
+      const d1 = Math.hypot(mid[0] - p[0], mid[1] - p[1], mid[2] - p[2]);
+      const d2 = Math.hypot(end[0] - mid[0], end[1] - mid[1], end[2] - mid[2]);
+      const k = d1 / (d1 + d2);
+      const at = (u) => {
+        const [a, b] = u <= k ? [p, mid] : [mid, end];
+        const tu = u <= k ? u / k : (u - k) / (1 - k);
+        return [a[0] + (b[0] - a[0]) * tu, a[1] + (b[1] - a[1]) * tu, a[2] + (b[2] - a[2]) * tu];
+      };
+      let prevL = null, prevR = null;
+      for (let i = 0; i <= 3; i++) {
+        const u = i / 3;
+        const c = at(u);
+        const w2 = w * Math.max(0, 1 - u);
+        const Lp = [c[0] - perX * w2, c[1], c[2] - perZ * w2];
+        const Rp = [c[0] + perX * w2, c[1], c[2] + perZ * w2];
+        if (prevL) {
+          if (w2 > 1e-6) {
+            mb.tri(prevL, prevR, Lp, 'pine', tag);
+            mb.tri(prevR, Lp, Rp, 'pine', tag);
+          } else {
+            mb.tri(prevL, prevR, c, 'pine', tag);
+          }
+        }
+        prevL = Lp; prevR = Rp;
+      }
     }
   }
 

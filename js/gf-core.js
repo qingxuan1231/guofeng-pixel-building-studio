@@ -119,17 +119,37 @@
       this.tri(a, b, c, mat, tag, n);
       this.tri(a, c, d, mat, tag, n);
     }
-    /** 长方体：六面 */
+    /** 长方体：六面。任一边长超过 0.22 m 时按 0.22 m 步距自适应细分，杜绝大门板/大方框面上
+     *  出现 >0.55 m 的超长三角。细分只在内部加网格顶点，边界坐标不变，不影响相邻构件的贴合。 */
     box(x0, x1, y0, y1, z0, z1, mat, tag) {
       if (x0 === x1 || y0 === y1 || z0 === z1) return;
-      const A = [x0, y0, z0], B = [x1, y0, z0], C = [x1, y0, z1], D = [x0, y0, z1];
-      const A2 = [x0, y1, z0], B2 = [x1, y1, z0], C2 = [x1, y1, z1], D2 = [x0, y1, z1];
-      this.quad(D, C, C2, D2, mat, tag); // 前 (+z)
-      this.quad(B, A, A2, B2, mat, tag); // 后 (-z)
-      this.quad(A, D, D2, A2, mat, tag); // 左 (-x)
-      this.quad(C, B, B2, C2, mat, tag); // 右 (+x)
-      this.quad(A2, D2, C2, B2, mat, tag); // 顶 (+y)
-      this.quad(C, D, A, B, mat, tag); // 底
+      const STEP = 0.22;
+      // 各轴分段（足 0.22m 才分，小件保持单面不增面数）
+      const nx = Math.max(1, Math.ceil((x1 - x0) / STEP));
+      const ny = Math.max(1, Math.ceil((y1 - y0) / STEP));
+      const nz = Math.max(1, Math.ceil((z1 - z0) / STEP));
+      const xs = [], ys = [], zs = [];
+      for (let i = 0; i <= nx; i++) xs.push(x0 + (x1 - x0) * i / nx);
+      for (let i = 0; i <= ny; i++) ys.push(y0 + (y1 - y0) * i / ny);
+      for (let i = 0; i <= nz; i++) zs.push(z0 + (z1 - z0) * i / nz);
+      // 前 (+z)
+      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++)
+        this.quad([xs[i], ys[j], z1], [xs[i + 1], ys[j], z1], [xs[i + 1], ys[j + 1], z1], [xs[i], ys[j + 1], z1], mat, tag);
+      // 后 (-z)
+      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++)
+        this.quad([xs[i + 1], ys[j], z0], [xs[i], ys[j], z0], [xs[i], ys[j + 1], z0], [xs[i + 1], ys[j + 1], z0], mat, tag);
+      // 左 (-x)
+      for (let i = 0; i < ny; i++) for (let j = 0; j < nz; j++)
+        this.quad([x0, ys[i], zs[j]], [x0, ys[i], zs[j + 1]], [x0, ys[i + 1], zs[j + 1]], [x0, ys[i + 1], zs[j]], mat, tag);
+      // 右 (+x)
+      for (let i = 0; i < ny; i++) for (let j = 0; j < nz; j++)
+        this.quad([x1, ys[i], zs[j + 1]], [x1, ys[i], zs[j]], [x1, ys[i + 1], zs[j]], [x1, ys[i + 1], zs[j + 1]], mat, tag);
+      // 顶 (+y)
+      for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++)
+        this.quad([xs[i], y1, zs[j]], [xs[i], y1, zs[j + 1]], [xs[i + 1], y1, zs[j + 1]], [xs[i + 1], y1, zs[j]], mat, tag);
+      // 底 (-y)
+      for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++)
+        this.quad([xs[i], y0, zs[j + 1]], [xs[i], y0, zs[j]], [xs[i + 1], y0, zs[j]], [xs[i + 1], y0, zs[j + 1]], mat, tag);
     }
     /** 以中心定位的长方体 */
     boxC(cx, cz, w, d, y0, y1, mat, tag) {
@@ -138,17 +158,61 @@
     /** 以中心定位的四棱台：上下截面不同（斗、柱础、收分构件用） */
     taper(cx, cz, w0, d0, w1, d1, y0, y1, mat, tag) {
       if (y0 === y1) return;
+      // 上下截面完全一致时退化为长方体，走 box 的细分路径
+      if (w0 === w1 && d0 === d1 && w0 > 0 && d0 > 0) {
+        this.box(cx - w0 / 2, cx + w0 / 2, y0, y1, cz - d0 / 2, cz + d0 / 2, mat, tag);
+        return;
+      }
+      const STEP = 0.22;
       const ring = (w, d, y) => ([
         [cx - w / 2, y, cz - d / 2], [cx + w / 2, y, cz - d / 2],
         [cx + w / 2, y, cz + d / 2], [cx - w / 2, y, cz + d / 2],
       ]);
       const s = ring(w0, d0, y0), t = ring(w1, d1, y1);
+      // 四面侧板：环向 + 竖向双线性细分，杜绝几米长的斜侧板大三角（阶条/垂带）
       for (let i = 0; i < 4; i++) {
         const j = (i + 1) % 4;
-        this.quad(s[i], s[j], t[j], t[i], mat, tag);
+        const span = Math.max(
+          Math.hypot(s[j][0] - s[i][0], s[j][2] - s[i][2]),
+          Math.hypot(t[j][0] - t[i][0], t[j][2] - t[i][2])
+        );
+        const n = Math.max(1, Math.ceil(span / STEP));
+        const ny = Math.max(1, Math.ceil((y1 - y0) / STEP));
+        const ptsB = [], ptsT = [];
+        for (let v = 0; v <= n; v++) {
+          const e = v / n;
+          ptsB.push([s[i][0] + (s[j][0] - s[i][0]) * e, s[i][1], s[i][2] + (s[j][2] - s[i][2]) * e]);
+          ptsT.push([t[i][0] + (t[j][0] - t[i][0]) * e, t[i][1], t[i][2] + (t[j][2] - t[i][2]) * e]);
+        }
+        for (let v = 0; v < n; v++) {
+          for (let w = 0; w < ny; w++) {
+            const f0 = w / ny, f1 = (w + 1) / ny;
+            const pt = (v2, f) => [
+              ptsB[v2][0] * (1 - f) + ptsT[v2][0] * f,
+              y0 + (y1 - y0) * f,
+              ptsB[v2][2] * (1 - f) + ptsT[v2][2] * f
+            ];
+            this.quad(pt(v, f0), pt(v + 1, f0), pt(v + 1, f1), pt(v, f1), mat, tag);
+          }
+        }
       }
-      this.quad(s[0], s[1], s[2], s[3], mat, tag); // 底 (-y)
-      this.quad(t[3], t[2], t[1], t[0], mat, tag); // 顶 (+y)
+      // 底面 / 顶面网格细分（大截面时避免整块大方框）
+      const cap = (w, d, y, flip) => {
+        if (w <= 0 || d <= 0) return;
+        const nx = Math.max(1, Math.ceil(w / STEP));
+        const nz = Math.max(1, Math.ceil(d / STEP));
+        const x0 = cx - w / 2, z0 = cz - d / 2;
+        for (let i = 0; i < nx; i++) {
+          for (let k = 0; k < nz; k++) {
+            const xa = x0 + w * i / nx, xb = x0 + w * (i + 1) / nx;
+            const za = z0 + d * k / nz, zb = z0 + d * (k + 1) / nz;
+            if (flip) this.quad([xa, y, zb], [xb, y, zb], [xb, y, za], [xa, y, za], mat, tag);
+            else this.quad([xa, y, za], [xb, y, za], [xb, y, zb], [xa, y, zb], mat, tag);
+          }
+        }
+      };
+      cap(w0, d0, y0, true); // 底 (-y)
+      cap(w1, d1, y1, false); // 顶 (+y)
     }
     /** 竖向圆柱（多边形棱柱）。noCap=true 时不出顶底扇面：
      *  檐柱顶上被额枋/斗栱盖住、底上埋进柱础，这两片扇面平时看不见，
@@ -161,15 +225,21 @@
         const a = a0 + (i / n) * Math.PI * 2;
         pts.push([cx + Math.cos(a) * r, cz + Math.sin(a) * r]);
       }
+      // 高度方向按 0.22 m 细分，杜绝 3 m 高圆柱一侧是整条长矩形（对角超 0.55 m）
+      const SPLIT = 0.22;
+      const ny = Math.max(1, Math.ceil((y1 - y0) / SPLIT));
       for (let i = 0; i < n; i++) {
         const p = pts[i], q = pts[(i + 1) % n];
-        this.quad(
-          [p[0], y0, p[1]],
-          [q[0], y0, q[1]],
-          [q[0], y1, q[1]],
-          [p[0], y1, p[1]],
-          mat, tag
-        );
+        for (let k = 0; k < ny; k++) {
+          const ya = y0 + ((y1 - y0) * k) / ny, yb = y0 + ((y1 - y0) * (k + 1)) / ny;
+          this.quad(
+            [p[0], ya, p[1]],
+            [q[0], ya, q[1]],
+            [q[0], yb, q[1]],
+            [p[0], yb, p[1]],
+            mat, tag
+          );
+        }
       }
       if (noCap) return;
       const top = [cx, y1, cz], bot = [cx, y0, cz];
@@ -182,43 +252,104 @@
     /** XZ 平面多边形竖直拉伸（用于八边形塔身、拱门轮廓、月洞等） */
     prism(points, y0, y1, mat, tag) {
       const n = points.length;
-      for (let i = 0; i < n; i++) {
-        const p = points[i], q = points[(i + 1) % n];
-        this.quad([p[0], y0, p[1]], [q[0], y0, q[1]], [q[0], y1, q[1]], [p[0], y1, p[1]], mat, tag);
-      }
-      // 顶底扇面：每种朝向只铺一次。这里以前正反两套都铺（当年为躲背面剔除），
-      // 但两条渲染路径都关背面剔除、法线还会朝相机翻正，反的那套纯属白画，
-      // 而且与正的那套严格同面 —— 塔的平座铺板就这么叠出 91 m² 共面（转视角闪）和 2× 面数。
+      const STEP = 0.22;
+      const ny = Math.max(1, Math.ceil((y1 - y0) / STEP));
       let cx = 0, cz = 0;
       for (const p of points) { cx += p[0]; cz += p[1]; }
       cx /= n; cz /= n;
+      const triFan = (cy, flip) => {
+        // 每边沿边细分 ns 段，同时从中心沿半径再细分 nr 层。
+        // 环带从外圈向内圈逐环铺 quad（外环 k=0 在最外沿），最内环收成中心三角；
+        // 绝不能反过来在最内先铺一个大三角——那会把中心到外层整片的面积盖住，
+        // 与内层环带共面重叠（斜视转视角花边抖动），nr=1 时还会退化成 (center,center,p)。
+        for (let i = 0; i < n; i++) {
+          const p = points[i], q = points[(i + 1) % n];
+          const span = Math.hypot(q[0] - p[0], q[1] - p[1]);
+          const ns = Math.max(1, Math.ceil(span / STEP));
+          const radMax = Math.max(Math.hypot(p[0] - cx, p[1] - cz), Math.hypot(q[0] - cx, q[1] - cz));
+          const nr = Math.max(1, Math.ceil(radMax / STEP));
+          // 环向采样 C+(1-f)*(p-C)：f=0 在外沿、f=1 收心，沿边线性过渡
+          for (let u = 0; u < ns; u++) {
+            const e0 = u / ns, e1 = (u + 1) / ns;
+            const ax = p[0] + (q[0] - p[0]) * e0, az = p[1] + (q[1] - p[1]) * e0;
+            const bx = p[0] + (q[0] - p[0]) * e1, bz = p[1] + (q[1] - p[1]) * e1;
+            const pt = (X, Z, f) => [cx + (X - cx) * (1 - f), cy, cz + (Z - cz) * (1 - f)];
+            for (let k = 0; k < nr; k++) {
+              const f0 = k / nr, f1 = (k + 1) / nr;
+              const pax = pt(ax, az, f0), pbx = pt(bx, bz, f0); // 本环外沿两点
+              if (k === nr - 1) {
+                // 最内环：内沿收成中心点，直接铺三角（避免中心退化）
+                const c0 = [cx, cy, cz];
+                if (flip) this.tri(pax, pbx, c0, mat, tag);
+                else this.tri(c0, pbx, pax, mat, tag);
+              } else {
+                const qax = pt(ax, az, f1), qbx = pt(bx, bz, f1); // 本环内沿两点
+                if (flip) this.quad(pax, pbx, qbx, qax, mat, tag);
+                else this.quad(qax, qbx, pbx, pax, mat, tag);
+              }
+            }
+          }
+        }
+      };
       for (let i = 0; i < n; i++) {
         const p = points[i], q = points[(i + 1) % n];
-        this.tri([cx, y1, cz], [p[0], y1, p[1]], [q[0], y1, q[1]], mat, tag);
-        this.tri([cx, y0, cz], [q[0], y0, q[1]], [p[0], y0, p[1]], mat, tag);
+        const span = Math.hypot(q[0] - p[0], q[1] - p[1]);
+        const ns = Math.max(1, Math.ceil(span / STEP));
+        // 侧面：每边的 XZ 段 × 竖直段双细分
+        for (let u = 0; u < ns; u++) {
+          const e0 = u / ns, e1 = (u + 1) / ns;
+          const ax = p[0] + (q[0] - p[0]) * e0, az = p[1] + (q[1] - p[1]) * e0;
+          const bx = p[0] + (q[0] - p[0]) * e1, bz = p[1] + (q[1] - p[1]) * e1;
+          for (let v = 0; v < ny; v++) {
+            const f0 = y0 + (y1 - y0) * v / ny, f1 = y0 + (y1 - y0) * (v + 1) / ny;
+            this.quad([ax, f0, az], [bx, f0, bz], [bx, f1, bz], [ax, f1, az], mat, tag);
+          }
+        }
       }
+      // 顶底扇面：每种朝向只铺一次（见下注释）。这里用 triFan 网格细分，
+      // 既躲开「中心大扇面」的超长边，也保持仅有单面朝向、不产生共面闪烁。
+      triFan(y1, false);
+      triFan(y0, true);
     }
     /** 旋转体：profile 为 [半径, 高度] 序列，自下而上 */
     lathe(cx, cz, profile, n, mat, tag) {
+      const STEP = 0.22;
       for (let i = 0; i < profile.length - 1; i++) {
         const [r0, y0] = profile[i];
         const [r1, y1] = profile[i + 1];
         if (r0 <= 0 && r1 <= 0) continue;
-        for (let k = 0; k < n; k++) {
-          const a = (k / n) * Math.PI * 2, b = ((k + 1) / n) * Math.PI * 2;
-          this.quad(
-            [cx + Math.cos(a) * r0, y0, cz + Math.sin(a) * r0],
-            [cx + Math.cos(b) * r0, y0, cz + Math.sin(b) * r0],
-            [cx + Math.cos(b) * r1, y1, cz + Math.sin(b) * r1],
-            [cx + Math.cos(a) * r1, y1, cz + Math.sin(a) * r1],
-            mat, tag
-          );
+        // 每段高度按 0.22 m 竖向细分，环向每边按弧长细分
+        const ny = Math.max(1, Math.ceil((y1 - y0) / STEP));
+        const arc = Math.max(r0, r1) * Math.PI * 2 / n; // 最大弧长
+        const ns = Math.max(1, Math.ceil(arc / STEP));
+        for (let seg = 0; seg < ny; seg++) {
+          const yA = y0 + (y1 - y0) * seg / ny, yB2 = y0 + (y1 - y0) * (seg + 1) / ny;
+          const a_r = r0 + (r1 - r0) * seg / ny, b_r = r0 + (r1 - r0) * (seg + 1) / ny;
+          for (let k = 0; k < n * ns; k++) {
+            const a = (k / (n * ns)) * Math.PI * 2, b = ((k + 1) / (n * ns)) * Math.PI * 2;
+            this.quad(
+              [cx + Math.cos(a) * a_r, yA, cz + Math.sin(a) * a_r],
+              [cx + Math.cos(b) * a_r, yA, cz + Math.sin(b) * a_r],
+              [cx + Math.cos(b) * b_r, yB2, cz + Math.sin(b) * b_r],
+              [cx + Math.cos(a) * b_r, yB2, cz + Math.sin(a) * b_r],
+              mat, tag
+            );
+          }
         }
       }
     }
     /** 竖直双面片（旗幡、门神、匾面） */
     panel(x0, x1, y0, y1, z, mat, tag) {
-      this.quad([x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z], mat, tag);
+      const STEP = 0.22;
+      const nx = Math.max(1, Math.ceil((x1 - x0) / STEP));
+      const ny = Math.max(1, Math.ceil((y1 - y0) / STEP));
+      for (let i = 0; i < nx; i++) {
+        for (let j = 0; j < ny; j++) {
+          const xa = x0 + (x1 - x0) * i / nx, xb = x0 + (x1 - x0) * (i + 1) / nx;
+          const ya = y0 + (y1 - y0) * j / ny, yb = y0 + (y1 - y0) * (j + 1) / ny;
+          this.quad([xa, ya, z], [xb, ya, z], [xb, yb, z], [xa, yb, z], mat, tag);
+        }
+      }
     }
     /** 合并另一个网格。key 非空时，把这一块三角形在合入结果里的起止区间记进 _mo 表，
      *  拖动时只平移区间内的顶点就能实现「单件移动」，无需整网重建。 */
@@ -523,7 +654,7 @@
 
   /* ------------------------- 常用构件小工具 ------------------------- */
   // 在两点之间搭一根方木（用于椽子、栏杆、树枝）
-  GF.beamBetween = function (mb, a, b, w, h, mat, tag) {
+  GF.beamBetween = function (mb, a, b, w, h, mat, tag, caps) {
     const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
     const len = Math.hypot(dx, dy, dz);
     if (len < 1e-4) return;
@@ -541,13 +672,28 @@
       const D = V.add(p, V.add(V.mul(right, -hw), V.mul(front, hh)));
       return [A, B, C, D];
     };
-    const c0 = corners(a), c1 = corners(b);
-    for (let i = 0; i < 4; i++) {
-      const j = (i + 1) % 4;
-      mb.quad(c0[i], c0[j], c1[j], c1[i], mat, tag);
+    // 沿线长按 0.22 m 细分，杜绝几米长的整根方木每侧是一个长矩形大三角
+    const SPLIT = 0.22;
+    const ns = Math.max(1, Math.ceil(len / SPLIT));
+    // 端面控制：链式调用时相邻段共享端点，同一截面只应出一块端面。
+    // 'both'（默认）出两端，'start' 只出 a 端，'end' 只出 b 端，'none' 都不出。
+    const capsStart = caps !== 'end' && caps !== 'none';
+    const capsEnd = caps !== 'start' && caps !== 'none';
+    const prev = corners(a);
+    if (capsStart) mb.quad(prev[3], prev[2], prev[1], prev[0], mat, tag);
+    for (let s = 1; s <= ns; s++) {
+      const e = s / ns;
+      const p = [a[0] + dx * e, a[1] + dy * e, a[2] + dz * e];
+      const cur = corners(p);
+      for (let i = 0; i < 4; i++) {
+        const j = (i + 1) % 4;
+        mb.quad(prev[i], prev[j], cur[j], cur[i], mat, tag);
+      }
+      if (s === ns && capsEnd) {
+        mb.quad(cur[3], cur[2], cur[1], cur[0], mat, tag);
+      }
+      for (let i = 0; i < 4; i++) prev[i] = cur[i];
     }
-    mb.quad(c0[3], c0[2], c0[1], c0[0], mat, tag);
-    mb.quad(c1[0], c1[1], c1[2], c1[3], mat, tag);
   };
 
   /** 任意方向圆杆（n 边棱柱）：寻杖、地栿、净瓶、椽子等，避免一眼全是方条 */
@@ -568,15 +714,30 @@
       }
       return out;
     };
-    const r0 = ring(a), r1 = ring(b);
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n;
-      mb.quad(r0[i], r0[j], r1[j], r1[i], mat, tag);
+    const r0 = ring(a);
+    let prev = r0;
+    // 沿线长按 0.22 m 细分侧面与中心扇面，杜绝长圆杆一段就成一个大棱面
+    const SPLIT = 0.22;
+    const ns = Math.max(1, Math.ceil(len / SPLIT));
+    for (let s = 1; s <= ns; s++) {
+      const e = s / ns;
+      const p = [a[0] + dx * e, a[1] + dy * e, a[2] + dz * e];
+      const cur = ring(p);
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        mb.quad(prev[i], prev[j], cur[j], cur[i], mat, tag);
+      }
+      if (s === ns) {
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          mb.tri(b, cur[i], cur[j], mat, tag);
+        }
+      }
+      prev = cur;
     }
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
       mb.tri(a, r0[j], r0[i], mat, tag);
-      mb.tri(b, r1[i], r1[j], mat, tag);
     }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

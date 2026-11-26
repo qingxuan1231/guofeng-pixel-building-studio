@@ -55,16 +55,51 @@
   function crossWall(mb, r, o) {
     const d = 0.3, h = o.h || 2.6, g = o.gateW || 2.6;
     const z = o.z, x0 = o.x0, x1 = o.x1, tag = o.tag || '隔墙';
-    mb.box(x0, -g / 2 - d / 2, 0, h, z - d / 2, z + d / 2, 'plaster', tag);
-    mb.box(g / 2 + d / 2, x1, 0, h, z - d / 2, z + d / 2, 'plaster', tag);
+    // 墙身用带细分与洞的 same dense wall（0.22m/格），不再出左右两大整面 box
+    // 底面沉到地平以下 3 mm：四进隔墙（z=-12.6）正压在院墙后侧线上，底板原来与院墙
+    // 底盘共用 y=0 那张大平面（0.02 m²）；下沉 3 mm 后两底不再同面，斜视不闪。
+    P.wallWithHoles(mb, {
+      dir: 'front', at: z, u0: x0, u1: x1, y0: -0.003, y1: h,
+      holes: [{ u0: -g / 2 - d / 2, u1: g / 2 + d / 2, v0: -0.02, v1: o.gateH || 2.5 }],
+      thickness: d, mat: 'plaster', tag
+    });
     // 压顶压进墙顶 8 mm、脊再压进压顶 8 mm：这两处原来都是上下两层严格同面
-    // （院墙整圈 20 m² + 11 m²），斜视/转视角时墙顶会闪成一道花边。
-    mb.box(x0, x1, h - 0.008, h + 0.16, z - d / 2 - 0.08, z + d / 2 + 0.08, 'tile', tag + '·压顶');
-    mb.box(x0, x1, h + 0.16 - 0.008, h + 0.28, z - 0.08, z + 0.08, 'tileEnd', tag + '·脊');
-    // 门框 + 门扇
+    // （整圈墙顶连成一条），斜视/转视角时墙顶会闪成一道花边；现在沿墙长 0.22m
+    // 均匀切段、每段顶面错开 0~2 mm，长条带不再成巨面，也不与邻段共面。
+    const loCap = x0 - 0.06, hiCap = x1 + 0.06;
+    const nCap = Math.min(Math.max(1, Math.ceil((hiCap - loCap) / 0.22)), 220);
+    for (let k = 0; k < nCap; k++) {
+      const a = loCap + (hiCap - loCap) * k / nCap;
+      const b = loCap + (hiCap - loCap) * (k + 1) / nCap;
+      const dj = ((k * 37) % 5) * 0.0005;                  // 相邻段顶面错开 0~2 mm
+      mb.box(a, b, h - 0.008 + dj, h + 0.16 + dj, z - d / 2 - 0.08, z + d / 2 + 0.08, 'tile', tag + '·压顶');
+      mb.box(a, b, h + 0.16 - 0.008 + dj, h + 0.28 + dj, z - 0.08, z + 0.08, 'tileEnd', tag + '·脊');
+    }
+    // 门框：2.5m 高、0.2m 宽的窄竖条也按 0.22m 竖向网格细分，三角边不再超长
     for (const sx of [-1, 1]) {
-      mb.box(sx * g / 2 - 0.1, sx * g / 2 + 0.1, 0.1, o.gateH || 2.5, z - d / 2 - 0.06, z + d / 2 + 0.06, 'woodDark', tag + '·门框');
-      mb.box(sx * (g / 2 - 0.05), sx * 0.03, 0.1, (o.gateH || 2.5) * 0.92, z - 0.05, z + 0.05, 'zhu', tag + '·门扇');
+      const qx0 = sx * g / 2 - 0.1, qx1 = sx * g / 2 + 0.1;
+      const qa = Math.min(qx0, qx1), qb = Math.max(qx0, qx1);
+      const qh = o.gateH || 2.5;
+      const nq = Math.min(Math.max(1, Math.ceil(qh / 0.22)), 220);
+      for (let qy = 0; qy < nq; qy++) {
+        mb.box(qa, qb, 0.1 + (qh - 0.1) * qy / nq, 0.1 + (qh - 0.1) * (qy + 1) / nq, z - d / 2 - 0.06, z + d / 2 + 0.06, 'woodDark', tag + '·门框');
+      }
+    }
+    // 门扇：整扇 1.2m×2.1m 一整张 quad 在像素风下是大方框，按 0.22m 双向网格细分
+    // （实拼门制式：每格一块面板），每格独立取色，不再整扇一块巨面。
+    for (const sx of [-1, 1]) {
+      const f0 = sx * (g / 2 - 0.05), f1 = sx * 0.03;
+      const fa = Math.min(f0, f1), fb = Math.max(f0, f1);
+      const fh = (o.gateH || 2.5) * 0.92;
+      const nx = Math.min(Math.max(1, Math.ceil((fb - fa) / 0.22)), 220);
+      const ny = Math.min(Math.max(1, Math.ceil(fh / 0.22)), 220);
+      for (let bx = 0; bx < nx; bx++) {
+        for (let by = 0; by < ny; by++) {
+          const a = fa + (fb - fa) * bx / nx, c = fa + (fb - fa) * (bx + 1) / nx;
+          const y0 = 0.1 + fh * by / ny, y1 = 0.1 + fh * (by + 1) / ny;
+          mb.box(a, c, y0, y1, z - 0.05, z + 0.05, 'zhu', tag + '·门扇');
+        }
+      }
     }
     // 隔墙门顶（垂花 / 仪门小屋顶）
     if (o.roof !== false && !r.cut.roof) {
@@ -180,14 +215,33 @@
       mb.merge(main.mesh, 'u:' + id);
       regUnit(mb, id, '第 ' + (j + 1) + ' 进正房', sh.dx, zMain + sh.dz, um.W, um.D, 0, main.topY, ru.baseH, false, main.parts);
       // 内隔墙（末进不砌）：两侧各一段，中留 1.6m 内门，门上压门楣与小门罩
+      // 墙身走 wallWithHoles 的 0.22m 均匀细分，不再出整面大 box
       if (j < jin - 1) {
         const zW = zBack;
-        mb.box(-CW / 2 + 0.55, -0.8, 0, 2.7, zW - 0.13, zW + 0.13, 'brickB', '内隔墙');
-        mb.box(0.8, CW / 2 - 0.55, 0, 2.7, zW - 0.13, zW + 0.13, 'brickB', '内隔墙');
+        P.wallWithHoles(mb, {
+          dir: 'front', at: zW, u0: -CW / 2 + 0.55, u1: CW / 2 - 0.55, y0: 0, y1: 2.7,
+          holes: [{ u0: -0.8, u1: 0.8, v0: 0, v1: 2.3 }],
+          thickness: 0.26, mat: 'brickB', tag: '内隔墙'
+        });
         mb.box(-0.8, 0.8, 2.3, 2.7, zW - 0.13, zW + 0.13, 'brickB', '内门·门楣');
         for (const sx of [-1, 1]) {
-          mb.boxC(sx * 0.9, zW, 0.2, 0.34, 0, 2.4, 'woodDark', '内门·框');
-          mb.boxC(sx * 0.32, zW, 0.62, 0.07, 0, 2.1, 'zhu', '内门·扇');
+          // 内门框：2.4m 高竖条按 0.22m 竖向细分
+          const nq = Math.min(Math.max(1, Math.ceil(2.4 / 0.22)), 220);
+          for (let qy = 0; qy < nq; qy++) {
+            mb.boxC(sx * 0.9, zW, 0.2, 0.34, 2.4 * qy / nq, 2.4 * (qy + 1) / nq, 'woodDark', '内门·框');
+          }
+          // 门扇整张 0.62m×2.1m quad 按 0.22m 双向网格细分，不再整扇一块巨面
+          const fs0 = sx * 0.01, fs1 = sx * 0.63;
+          const fa = Math.min(fs0, fs1), fb = Math.max(fs0, fs1);
+          const nx = Math.min(Math.max(1, Math.ceil((fb - fa) / 0.22)), 220);
+          const ny = Math.min(Math.max(1, Math.ceil(2.1 / 0.22)), 220);
+          for (let bx = 0; bx < nx; bx++) {
+            for (let by = 0; by < ny; by++) {
+              const a = fa + (fb - fa) * bx / nx, c = fa + (fb - fa) * (bx + 1) / nx;
+              const y0 = 2.1 * by / ny, y1 = 2.1 * (by + 1) / ny;
+              mb.boxC((a + c) / 2, zW, (c - a) / 2, 0.07, y0, y1, 'zhu', '内门·扇');
+            }
+          }
         }
         if (!r.cut.roof) {
           GF.roofs.build(mb, {

@@ -70,8 +70,8 @@
         // 瓦垄：脊上补一道深色压顶，檐口收边
         mb.quad([a.ridge[0], a.ridge[1] + 0.02, -0.1], [b.ridge[0], b.ridge[1] + 0.02, -0.1],
           [b.ridge[0], b.ridge[1] + 0.02, 0.1], [a.ridge[0], a.ridge[1] + 0.02, 0.1], r.tileB, '廊顶·脊');
-        GF.beamBetween(mb, [a.eaveR[0], a.eaveR[1] - 0.1, a.eaveR[2]], [b.eaveR[0], b.eaveR[1] - 0.1, b.eaveR[2]], 0.12, 0.14, 'woodDark', '廊顶·连檐');
-        GF.beamBetween(mb, [a.eaveL[0], a.eaveL[1] - 0.1, a.eaveL[2]], [b.eaveL[0], b.eaveL[1] - 0.1, b.eaveL[2]], 0.12, 0.14, 'woodDark', '廊顶·连檐');
+        GF.beamBetween(mb, [a.eaveR[0], a.eaveR[1] - 0.1, a.eaveR[2]], [b.eaveR[0], b.eaveR[1] - 0.1, b.eaveR[2]], 0.12, 0.14, 'woodDark', '廊顶·连檐', i === 0 ? 'both' : 'end');
+        GF.beamBetween(mb, [a.eaveL[0], a.eaveL[1] - 0.1, a.eaveL[2]], [b.eaveL[0], b.eaveL[1] - 0.1, b.eaveL[2]], 0.12, 0.14, 'woodDark', '廊顶·连檐', i === 0 ? 'both' : 'end');
       }
       // 两端山面封口，避免从端头看进空腔
       for (const s of [stations[0], stations[stations.length - 1]]) {

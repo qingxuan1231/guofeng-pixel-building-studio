@@ -1,0 +1,17 @@
+===== ① 山花闭合 =====
+  gable: {"roofType":"gable","tri":740,"solid":1992,"total":4608,"fill":"43%","holes":0}
+  gableHard: {"roofType":"gableHard","tri":740,"solid":1992,"total":4608,"fill":"43%","holes":0}
+  roll: {"roofType":"roll","tri":787,"solid":1906,"total":4608,"fill":"41%","holes":0}
+  gableHip: {"roofType":"gableHip","tri":182,"solid":1876,"total":4608,"fill":"41%","holes":0}
+===== ①b 山花网格最长边 =====
+  gable: {"maxE":"0.410","maxTag":"屋面·山花","big":0}
+  gableHard: {"maxE":"0.410","maxTag":"屋面·山花","big":0}
+  roll: {"maxE":"0.399","maxTag":"屋面·山花","big":0}
+  gableHip: {"maxE":"0.392","maxTag":"屋面·山花","big":0}
+===== ①c temple5 全量扫描 =====
+  {}
+===== ② 围墙细分 =====
+  院墙三角形数=28632  最长边=0.372m  超过0.55m=0
+===== ③ 隔墙/自砌 =====
+  temple5 隔墙: {"n":62060,"maxEdge":"0.412","bigEdge":0}
+  wujin 院墙: {"n":45468,"maxEdge":"0.372","bigEdge":0}
