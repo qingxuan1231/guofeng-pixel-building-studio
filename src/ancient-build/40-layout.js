@@ -84,15 +84,29 @@
     layStats(mb).corridors.push({ tag: tag || '游廊', x0, z0, x1, z1, w: Wd });
   }
   // 多层收分台基（主殿三层台基）+ 前置月台
-  function tieredTerrace(mb, W, D, h, tiers, tag) {
+  // cx, cz：台基平面中心。此前以原点为心，主殿台基整体落在前院正中，与殿身错开一整跨。
+  // 台基各层用 loftRect 断面环生成（只出侧壁，不封层间盖），再一层盖一张踏面；
+  // 最上层再出一圈 0.06 高的阶条石压边。相比旧 taper 逐段叠，层间不再有同高共面面。
+  function tieredTerrace(mb, W, D, h, tiers, tag, cx, cz) {
+    cx = cx || 0; cz = cz || 0;
+    const hh = h / tiers;
     let y = 0;
     for (let i = 0; i < tiers; i++) {
-      const hh = h / tiers;
       const w = W + 1.1 - i * 0.32, d = D + 1.1 - i * 0.32;
-      mb.taper(0, 0, w, d, w - 0.22, d - 0.22, y, y + hh, 'stoneDark', tag + '·台');
+      P.loftRect(mb, cx, cz, [
+        { y, w, d },
+        { y: y + hh, w: w - 0.22, d: d - 0.22, m: 'stoneDark' }
+      ], tag + '·层');
+      P.capRect(mb, cx, cz, w - 0.22, d - 0.22, y + hh, 'stone', tag + '·踏面');
       y += hh;
     }
-    mb.box(-W / 2 - 0.4, W / 2 + 0.4, y, y + 0.06, -D / 2 - 0.4, D / 2 + 0.4, 'stone', tag + '·台面');
+    const wT = W + 1.1 - (tiers - 1) * 0.32 - 0.22, dT = D + 1.1 - (tiers - 1) * 0.32 - 0.22;
+    P.loftRect(mb, cx, cz, [
+      { y, w: wT, d: dT },
+      { y, w: wT + 0.08, d: dT + 0.08 },
+      { y: y + 0.06, w: wT + 0.08, d: dT + 0.08, m: 'stone' }
+    ], tag + '·压边');
+    P.capRect(mb, cx, cz, wT + 0.08, dT + 0.08, y + 0.06, 'slabTop', tag + '·台面');
     return y + 0.06;
   }
 

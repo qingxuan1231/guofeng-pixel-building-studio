@@ -1890,10 +1890,9 @@
   GF.parts = {
     mapper, localBox, wallWithHoles, windowAt, doorAt, plaque, dougong, dougongHeight, pingban, lintel,
     queti, platform, railing, horseHeadWall, courtWall, yingbi, lion, censer,
+    loftRect, capRect, rectRing,
     lantern, banner, tree, rock, pond, furniture, latticeBars, partition,
     couplet, menZan, baogu, ceiling, caisson, stoneLantern, well, stele,
     bellDrum, penjing, quBridge, tieMaZhuang
   };
 })(typeof window !== 'undefined' ? window : globalThis);
-
-

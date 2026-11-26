@@ -46,29 +46,38 @@
     // 二进隔墙：天王殿院 / 大雄宝殿院
     crossWall(mb, r, { z: 2.4, x0: -CW / 2, x1: CW / 2, gateW: 3.0, gateH: 2.6, tag: '二进隔墙' });
 
-    // 大雄宝殿：全寺最高最大，三层台基 + 月台 + 庑殿
+    // 大雄宝殿：全寺最高最大，须弥座台基 + 月台 + 庑殿
+    // 台基由 axisUnit 走标准 platform 三档形制（须弥座），以殿身中心 (0, mz) 为心生成；
+    // 月台为殿前附属石台，独立一件 —— 不再用 tieredTerrace 三层叠台 + 殿身自带须弥座两套台基叠置。
     const mz = -3.2, mW = 9.6, mD = 5.4, mBase = 0.75;
     const msh = unitShift(r, '大雄宝殿');
     const baseMesh = new GF.Mesh();
-    const terrTop = tieredTerrace(baseMesh, mW, mD, mBase, 3, '大雄台基');
-    baseMesh.box(-mW * 0.36, mW * 0.36, 0, mBase, mz + mD / 2, mz + mD / 2 + 1.8, 'stoneDark', '大雄月台');
-    baseMesh.box(-mW * 0.36, mW * 0.36, mBase, mBase + 0.06, mz + mD / 2, mz + mD / 2 + 1.8, 'stone', '月台台面');
-    for (let i = 0; i < 3; i++) {
+    // 月台：贴殿身正前方的石台，顶面比须弥座台面高 5 cm（避免与台基台面共面）；走断面环，不再 box 叠面
+    const mtW = mW * 0.72, mtD = 1.8, mtCz = mz + mD / 2 + mtD / 2;
+    const mtTop = mBase + 0.05;
+    P.loftRect(baseMesh, 0, mtCz, [
+      { y: 0, w: mtW, d: mtD },
+      { y: mtTop, w: mtW, d: mtD, m: 'stoneDark' },
+      { y: mtTop, w: mtW - 0.04, d: mtD - 0.04, m: 'stoneDark' }
+    ], '大雄月台');
+    P.capRect(baseMesh, 0, mtCz, mtW - 0.08, mtD - 0.08, mtTop, 'slabTop', '月台台面');
+    // 月台前踏跺：自月台前缘向外 3 级，最后一级高度为零所以只建前两级
+    for (let i = 0; i < 2; i++) {
       const d = (i + 1) * mBase / 3;
-      baseMesh.box(-1.6, 1.6, 0, mBase - d, mz + mD / 2 + 1.8 + i * 0.3, mz + mD / 2 + 1.8 + (i + 1) * 0.3, 'stone', '月台踏跺');
+      baseMesh.box(-1.6, 1.6, 0, mBase - d, mtCz + mtD / 2 + i * 0.3, mtCz + mtD / 2 + (i + 1) * 0.3, 'stone', '月台踏跺');
     }
-    P.railing(baseMesh, { a: [-mW * 0.36, mz + mD / 2 + 1.8], b: [-mW * 0.36, mz + mD / 2], y: mBase + 0.06, style: 'marble', tag: '月台栏' });
-    P.railing(baseMesh, { a: [mW * 0.36, mz + mD / 2 + 1.8], b: [mW * 0.36, mz + mD / 2], y: mBase + 0.06, style: 'marble', tag: '月台栏' });
+    P.railing(baseMesh, { a: [-mtW / 2, mtCz + mtD / 2], b: [-mtW / 2, mtCz - mtD / 2], y: mtTop, style: 'marble', tag: '月台栏' });
+    P.railing(baseMesh, { a: [mtW / 2, mtCz + mtD / 2], b: [mtW / 2, mtCz - mtD / 2], y: mtTop, style: 'marble', tag: '月台栏' });
     // 台基跟殿身共用同一份 unitShift：拖动大雄宝殿时台基、月台、踏跺、栏杆一起走
     baseMesh.translate(msh.dx, 0, msh.dz);
     const baseHide = !!(r.units && r.units['大雄宝殿'] && r.units['大雄宝殿'].parts && r.units['大雄宝殿'].parts.hide && r.units['大雄宝殿'].parts.hide.base);
     if (!baseHide) mb.merge(baseMesh);
     axisUnit(mb, r, {
-      tag: '大雄宝殿', z: mz, y: terrTop - 0.12, statBaseH: mBase,
-      r: { baseH: 0.12, dougong: true, dgScale: 0.9, dgStyle: 'full', railing: true },
+      tag: '大雄宝殿', z: mz, statBaseH: mBase,
+      r: { baseH: mBase, steps: 0, railing: false, dougong: true, dgScale: 0.9, dgStyle: 'full' },
       unit: { W: mW, D: mD, bays: 5, roofType: 'hip', eave: 1.2, veranda: true, partition: 1.2 }
     });
-    // 把三层台基并进「大雄宝殿」的台基构件：选中 / 隐藏台基时连大台基一起处理
+    // 把月台并进「大雄宝殿」的台基构件：选中 / 隐藏台基时连月台一起处理
     const bigBase = baseMesh.triCount ? baseMesh.bounds() : null;
     const su = mb.units && mb.units[mb.units.length - 1];
     if (bigBase && su && su.id === '大雄宝殿' && su.parts && su.parts.base) {
@@ -83,14 +92,15 @@
     // 三进隔墙：大殿院 / 法堂院
     crossWall(mb, r, { z: -6.8, x0: -CW / 2, x1: CW / 2, gateW: 2.6, gateH: 2.4, tag: '三进隔墙' });
 
-    // 法堂
+    // 法堂：z 后移 0.1 m、踏跺 4 级减为 3 级，末级前立面停在 z=-6.2，
+    // 与大雄宝殿须弥座后墙（z=-6.4）留出 0.2 m 间隙，消除台基全段共面。
     axisUnit(mb, r, {
-      tag: '法堂', z: -9.6, r: { baseH: 0.95, dougong: false },
+      tag: '法堂', z: -9.7, r: { baseH: 0.95, steps: 3, dougong: false },
       unit: { W: 7.0, D: 4.2, bays: 3, roofType: 'gableHip', eave: 1.0, veranda: true, cheap: true }
     });
 
-    // 四进隔墙：法堂 / 藏经阁
-    crossWall(mb, r, { z: -12.4, x0: -CW / 2, x1: CW / 2, gateW: 2.4, gateH: 2.3, tag: '四进隔墙' });
+    // 四进隔墙：法堂 / 藏经阁（法堂后移后同步后移 0.2 m，避免与法堂须弥座后墙嵌入）
+    crossWall(mb, r, { z: -12.6, x0: -CW / 2, x1: CW / 2, gateW: 2.4, gateH: 2.3, tag: '四进隔墙' });
 
     // 藏经阁（后阁，二层）
     axisUnit(mb, r, {
@@ -142,18 +152,25 @@
     crossWall(mb, r, { z: zF - 8.6, x0: -CW / 2, x1: CW / 2, gateW: 2.6, gateH: 2.4, tag: '前院隔墙' });
 
     // 三清殿（主殿，月台，歇山）
+    // 台基同样以殿身中心 (0, mz) 为心生成，由 axisUnit 走标准 platform 三档形制（须弥座）；
+    // 月台为殿前附属石台，独立一件 —— 不再用 tieredTerrace 两层叠台 + 殿身自带须弥座两套台基叠置。
     const mz = -1.8, mW = 8.4, mD = 5.0, mBase = 0.7;
     const msh = unitShift(r, '三清殿');
     const baseMesh = new GF.Mesh();
-    const terrTop = tieredTerrace(baseMesh, mW, mD, mBase, 2, '三清台基');
-    baseMesh.box(-mW * 0.34, mW * 0.34, 0, mBase, mz + mD / 2, mz + mD / 2 + 1.6, 'stoneDark', '三清月台');
-    baseMesh.box(-mW * 0.34, mW * 0.34, mBase, mBase + 0.06, mz + mD / 2, mz + mD / 2 + 1.6, 'stone', '月台台面');
+    const mtTop = mBase + 0.05;
+    const mtW = mW * 0.68, mtD = 1.6, mtCz = mz + mD / 2 + mtD / 2;
+    P.loftRect(baseMesh, 0, mtCz, [
+      { y: 0, w: mtW, d: mtD },
+      { y: mtTop, w: mtW, d: mtD, m: 'stoneDark' },
+      { y: mtTop, w: mtW - 0.04, d: mtD - 0.04, m: 'stoneDark' }
+    ], '三清月台');
+    P.capRect(baseMesh, 0, mtCz, mtW - 0.08, mtD - 0.08, mtTop, 'slabTop', '月台台面');
     baseMesh.translate(msh.dx, 0, msh.dz);
     const baseHide = !!(r.units && r.units['三清殿'] && r.units['三清殿'].parts && r.units['三清殿'].parts.hide && r.units['三清殿'].parts.hide.base);
     if (!baseHide) mb.merge(baseMesh);
     axisUnit(mb, r, {
-      tag: '三清殿', z: mz, y: terrTop - 0.12, statBaseH: mBase,
-      r: { baseH: 0.12, dougong: true, dgScale: 0.85, dgStyle: 'full', railing: true },
+      tag: '三清殿', z: mz, statBaseH: mBase,
+      r: { baseH: mBase, steps: 0, railing: false, dougong: true, dgScale: 0.85, dgStyle: 'full' },
       unit: { W: mW, D: mD, bays: 5, roofType: 'gableHip', eave: 1.1, veranda: true, partition: 1.2 }
     });
     const bigBase = baseMesh.triCount ? baseMesh.bounds() : null;
