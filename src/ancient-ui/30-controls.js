@@ -230,7 +230,7 @@
     {
       title: '六 · 渲染与出图',
       items: [
-        { path: 'render.ppm', label: '像素 / 米', type: 'range', min: 8, max: 320, step: 4 },
+        { path: 'render.ppm', label: '像素 / 米', type: 'range', min: 8, max: 120, step: 4 },
         { path: 'render.pitch', label: '俯视角度', type: 'range', min: 18, max: 55, step: 1, unit: '°' },
         { path: 'render.persp', label: '透视强度', type: 'range', min: 0, max: 1, step: 0.05 },
         { path: 'render.outline', label: '描边', type: 'toggle' },
@@ -475,4 +475,3 @@
     clearTimeout(timer);
     timer = setTimeout(rebuild, 60);
   }
-

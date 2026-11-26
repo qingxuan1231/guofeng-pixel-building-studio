@@ -225,7 +225,7 @@
     dzUnit.mesh.rotateY(180);
     const dzSh = unitShift(r, '倒座');
     dzUnit.mesh.translate(dzSh.dx, 0, dz + dzSh.dz);
-    mb.merge(dzUnit.mesh);
+    mb.merge(dzUnit.mesh, 'u:倒座');
     regUnit(mb, '倒座', '倒座房', dzSh.dx, dz + dzSh.dz, dzGeom.W, dzGeom.D, 180, dzUnit.topY, 0.25, false, dzUnit.parts);
     layStats(mb).axis.push({ tag: '倒座', x: 0, z: dz, W: 8.0, D: 3.2, baseH: 0.25, topY: dzUnit.topY });
 
@@ -278,7 +278,7 @@
     zbUnit.mesh.rotateY(180);
     const zbSh = unitShift(r, '后罩房');
     zbUnit.mesh.translate(zbSh.dx, 0, zb + zbSh.dz);
-    mb.merge(zbUnit.mesh);
+    mb.merge(zbUnit.mesh, 'u:后罩房');
     regUnit(mb, '后罩房', '后罩房', zbSh.dx, zb + zbSh.dz, zbGeom.W, zbGeom.D, 180, zbUnit.topY, 0.4, false, zbUnit.parts);
     layStats(mb).axis.push({ tag: '后罩房', x: 0, z: zb, W: 8.4, D: 3.0, baseH: 0.4, topY: zbUnit.topY });
 
@@ -402,4 +402,3 @@
     P.tree(mb, -CW / 2 + 1.6, zSplit - 2.0, 'plum', rng, 0.9, '梅');
     P.tree(mb, CW / 2 - 2.0, zSplit - 3.4, 'maple', rng, 0.9, '枫');
   }
-

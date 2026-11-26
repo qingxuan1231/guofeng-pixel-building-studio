@@ -756,7 +756,7 @@
       buildItem(sub, it, s);
       sub.rotateY(it.rot || 0);
       sub.translate(p.x, it.y || 0, p.z);
-      mb.merge(sub);
+      mb.merge(sub, key);
       reg(key, (ITEM_LABEL[it.k] || it.k) + ' ' + (i + 1), p, 1.0);
     };
 
@@ -793,7 +793,9 @@
     // 水池与曲桥：整组构造，不参与单件编辑
     if (env.pond && env.showGround !== false && env.groundType !== 'lake') {
       const p = at('pond', env.pond.x || 5.5, env.pond.z || 4.5);
-      P.pond(mb, p.x, p.z, env.pond.w || 3.4, env.pond.d || 2.4, '水池');
+      const sub = new GF.Mesh();
+      P.pond(sub, p.x, p.z, env.pond.w || 3.4, env.pond.d || 2.4, '水池');
+      mb.merge(sub, 'pond');
       reg('pond', '水池', p, Math.max(env.pond.w || 3.4, env.pond.d || 2.4) * 0.6);
     }
     if ((env.props || []).indexOf('qubridge') >= 0) {
@@ -806,8 +808,7 @@
       buildItem(sub, it, it.s == null ? 1 : it.s);
       sub.rotateY(it.rot || 0);
       sub.translate(p.x, it.y || 0, p.z);
-      mb.merge(sub);
+      mb.merge(sub, 'item' + i);
       reg('item' + i, (ITEM_LABEL[it.k] || it.k) + ' #' + (i + 1), p, 1.0);
     });
   }
-

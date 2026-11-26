@@ -108,6 +108,13 @@
     const tol = Math.max(18 * k, 24);
     let best = null, bestD = 1e9;
     for (const mv of state.moves) {
+      // 固定在院墙上的单位（院门等）只能随整栋建筑整体移动，不给单件锚点
+      const ki = String(mv.key);
+      if (ki.slice(0, 2) === 'u:') {
+        const us = state.mesh && state.mesh.units;
+        const u = us && us.find((x) => String(x.id) === ki.slice(2));
+        if (u && u.fixed) continue;
+      }
       const q = projWorld(mv.x, mv.z);
       const cy = q.fy - Math.min(2.2, mv.r) * f.map.ppm * 0.85; // 锚点抬到物体中部，好点中
       const d = Math.hypot(q.fx - p.fx, cy - p.fy);
@@ -115,27 +122,129 @@
     }
     return best;
   }
+  // 拖动只平移物件：构建时每个可拖对象（建筑本体 / 院落单体 / 环境陈设 / 水池）
+  // 都在 mesh._mo 里记了「三角面起止区间」，拖动时直接把区间顶点平移到配方位置，
+  // 不重建整网、不动取景 —— 之前每次拖动都完整 GF.build + 画布重排，抖动就是它造成的。
+  let dragCtx = null;   // 当前已落位的键与配方绝对坐标，逐帧累计出本帧该平移的量
+  function currentDragOffset() {
+    if (bldDrag) {
+      if (bldDrag.whole) return { x: +(state.recipe.moveX || 0), z: +(state.recipe.moveZ || 0) };
+      const u = state.recipe.units[bldDrag.id] || {};
+      return { x: +(u.dx || 0), z: +(u.dz || 0) };
+    }
+    if (dragItem) {
+      const it = envItems()[dragItem.i];
+      return it ? { x: it.x, z: it.z } : null;
+    }
+    if (movingItem) {
+      const mv = (state.recipe.env.move || {})[movingItem.key];
+      return mv ? { x: mv.x, z: mv.z } : null;
+    }
+    return null;
+  }
+  function dragKey() {
+    if (bldDrag) return bldDrag.whole ? 'bld' : 'u:' + bldDrag.id;
+    if (dragItem) {
+      const nAuto = (state.recipe.env.auto || []).length;
+      return dragItem.i < nAuto ? 'auto' + dragItem.i : 'item' + (dragItem.i - nAuto);
+    }
+    if (movingItem) return movingItem.key;
+    return null;
+  }
+  // 拖动开始时网格正用到的地方（各入口在 mousedown 记录），保证首帧平移量为 0、不跳
+  function dragOrigin() {
+    if (bldDrag) return { x: bldDrag.dx0, z: bldDrag.dz0 };
+    if (dragItem) return dragItem.d0 || null;
+    if (movingItem) return movingItem.d0 || null;
+    return null;
+  }
+  // 把「配方位置 - 网格已带位置」这段增量平移到对应顶点区间
+  function dragTransform() {
+    const cur = currentDragOffset();
+    const key = dragKey();
+    const m = state.mesh;
+    if (!cur || !key || !m) return;
+    const range = (m._mo || {})[key];
+    // 每次新手势都要重新对基线：同键重拖 / 换配方重排后，旧基线会让首帧凭空跳一截
+    const owner = bldDrag || dragItem || movingItem;
+    if (!dragCtx || dragCtx.key !== key || dragCtx.owner !== owner) {
+      const o0 = dragOrigin();
+      dragCtx = { key, owner, x: o0 ? o0.x : cur.x, z: o0 ? o0.z : cur.z };
+    }
+    const dx = cur.x - dragCtx.x, dz = cur.z - dragCtx.z;
+    dragCtx.x = cur.x; dragCtx.z = cur.z;
+    if (!dx && !dz) return;
+    if (!range) {
+      // 正常每类可拖对象都标了区间；万一漏标，最多在本次拖动手势里重建一次，
+      // 绝不在连续帧里反复整网 GF.build + 重排（那正是窗口抖动的来源）
+      if (!dragCtx.rebuilt) {
+        dragCtx.rebuilt = true;
+        state.mesh = GF.build(state.recipe, { ppm: state.recipe.render.ppm });
+        state.moves = state.mesh.moves || state.moves;
+      }
+      return;
+    }
+    m.moveRange(range[0], range[1], dx, dz);
+    m.geoV = (m.geoV || 0) + 1;  // 顶点已变：GPU / CPU 重新上传这份几何
+    m.__shCache = null;          // 阴影跟着物体走，重新烘焙一帧
+    // 可拾取的元数据同步平移，否则松手后再点会点错位置
+    if (key === 'bld' && m.bldBox) {
+      m.bldBox.x0 += dx; m.bldBox.x1 += dx; m.bldBox.z0 += dz; m.bldBox.z1 += dz;
+    } else if (key.slice(0, 2) === 'u:') {
+      const u = (m.units || []).find((x) => x.id === key.slice(2));
+      if (u) { u.x += dx; u.z += dz; }
+    }
+    for (const mv of (m.moves || [])) if (mv.key === key) { mv.x += dx; mv.z += dz; }
+    // 「拖动陈设」模式里整栋 / 单体的离地偏移跟着累计，重建后不会弹回原型坐标
+    if (movingItem && m.moves) {
+      const ki = String(movingItem.key);
+      if (ki === 'bld') {
+        state.recipe.moveX = +((+state.recipe.moveX || 0) + dx).toFixed(2);
+        state.recipe.moveZ = +((+state.recipe.moveZ || 0) + dz).toFixed(2);
+      } else if (ki.slice(0, 2) === 'u:' && state.recipe.units) {
+        const us = state.recipe.units, idu = ki.slice(2);
+        if (!us[idu]) us[idu] = {};
+        us[idu].dx = +((+us[idu].dx || 0) + dx).toFixed(2);
+        us[idu].dz = +((+us[idu].dz || 0) + dz).toFixed(2);
+      }
+    }
+  }
   let dragRaf = 0;
   let dragPreviewDirty = false, dragPreviewHeld = false, dragIdle = 0;
+  // 纯位移拖动（建筑 / 单体 / 陈设落位）：不重建网格，只平移顶点区间
   function dragRender() {
     if (dragRaf) return;
     dragRaf = requestAnimationFrame(() => {
       dragRaf = 0;
       try {
-        state.mesh = GF.build(state.recipe, { ppm: state.recipe.render.ppm });
-        state.moves = state.mesh.moves || state.moves;
+        dragTransform();
+        if (!state.mesh) {
+          state.mesh = GF.build(state.recipe, { ppm: state.recipe.render.ppm });
+          state.moves = state.mesh.moves || state.moves;
+        }
         const opts = previewOpts({ ppm: Math.min(state.recipe.render.ppm, 14), pad: 5 });
         state.frame = GF.render(state.mesh, opts);
-        draw();
+        draw(true);
       } catch (e) { console.error(e); }
     });
+  }
+  // 改变了几何形状的滑条（尺寸 / 旋转 / 高度 / 规模…）：只能整网重建出新形态
+  function dragRebuildRender() {
+    if (dragRaf) { cancelAnimationFrame(dragRaf); dragRaf = 0; }
+    try {
+      state.mesh = GF.build(state.recipe, { ppm: state.recipe.render.ppm });
+      state.moves = state.mesh.moves || state.moves;
+      const opts = previewOpts({ ppm: Math.min(state.recipe.render.ppm, 14), pad: 5 });
+      state.frame = GF.render(state.mesh, opts);
+      draw(true);
+    } catch (e) { console.error(e); }
   }
   // 陈设滑条：拖动时只出低像素预览，松手 / 停手后必须回到完整帧
   function compDragRender() {
     dragPreviewDirty = true;
     clearTimeout(dragIdle);
     dragIdle = setTimeout(() => { if (!dragPreviewHeld) commitDragPreview(); }, 260);
-    dragRender();
+    dragRebuildRender();
   }
   function commitDragPreview() {
     if (!dragPreviewDirty) return;
@@ -171,4 +280,3 @@
     dragPreviewHeld = false;
     commitDragPreview();
   });
-

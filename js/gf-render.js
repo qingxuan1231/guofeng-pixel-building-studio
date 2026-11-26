@@ -959,7 +959,9 @@
 
   // 几何上传：pos 直接复用 mesh.pos（每顶点 3 float），其余按面展开成每顶点属性
   function gpuGeo(g, mesh, matIndex, key, gAmt) {
-    if (g.geoKey === key && g.geoGAmt === gAmt) return g.geo;
+    // geoV 是拖动平移时递增的版本号：顶点数组就地改过，光靠 mesh 对象同一性（geoKey）
+    // 判断不出「位置已变」，必须带上版本号才能让 WebGL 缓冲跟着更新。
+    if (g.geoKey === key && g.geoGAmt === gAmt && g.geoVer === (mesh.geoV | 0)) return g.geo;
     const T = mesh.triCount, n = T * 3;
     const extra = new Float32Array(n * 7);      // nrm(3) mat gnd tid gk
     const nrm = mesh.nrm, mats = mesh.mat, tags = mesh.tag, pos = mesh.pos;
@@ -1007,7 +1009,7 @@
     gl.vertexAttribPointer(5, 1, gl.FLOAT, false, 28, 24);
     gl.bindVertexArray(null);
     g.geo = { pos: posBuf, extra: exBuf, count: n };
-    g.geoKey = key; g.geoGAmt = gAmt;
+    g.geoKey = key; g.geoGAmt = gAmt; g.geoVer = mesh.geoV | 0;
     return g.geo;
   }
 

@@ -27,7 +27,7 @@
   (function () {
     let v = null;
     try { v = Number(localStorage.getItem('gf.ppm')); } catch (e) {}
-    if (isFinite(v) && v >= 8 && v <= 320) state.recipe.render.ppm = v;
+    if (isFinite(v) && v >= 8 && v <= 120) state.recipe.render.ppm = v;
   })();
 
   const $ = (s, el) => (el || document).querySelector(s);
@@ -79,4 +79,3 @@
       ? '地面栅格：世界米制，按视距 1/2/5m 分档，5 格加重；左上角线段比例尺可读真实尺寸'
       : '地面栅格：关着。点一下打开';
   }
-

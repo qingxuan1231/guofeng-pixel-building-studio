@@ -16,7 +16,7 @@
     const sh = unitShift(r, o.tag);
     const ux = (o.x || 0) + sh.dx, uz = (o.z || 0) + sh.dz;
     u.mesh.translate(ux, o.y || 0, uz);
-    mb.merge(u.mesh);
+    mb.merge(u.mesh, 'u:' + o.tag);
     regUnit(mb, o.tag, o.tag, ux, uz, unit.W, unit.D, 0, u.topY + (o.y || 0), rr.baseH, false, u.parts, o.y || 0);
     const bh = o.statBaseH != null ? o.statBaseH : rr.baseH;
     layStats(mb).axis.push({
@@ -38,7 +38,7 @@
     const ux = o.x + sh.dx, uz = o.z + sh.dz;
     u.mesh.rotateY(rot);
     u.mesh.translate(ux, 0, uz);
-    mb.merge(u.mesh);
+    mb.merge(u.mesh, 'u:' + o.tag);
     regUnit(mb, o.tag, o.tag, ux, uz, unit.W, unit.D, rot, u.topY, rr.baseH, false, u.parts);
     layStats(mb).flanks.push({
       tag: o.tag, x: ux, z: uz, W: unit.W, D: unit.D,
@@ -158,7 +158,7 @@
       const main = houseUnit(ru, um);
       const sh = unitShift(r, id);
       main.mesh.translate(sh.dx, 0, zMain + sh.dz);
-      mb.merge(main.mesh);
+      mb.merge(main.mesh, 'u:' + id);
       regUnit(mb, id, '第 ' + (j + 1) + ' 进正房', sh.dx, zMain + sh.dz, um.W, um.D, 0, main.topY, ru.baseH, false, main.parts);
       // 内隔墙（末进不砌）：两侧各一段，中留 1.6m 内门，门上压门楣与小门罩
       if (j < jin - 1) {
@@ -202,7 +202,7 @@
       const wx = sx * (CW / 2 - 2.9);
       const sh = unitShift(r, id);
       wing.mesh.translate(wx + sh.dx, 0, zWing + sh.dz);
-      mb.merge(wing.mesh);
+      mb.merge(wing.mesh, 'u:' + id);
       regUnit(mb, id, sx > 0 ? '东厢房' : '西厢房', wx + sh.dx, zWing + sh.dz, um.W, um.D, rot, wing.topY, ru.baseH, false, wing.parts);
     }
 
@@ -629,4 +629,3 @@
     P.tree(mb, 3.4, 4.2, 'pine', rng, 1.1, '松');
     P.stele(mb, -4.4, 5.8, 0.9, '功德碑');
   }
-

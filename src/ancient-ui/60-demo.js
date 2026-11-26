@@ -42,7 +42,8 @@
     buildRaf = requestAnimationFrame(step);
   }
 
-  function draw() {
+  // 拖动轻量帧带 skipLayout：画布几何参数未变时跳过样式重排，避免每帧触发布局抖动
+  function draw(skipLayout) {
     const f = state.frame;
     if (!f) return;
     lockViewCenter(f);
@@ -95,7 +96,6 @@
     paintSelection();
     paintPartSelection();
     state.bbox = contentBBox(f);
-    if (state.refit) { state.refit = false; viewAt(state.view || 'all'); } else layout();
+    if (state.refit) { state.refit = false; viewAt(state.view || 'all'); } else if (!skipLayout) layout();
     updateScaleBar();
   }
-

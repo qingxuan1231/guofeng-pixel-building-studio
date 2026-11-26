@@ -220,8 +220,10 @@
     panel(x0, x1, y0, y1, z, mat, tag) {
       this.quad([x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z], mat, tag);
     }
-    /** 合并另一个网格 */
-    merge(other) {
+    /** 合并另一个网格。key 非空时，把这一块三角形在合入结果里的起止区间记进 _mo 表，
+     *  拖动时只平移区间内的顶点就能实现「单件移动」，无需整网重建。 */
+    merge(other, key) {
+      const t0 = this.mat.length;
       for (let i = 0; i < other.triCount; i++) {
         const o = i * 9;
         this.pos.push(
@@ -235,7 +237,33 @@
         this.wx.push(other.wx[i]);
         this.wz.push(other.wz[i]);
       }
+      // 子网格自身的可拖区间整体平移偏移量后并入
+      if (other._mo) {
+        this._mo = this._mo || {};
+        for (const k in other._mo) {
+          const r = other._mo[k];
+          this._mo[k] = [t0 + r[0], t0 + r[1]];
+        }
+      }
+      if (key != null) {
+        this._mo = this._mo || {};
+        this._mo[key] = [t0, this.mat.length];
+      }
       return this;
+    }
+    /** 只平移三角面区间 [t0, t1) 的顶点与世界中心（不动法线），用于拖动时单件落位 */
+    moveRange(t0, t1, dx, dz) {
+      if (dx === 0 && dz === 0) return 1;
+      if (t0 == null || t1 == null || t1 <= t0) return 0;
+      const pos = this.pos, wx = this.wx, wz = this.wz;
+      for (let t = t0; t < t1; t++) {
+        const o = t * 9;
+        pos[o] += dx; pos[o + 2] += dz;
+        pos[o + 3] += dx; pos[o + 5] += dz;
+        pos[o + 6] += dx; pos[o + 8] += dz;
+        wx[t] += dx; wz[t] += dz;
+      }
+      return 1;
     }
     /** 平移 */
     translate(dx, dy, dz) {

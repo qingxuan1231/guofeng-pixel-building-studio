@@ -53,7 +53,11 @@
       (bm.moves || []).forEach((m) => { m.x += ox; m.z += oz; });
     }
     mb.merge(em);
+    const bld0 = mb.mat.length;
     mb.merge(bm);
+    // 整栋区间：环境之后到建筑结束的整段（含未单元化的院墙 / 大殿 / 佛龛等），拖动整栋建筑时按区间平移
+    mb._mo = mb._mo || {};
+    mb._mo.bld = [bld0, mb.mat.length];
     mb.moves = (em.moves || []).concat(bm.moves || []);
     mb.units = bm.units || [];
     if (bm.cityStats) mb.cityStats = bm.cityStats;
@@ -77,6 +81,3 @@
   };
 
   GF.builders = { ground, body, base, interior, environment };
-
-
-

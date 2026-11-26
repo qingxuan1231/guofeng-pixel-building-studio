@@ -61,7 +61,7 @@
         paintCompPanel();
         const p = framePt(e.clientX, e.clientY);
         const w = unproj(p.fx, p.fy);
-        dragItem = { i: hi, dx: it.x - w.x, dz: it.z - w.z };
+        dragItem = { i: hi, dx: it.x - w.x, dz: it.z - w.z, d0: { x: it.x, z: it.z } };
         setStat('拖动：' + compLabel(it.k) + '（松手落位）');
         return;
       }
@@ -71,7 +71,7 @@
       if (!hit) return; // 拖动模式下视角锁定：点空处不旋转、不平移
       const p = framePt(e.clientX, e.clientY);
       const w = unproj(p.fx, p.fy);
-      movingItem = { key: hit.key, label: hit.label, dx: hit.x - w.x, dz: hit.z - w.z };
+      movingItem = { key: hit.key, label: hit.label, dx: hit.x - w.x, dz: hit.z - w.z, d0: { x: hit.x, z: hit.z } };
       setStat('拖动：' + hit.label + '（松手即落位）');
       return;
     }
@@ -112,9 +112,21 @@
     if (movingItem) {
       const p = framePt(e.clientX, e.clientY);
       const w = unproj(p.fx, p.fy);
-      state.recipe.env.move = state.recipe.env.move || {};
-      state.recipe.env.move[movingItem.key] = { x: w.x + movingItem.dx, z: w.z + movingItem.dz };
-      state.moves.forEach((m) => { if (m.key === movingItem.key) { m.x = w.x + movingItem.dx; m.z = w.z + movingItem.dz; } });
+      const nx = w.x + movingItem.dx, nz = w.z + movingItem.dz;
+      const mo = state.recipe.env.move = state.recipe.env.move || {};
+      mo[movingItem.key] = { x: nx, z: nz };
+      // 落到实体的落点坐标：预设件 / 自由件重建与拾取都直接读 it.x / it.z，水池读 pond 字段，
+      // 只写 env.move 的话松手后重建 / 再点选会对不上位置。
+      const ki = String(movingItem.key);
+      if (ki.slice(0, 4) === 'auto' || ki.slice(0, 4) === 'item') {
+        const seg = ki.slice(0, 4) === 'auto' ? state.recipe.env.auto : state.recipe.env.items;
+        const si = seg ? seg[+ki.slice(4)] : null;
+        if (si) { si.x = +nx.toFixed(2); si.z = +nz.toFixed(2); }
+      } else if (ki === 'pond' && state.recipe.env.pond) {
+        state.recipe.env.pond.x = +nx.toFixed(2);
+        state.recipe.env.pond.z = +nz.toFixed(2);
+      }
+      // 锚点由拖动渲染按同帧增量同步（避免绝对 / 相对两套记账互相打架）
       dragRender();
       return;
     }
@@ -245,4 +257,3 @@
     if (raf) return;
     raf = requestAnimationFrame(() => { raf = 0; renderFullPreview(); });
   }
-
