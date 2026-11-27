@@ -247,6 +247,8 @@
         }
       }
     }
+    // 中缝：两扇对开各退 3cm，中间黑色门缝条闭合，不再露空
+    mb.box(gateX - 0.03, gateX + 0.03, 0.1, 2.3, zF - 0.06, zF + 0.06, 'woodDark', '宅门·缝');
     if (!r.cut.roof) {
       GF.roofs.build(mb, {
         cx: gateX, cz: zF, x0: gateX - gateW / 2 - 0.7, x1: gateX + gateW / 2 + 0.7, z0: zF - 0.9, z1: zF + 0.9,

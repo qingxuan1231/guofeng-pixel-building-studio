@@ -100,6 +100,8 @@
           mb.box(a, c, y0, y1, z - 0.05, z + 0.05, 'zhu', tag + '·门扇');
         }
       }
+      // 中缝：两扇对开之间留了 3cm×2 的门缝，用黑色门缝条填上，不再透出院墙后面的天空
+      mb.box(-0.03, 0.03, 0.1, 0.1 + fh, z - 0.05, z + 0.05, 'woodDark', tag + '·门缝');
     }
     // 隔墙门顶（垂花 / 仪门小屋顶）
     if (o.roof !== false && !r.cut.roof) {
@@ -154,29 +156,42 @@
   function courtyardHouse(mb, r, ctx) {
     const { CW, CD } = ctx;
 
-    // 垂花门
+    // 垂花门：门宽/门高/门楣全部读这一栋的覆盖配方（编辑器滑块实时生效）。
+    // 清官式比例：门楣底沿对齐门洞顶沿、左右各出挑 10cm、高 15cm；垂花柱随门宽外放，
+    // 柱顶随门高抬升，屋顶随柱距伸缩，保证任意参数下门洞、柱、檐三者不乱。
     const gz = CD / 2 - 0.2;
-    for (const sx of [-1, 1]) {
-      mb.boxC(sx * 1.95, gz, 0.36, 0.36, 0, 0.36, 'stone', '门枕石');
-      mb.cyl(sx * 1.95, gz, 0.19, 0.3, 3.2, 8, r.colMat, '垂花柱');
-      mb.boxC(sx * 1.95, gz, 0.14, 0.5, 2.2, 2.35, 'wood', '垂莲柱·头');
-    }
-    for (const sx of [-1, 1]) {
-      mb.boxC(sx * 0.66, gz, 1.2, 0.09, 0.25, 2.5, 'zhu', '门扇');
-      mb.boxC(sx * 0.2, gz + 0.06, 0.22, 0.06, 1.2, 1.32, 'gold', '门环');
-    }
-    mb.box(-2.05, 2.05, 2.95, 3.1, gz - 0.12, gz + 0.12, 'wood', '门楣');
-    P.plaque(mb, { dir: 'front', at: gz + 0.16, uc: 0, vc: 2.66, w: 1.15, h: 0.38, chars: 2 });
     const gov = unitOverride(r, 'gate');
     const gRu = unitRecipe(r, gov);
+    const gateW = Math.min(3.0, Math.max(1.0, gRu.doorW == null ? 2.0 : +gRu.doorW));
+    const gateH = Math.min(3.6, Math.max(1.6, gRu.doorH == null ? 2.7 : +gRu.doorH));
+    const halfG = gateW / 2;
+    const colX = halfG + 0.69;                       // 垂花柱半距：门洞边外 0.69m
+    const leafY0 = 0.25, leafY1 = gateH;             // 门扇顶沿 = 门洞顶沿
+    const lintY0 = leafY1, lintY1 = leafY1 + 0.15;   // 门楣：底沿贴门洞顶，高 15cm
+    const colTop = Math.max(3.2, lintY1 + 0.35);     // 柱顶随门高抬升，门楣永在柱顶之下
+    const roofX = colX + 0.8;
+    for (const sx of [-1, 1]) {
+      mb.boxC(sx * colX, gz, 0.36, 0.36, 0, 0.36, 'stone', '门枕石');
+      mb.cyl(sx * colX, gz, 0.19, 0.3, colTop, 8, r.colMat, '垂花柱');
+      mb.boxC(sx * colX, gz, 0.14, 0.5, lintY0 - 0.35, lintY0 - 0.2, 'wood', '垂莲柱·头');
+    }
+    const ringX = Math.max(0.16, halfG * 0.5 - 0.12);
+    const ringYc = leafY0 + gateH * 0.5;
+    for (const sx of [-1, 1]) {
+      mb.boxC(sx * halfG / 2, gz, Math.max(0.4, halfG - 0.03), 0.09, leafY0, leafY1, 'zhu', '门扇');
+      mb.boxC(sx * ringX, gz + 0.06, 0.22, 0.06, ringYc - 0.06, ringYc + 0.06, 'gold', '门环');
+    }
+    mb.boxC(0, gz, 0.06, 0.09, leafY0, leafY1, 'woodDark', '门缝');
+    mb.box(-(colX + 0.1), colX + 0.1, lintY0, lintY1, gz - 0.12, gz + 0.12, 'wood', '门楣');
+    P.plaque(mb, { dir: 'front', at: gz + 0.16, uc: 0, vc: lintY0 - 0.12, w: Math.max(0.6, Math.min(1.15, gateW - 0.5)), h: 0.38, chars: 2 });
     if (!r.cut.roof) {
       GF.roofs.build(mb, {
-        cx: 0, cz: gz, x0: -2.75, x1: 2.75, z0: gz - 1.0, z1: gz + 1.0,
-        yb: 3.2, rise: 0.8, type: 'gable', tile: gRu.tile, tileB: gRu.tileB,
+        cx: 0, cz: gz, x0: -roofX, x1: roofX, z0: gz - 1.0, z1: gz + 1.0,
+        yb: colTop, rise: 0.8, type: 'gable', tile: gRu.tile, tileB: gRu.tileB,
         upturn: gRu.upturn == null ? 0.3 : Math.min(0.7, gRu.upturn), ridgeStyle: 'plain', beasts: 0, gableMat: gRu.wallMat, tag: '垂花门顶'
       });
     }
-    regUnit(mb, 'gate', '院门 · 垂花门', 0, gz, 5.5, 2.0, 0, 3.95, gRu.baseH == null ? 0.3 : gRu.baseH, true);
+    regUnit(mb, 'gate', '院门 · 垂花门', 0, gz, roofX * 2, 2.0, 0, colTop + 0.8, gRu.baseH == null ? 0.3 : gRu.baseH, true);
 
     // 进数：院深按进数分段，每进一座正房；进与进之间砌内隔墙、中留内门。
     // 首进另有厢房 + 抄手游廊 + 庭内陈设，后几进只留正房与隔墙，深宅的层次靠这个出来。
@@ -231,7 +246,7 @@
             mb.boxC(sx * 0.9, zW, 0.2, 0.34, 2.4 * qy / nq, 2.4 * (qy + 1) / nq, 'woodDark', '内门·框');
           }
           // 门扇整张 0.62m×2.1m quad 按 0.22m 双向网格细分，不再整扇一块巨面
-          const fs0 = sx * 0.01, fs1 = sx * 0.63;
+          const fs0 = sx * 0.03, fs1 = sx * 0.63;
           const fa = Math.min(fs0, fs1), fb = Math.max(fs0, fs1);
           const nx = Math.min(Math.max(1, Math.ceil((fb - fa) / 0.22)), 220);
           const ny = Math.min(Math.max(1, Math.ceil(2.1 / 0.22)), 220);
@@ -242,6 +257,8 @@
               mb.boxC((a + c) / 2, zW, (c - a) / 2, 0.07, y0, y1, 'zhu', '内门·扇');
             }
           }
+          // 中缝：两扇对开内边各退 3cm，中间黑色门缝条闭合，不再露空
+          mb.boxC(0, zW, 0.06, 0.07, 0, 2.1, 'woodDark', '内门·缝');
         }
         if (!r.cut.roof) {
           GF.roofs.build(mb, {

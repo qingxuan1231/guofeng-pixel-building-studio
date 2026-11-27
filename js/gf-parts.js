@@ -273,6 +273,7 @@
       for (const s of [-1, 1]) {
         localBox(mb, mp, uc + s * 0.03, uc + s * (half + 0.004), y0, y0 + h, LA[0], LA[1], 'wood', tag + '·板门');
       }
+      localBox(mb, mp, uc - 0.03, uc + 0.03, y0, y0 + h, LA[0], LA[1], 'woodDark', tag + '·门缝');
       localBox(mb, mp, uc - w / 2, uc + w / 2, y0 - 0.12, y0, TH[0], TH[1], 'stone', tag + '·门槛');
       return;
     }
@@ -306,6 +307,7 @@
         disc(pu, pv, 0.082, 0.115, BZ[0] + 0.006, BZ[1], 'gold', tag + '·铺首');
         if (fine) disc(pu, pv - 0.20, 0.10, 0.135, BZ[0], BZ[1] - 0.01, 'gold', tag + '·门环');
       }
+      localBox(mb, mp, uc - 0.03, uc + 0.03, y0, y0 + h, LA[0], LA[1], 'woodDark', tag + '·门缝');
       // 抱框（门洞两侧立柱）、门楣、门槛石、门枕石，各占自己的槽
       const BR = W('bracket'), LI = W('lintel'), ZE = W('zhen');
       localBox(mb, mp, uc - w / 2 - 0.14, uc - w / 2, y0, y0 + h, BR[0], BR[1], 'woodDark', tag + '·抱框');
