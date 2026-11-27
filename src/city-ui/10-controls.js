@@ -1,5 +1,26 @@
 'use strict';
   /* ----------------------------- 路径读写 ----------------------------- */
+  // 拉条滚轮增减：悬浮在 range 上滚动鼠标，按 step 精度调值并复用原 input 逻辑
+  function bindRangeWheel(el) {
+    if (!el) return;
+    let acc = 0;
+    el.addEventListener('wheel', (e) => {
+      if (e.ctrlKey || e.metaKey) { // 保留浏览器缩放
+        return;
+      }
+      e.preventDefault();
+      acc += e.deltaY;
+      const step = Number(el.step) || 1;
+      let dv = 0;
+      while (acc >= 60) { acc -= 60; dv += step; }
+      while (acc <= -60) { acc += 60; dv -= step; }
+      if (!dv) return;
+      const min = Number(el.min), max = Number(el.max);
+      const v = Math.max(min, Math.min(max, Number(el.value) + dv));
+      el.value = v;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, { passive: false });
+  }
   function getPath(o, p) {
     return p.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
   }
@@ -113,7 +134,7 @@
       { path: 'render.palette', label: '配色底子', type: 'select', opts: PALETTES }
     ] },
     { title: '七 · 渲染与出图', items: [
-      { path: 'render.ppm', label: '像素 / 米', type: 'range', min: 6, max: 44, step: 1 },
+      { path: 'render.ppm', label: '像素 / 米', type: 'range', min: 8, max: 44, step: 1 },
       { path: 'render.pitch', label: '俯角（Z 轴）', type: 'range', min: 15, max: 88, step: 1, unit: '°' },
       { path: 'render.persp', label: '人眼透视（0=轴测）', type: 'range', min: 0, max: 1, step: 0.05 },
       { path: 'render.outline', label: '描边', type: 'toggle' },
@@ -209,6 +230,7 @@
       if (it.path === 'render.ppm') syncDens(Number(rg.value));
       onChange(it.path);
     });
+    if (it.path === 'render.ppm') bindRangeWheel(rg);
     if (it.path === 'render.pitch') bindPitchSlider(rg);
     if (it.path === 'render.persp') bindPerspSlider(rg);
     registry.push({ el: rg, it, kind: 'range', valEl: val, fmt });

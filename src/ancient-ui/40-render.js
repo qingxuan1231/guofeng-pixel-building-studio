@@ -97,7 +97,6 @@
 
   function rebuild(skipBld) {
     const r = state.recipe;
-    try { localStorage.setItem('gf.ppm', String(r.render.ppm)); } catch (e) {}
     if (state.playing) stopBuild(true);
     if (state.selItem != null && !envItems()[state.selItem]) state.selItem = null;
     try {
@@ -116,4 +115,3 @@
       $('#stat').textContent = '渲染出错：' + e.message;
     }
   }
-

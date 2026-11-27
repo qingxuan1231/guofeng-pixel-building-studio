@@ -23,12 +23,9 @@
     grid: true
   };
 
-  // 像素密度是用户的出图设置，不属于配方内容：跨预设、刷新都保留，绝不回落到预设默认。
-  (function () {
-    let v = null;
-    try { v = Number(localStorage.getItem('gf.ppm')); } catch (e) {}
-    if (isFinite(v) && v >= 8 && v <= 120) state.recipe.render.ppm = v;
-  })();
+  // 像素密度：统一默认 8px/m，打开工坊即回落到该默认值，不记忆用户上次的设置。
+  // （如后续需要跨刷新保留，可另存其它键；此处刻意固定，保证“加载＝8px”。）
+  state.recipe.render.ppm = 8;
 
   const $ = (s, el) => (el || document).querySelector(s);
   const canvas = $('#view');

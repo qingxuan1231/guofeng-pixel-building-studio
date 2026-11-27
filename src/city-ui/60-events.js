@@ -91,6 +91,7 @@
       if (rg) { rg.value = state.city.render.ppm; const val = rg.parentElement.querySelector('.val'); if (val) val.textContent = state.city.render.ppm; }
       onChange('render.ppm');
     });
+    bindRangeWheel($('#densRange'));
     $('#pitchRange').addEventListener('input', (e) => setPitch(Number(e.target.value)));
     bindPitchSlider($('#pitchRange'));
     $('#perspRange').addEventListener('input', (e) => setPersp(Number(e.target.value) / 100));

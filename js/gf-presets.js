@@ -57,7 +57,7 @@
       rocks: 1, pond: null, banners: 0, path: true, props: [], move: {}
     },
     render: {
-      palette: 'qingya', ppm: 16, pitch: 30, yaw: 45, dirs: 1,
+      palette: 'qingya', ppm: 8, pitch: 30, yaw: 45, dirs: 1,
       outline: true, shadow: true, sunAz: null, shadowAngle: 1.15,
       transparent: true,
       style: 'pixel', styleAmount: 0.75, persp: 0

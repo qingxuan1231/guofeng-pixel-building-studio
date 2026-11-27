@@ -133,6 +133,7 @@
         });
         onChange();
       });
+      bindRangeWheel(densRange);
     }
     document.querySelectorAll('[data-view]').forEach((btn) => {
       btn.addEventListener('click', () => { if (!lockView()) viewAt(btn.dataset.view); });
@@ -204,4 +205,3 @@
   function updateCamInfo() {
     $('#camInfo').textContent = `俯视 ${state.recipe.render.pitch}° · 旋向 ${Math.round(state.recipe.render.yaw)}° · 每次 45°`;
   }
-

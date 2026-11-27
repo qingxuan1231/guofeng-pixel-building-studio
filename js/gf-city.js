@@ -20,7 +20,7 @@
     life: true, lifeDensity: 0.6, night: false, alleyW: 1.4,
     roofColor: 'grey', trimColor: 'green',
     render: {
-      ppm: 14, pitch: 52, yaw: 35, palette: 'qingya',
+      ppm: 8, pitch: 52, yaw: 35, palette: 'qingya',
       style: 'pixel', styleAmount: 0.7, outline: true, shadow: true,
       sunAz: null, shadowAngle: 1.1, transparent: true, persp: 1
     }
@@ -1045,4 +1045,3 @@
   };
   GF.cityDefault = GF.cityDefault || function () { return JSON.parse(JSON.stringify(DEF_CITY)); };
 })(typeof window !== 'undefined' ? window : globalThis);
-
