@@ -98,16 +98,19 @@
   function rebuild(skipBld) {
     const r = state.recipe;
     if (state.playing) stopBuild(true);
-    if (state.selItem != null && !envItems()[state.selItem]) state.selItem = null;
     try {
       state.mesh = GF.build(r, { ppm: r.render.ppm });
       state.moves = state.mesh.moves || [];
       state.frame = GF.render(state.mesh, previewOpts());
       rememberViewFrame();
       draw();
+      // build 展开（env.auto 已写入）之后再校验选中项是否仍有效，避免 build 前读 envItems() 把
+      // 还没展开的 auto(null) 写成 []——那样 environment() 会误判已展开、跳过配方自带件展开。
+      if (state.selItem != null && !envItems()[state.selItem]) state.selItem = null;
       const b = state.mesh.bounds('ground');
       $('#stat').textContent = `出图 ${state.frame.w}×${state.frame.h}px · 三角面 ${state.mesh.triCount.toLocaleString()} · 占地 ${(b.x1 - b.x0).toFixed(1)}×${(b.z1 - b.z0).toFixed(1)}m`;
       paintCompPanel();
+      buildCompBar();
       buildBldBar();
       if (!skipBld) paintBldPanel();
     } catch (e) {

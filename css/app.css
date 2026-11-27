@@ -289,6 +289,12 @@ canvas#view.dragging { cursor: grabbing; }
 }
 .comp-chip:hover { border-color: var(--accent-2); color: var(--ink); background: #fff8e6; }
 .comp-chip:active { cursor: grabbing; }
+.comp-chip .cb-n {
+  display: inline-block; min-width: 14px; height: 14px; line-height: 13px; padding: 0 3px;
+  margin-left: 3px; font-style: normal; font-size: 9px; text-align: center;
+  background: #c9962e; color: #fff; border-radius: 7px; vertical-align: 1px;
+  font-weight: 700;
+}
 .comp-panel {
   position: absolute; left: 50%; bottom: 72px; transform: translateX(-50%);
   width: 320px; display: none; padding: 8px 10px 10px;

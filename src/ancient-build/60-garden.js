@@ -721,7 +721,7 @@
     const reg = (key, label, p, rad) => mb.moves.push({ key, label, x: p.x, z: p.z, r: rad || 0.8 });
     const ITEM_LABEL = {
       pine: '松', plum: '梅', bamboo: '竹', willow: '柳', maple: '枫', gingko: '银杏',
-      misc: '杂树', banana: '芭蕉', taihu: '太湖石', qianshi: '千层石',
+      misc: '杂树', banana: '芭蕉', leaf: '阔叶', taihu: '太湖石', qianshi: '千层石',
       stonelamp: '石灯', well: '井', stele: '碑', bell: '钟', drum: '鼓',
       penjing: '盆景', tiema: '拴马桩', table: '石桌', stool: '石凳', banner: '幡'
     };
@@ -730,7 +730,7 @@
       const rr = new GF.RNG((r.seed || 1) + 977 + (it.k || '').length * 31);
       switch (it.k) {
         case 'pine': case 'plum': case 'bamboo': case 'willow': case 'maple':
-        case 'gingko': case 'misc': case 'banana':
+        case 'gingko': case 'misc': case 'banana': case 'leaf':
           P.tree(sub, 0, 0, it.k, rr, s, '组件树');
           break;
         case 'taihu': case 'qianshi':

@@ -5,7 +5,7 @@
   const COMPONENTS = [
     { g: '树', k: 'pine', t: '松' }, { g: '树', k: 'plum', t: '梅' }, { g: '树', k: 'bamboo', t: '竹' },
     { g: '树', k: 'willow', t: '柳' }, { g: '树', k: 'maple', t: '枫' }, { g: '树', k: 'gingko', t: '银杏' },
-    { g: '树', k: 'misc', t: '杂树' }, { g: '树', k: 'banana', t: '芭蕉' },
+    { g: '树', k: 'leaf', t: '阔叶' }, { g: '树', k: 'misc', t: '杂树' }, { g: '树', k: 'banana', t: '芭蕉' },
     { g: '石', k: 'taihu', t: '太湖石' }, { g: '石', k: 'qianshi', t: '千层石' },
     { g: '陈设', k: 'stonelamp', t: '石灯' }, { g: '陈设', k: 'well', t: '井' },
     { g: '陈设', k: 'stele', t: '碑' }, { g: '陈设', k: 'bell', t: '钟' },
@@ -18,9 +18,11 @@
   // 在前，组件条新落进来的自由件（env.items）在后；数组里存的是对象引用，改一处直接落到配方上。
   function envItems() {
     const e = state.recipe.env;
-    if (!Array.isArray(e.auto)) e.auto = [];
-    if (!Array.isArray(e.items)) e.items = [];
-    return e.auto.concat(e.items);
+    // 只读合并，绝不回写：switch 配方的 build 前置校验若把 auto 从 null 写成 [],
+    // environment() 会误判「已展开」而跳过配方自带件→切完配方树/石/陈设全丢。
+    const auto = Array.isArray(e.auto) ? e.auto : [];
+    const items = Array.isArray(e.items) ? e.items : [];
+    return auto.concat(items);
   }
   function autoCount() {
     const e = state.recipe.env;
@@ -85,10 +87,13 @@
     COMPONENTS.filter((c) => c.g === state.compGroup).forEach((c) => {
       const chip = document.createElement('button');
       chip.className = 'comp-chip';
-      chip.textContent = c.t;
       chip.dataset.k = c.k;
       chip.draggable = true;
-      chip.title = '按住拖进画面即可落一件' + c.t + '；不方便拖时点一下也会落在画面中心';
+      // 同一款在配方里已有几件（预设展开件 + 自由件）：有就上角标，一眼知道配方自带 / 已放几件
+      const n = envItems().filter((it) => it.k === c.k).length;
+      chip.innerHTML = c.t + (n ? ' <i class="cb-n">' + n + '</i>' : '');
+      chip.title = '按住拖进画面即可落一件' + c.t + '；不方便拖时点一下也会落在画面中心'
+        + (n ? '（当前已有 ' + n + ' 件，编辑面板里可分别选中调整）' : '');
       chip.addEventListener('dragstart', (e) => {
         e.dataTransfer.setData('text/gf-comp', c.k);
         e.dataTransfer.effectAllowed = 'copy';
@@ -235,11 +240,15 @@
         + '<button class="cp-btn danger" id="cpDel">删除</button></div>'
       : '<div class="cp-head"><b>组件编辑</b><span class="cp-tip">点画面里的物件即可选中 · 拖标题可移面板</span>'
         + '<button class="cp-btn" id="cpHide">收起</button></div>';
+    const seen = {};   // 同一款多件时按出现顺序编号，面板与画布拾取都能对上号
     const list = '<div class="cp-list">' + (items.length
       ? items.map((x, i) => {
         const preset = i < autoCount();
-        return '<button class="cp-item' + (i === state.selItem ? ' on' : '') + (preset ? ' preset' : '') + '" data-i="' + i + '" title="' + (preset ? '配方自带件' : '新加件') + '">'
-          + compLabel(x.k) + (preset ? '' : ' · 新') + '</button>';
+        const nth = (seen[x.k] = (seen[x.k] || 0) + 1);
+        const same = items.filter((y) => y.k === x.k).length;
+        const tag = compLabel(x.k) + (same > 1 ? ' · ' + nth + '/' + same : '');
+        return '<button class="cp-item' + (i === state.selItem ? ' on' : '') + (preset ? ' preset' : '') + '" data-i="' + i + '" title="' + (preset ? '配方自带件' : '新加件') + (same > 1 ? ' · 第 ' + nth + ' / ' + same + ' 件' : '') + '">'
+          + tag + (preset ? '' : ' · 新') + '</button>';
       }).join('')
       : '<span class="cp-empty">还没有放置物件：从上面拖一件进来，或直接点组件卡</span>') + '</div>';
     const dis = it ? '' : ' disabled';
