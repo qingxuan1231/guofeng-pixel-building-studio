@@ -2,7 +2,6 @@
   /* ---------------- 阶段④-1 寺·五进中轴（temple5） ---------------- */
   function courtyardTemple5(mb, r, ctx) {
     const { CW, CD } = ctx;
-    const rng = new GF.RNG(r.seed + 21);
     const zF = CD / 2, zB = -CD / 2;
     P.courtWall(mb, {
       x0: -CW / 2, x1: CW / 2, z0: zB, z1: zF, y: 3.0,
@@ -96,8 +95,6 @@
       r: { baseH: mBase, steps: 3, railing: false, dougong: true, dgScale: 0.9, dgStyle: 'full' },
       unit: { W: mW, D: mD, bays: 5, roofType: 'hip', eave: 1.2, veranda: true, partition: 1.2 }
     });
-    P.censer(mb, 0, mz + mD / 2 + 2.4, 1.3, '香炉');
-    for (const sx of [-1, 1]) P.lion(mb, sx * (mW / 2 + 0.9), mz + mD / 2 + 1.6, 1.0, '石狮');
 
     // 三进隔墙：大殿院 / 法堂院
     crossWall(mb, r, { z: -6.8, x0: -CW / 2, x1: CW / 2, gateW: 2.6, gateH: 2.4, tag: '三进隔墙' });
@@ -125,14 +122,11 @@
         r: { baseH: 0.85, dougong: false }, unit: { W: 3.6, D: 3.0, bays: 2, roofType: 'gable', eave: 0.6, cheap: true }
       });
     }
-    P.tree(mb, -CW / 2 + 1.6, kz + 1.0, 'pine', rng, 1.0, '松');
-    P.tree(mb, CW / 2 - 1.6, kz + 1.0, 'pine', rng, 1.0, '松');
   }
 
   /* ---------------- 阶段④-2 道观（daoguan） ---------------- */
   function courtyardDao(mb, r, ctx) {
     const { CW, CD } = ctx;
-    const rng = new GF.RNG(r.seed + 22);
     const zF = CD / 2, zB = -CD / 2;
     P.courtWall(mb, {
       x0: -CW / 2, x1: CW / 2, z0: zB, z1: zF, y: 3.0,
@@ -193,7 +187,6 @@
     if (bigBase && su && su.id === '三清殿' && su.parts) {
       su.parts.terrace = bigBase;
     }
-    P.censer(mb, 0, mz + mD / 2 + 2.0, 1.2, '香炉');
 
     // 东西配殿：执事房 / 客堂
     for (const sx of [-1, 1]) {
@@ -210,15 +203,11 @@
       tag: '三清阁', z: -8.8, r: { baseH: 0.95, dougong: false },
       unit: { W: 5.6, D: 3.8, bays: 3, floors: 2, floorHList: [2.9, 2.5], roofType: 'gableHip', eave: 0.85, cheap: true }
     });
-
-    P.tree(mb, -CW / 2 + 1.5, 2.0, 'pine', rng, 0.95, '松');
-    P.tree(mb, CW / 2 - 1.5, 2.0, 'pine', rng, 0.95, '松');
   }
 
   /* ---------------- 阶段④-3 五进四合院（wujin） ---------------- */
   function courtyardWujin(mb, r, ctx) {
     const { CW, CD } = ctx;
-    const rng = new GF.RNG(r.seed + 23);
     const zF = CD / 2, zB = -CD / 2, wallH = 3.0;
     // 外围墙：东南隅开门（前墙东侧留门洞）。墙身走 wallWithHoles 0.22m 细分，
     // 不再四张整面大 box（原来 20m 长墙一张大 quad，像素风下成大三角/大方框）。
@@ -339,15 +328,11 @@
         corridorRun(mb, r, sx * (CW / 2 - 1.1), zF - 4.2, sx * (CW / 2 - 1.1), zB + 4.0, 1.0, 0.02, '抄手游廊', { plain: true });
       }
     }
-    P.tree(mb, -2.4, zF - 10.6, 'bamboo', rng, 0.9, '竹');
-    P.tree(mb, 2.4, zF - 10.6, 'plum', rng, 0.9, '梅');
-    P.rock(mb, 3.0, z3 + 1.0, 0.7, rng, '假山');
   }
 
   /* ---------------- 阶段④-4 廊院式祠庙（langyuan） ---------------- */
   function courtyardLangyuan(mb, r, ctx) {
     const { CW, CD } = ctx;
-    const rng = new GF.RNG(r.seed + 24);
     const zF = CD / 2, zB = -CD / 2;
     P.courtWall(mb, {
       x0: -CW / 2, x1: CW / 2, z0: zB, z1: zF, y: 3.0,
@@ -376,16 +361,11 @@
       mb.boxC(cx, cz, 0.26, 0.26, 0.02, 0.16, 'stone', '角柱·础');
       layStats(mb).corners.push({ x: cx, z: cz, wallX: sx * (CW / 2 - 0.15), wallZ: sz > 0 ? zF : zB });
     }
-    P.stele(mb, -3.2, 0, 0.9, '碑');
-    P.stoneLantern(mb, 3.2, 0, 0.9, '石灯');
-    P.tree(mb, -rw + 1.4, rzS - 1.6, 'pine', rng, 0.9, '松');
-    P.tree(mb, rw - 1.4, rzS - 1.6, 'bamboo', rng, 0.9, '竹');
   }
 
   /* ---------------- 阶段④-5 贾府（府邸 + 后花园复合） ---------------- */
   function courtyardJiafu(mb, r, ctx) {
     const { CW, CD } = ctx;
-    const rng = new GF.RNG(r.seed + 25);
     const zF = CD / 2, zB = -CD / 2;
     const zSplit = -6.0;
     P.courtWall(mb, {
@@ -431,8 +411,6 @@
     // 后部园林：叠山理水、亭榭自由布局
     const px = -1.0, pz = (zSplit + zB) / 2 - 0.5, pw = CW * 0.38, pd = 5.0;
     P.pond(mb, px, pz, pw, pd, '后园池');
-    P.rock(mb, px + pw / 2 + 1.6, pz + pd / 2 + 0.8, 1.1, rng, '园山');
-    P.rock(mb, px - pw / 2 - 1.4, pz - pd / 2 - 0.4, 0.8, rng, '园石');
     // 湖心小亭 + 石矶
     mb.taper(px + 1.0, pz, 2.2, 2.0, 2.1, 1.9, 0, 0.28, 'stoneDark', '亭矶');
     smallPavilion(mb, r, px + 1.0, pz, 0.72, 2.2, 'pyramid', '后园亭', 0.28);
@@ -449,7 +427,4 @@
         upturn: 0.3, ridgeStyle: 'plain', gableMat: 'wood', tag: '水榭顶'
       });
     }
-    P.tree(mb, CW / 2 - 1.8, pz + 1.6, 'willow', rng, 1.0, '柳');
-    P.tree(mb, -CW / 2 + 1.6, zSplit - 2.0, 'plum', rng, 0.9, '梅');
-    P.tree(mb, CW / 2 - 2.0, zSplit - 3.4, 'maple', rng, 0.9, '枫');
   }

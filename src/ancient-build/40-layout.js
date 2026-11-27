@@ -293,11 +293,8 @@
     // 院内竹木：树的渲染统一归环境层（同款 env.trees 会以组件形式展开进清单，可选中 / 可删除），
     // 布局层不再重复画一遍——否则画面出现两棵同名树、清单里却只有一棵。
 
-    // 庭院陈设（首进院心）
-    P.furniture(mb, 'table', 0, zFront - 1.0, 1, 0, '石桌');
-    P.furniture(mb, 'stool', 0.9, zFront - 1.0, 1, 0, '石凳');
-    P.furniture(mb, 'stool', -0.9, zFront - 1.0, 1, 0, '石凳');
-    P.rock(mb, -CW / 2 + 2.8, zFront + 0.6, 0.9, new GF.RNG(r.seed + 5), '假山');
+    // 庭院陈设（首进院心）：石桌、双石凳、假山——渲染改由环境层接管（并入组件清单），
+    // 布局层不再重复画一遍，否则画面出现同名陈设、清单里却选不中。
     if (r.env.pond && r.env.showGround !== false && r.env.groundType !== 'lake') {
       P.pond(mb, r.env.pond.x || CW / 2 - 3.4, r.env.pond.z || zFront + 0.6, r.env.pond.w || 2.2, r.env.pond.d || 1.5);
     }
@@ -517,7 +514,6 @@
   /* 江南园林：叠山理水、框景漏景、对景添景 */
   function courtyardGarden(mb, r, ctx) {
     const { CW, CD } = ctx;
-    const rng = new GF.RNG(r.seed + 7);
 
     // 正厅（卷棚，临水而筑）
     const W1 = Math.min(CW * 0.36, 6.6), D1 = 4.6;
@@ -532,26 +528,10 @@
 
     // 入口影壁（对景）
     P.yingbi(mb, { cx: 0, cz: CD / 2 - 2.5, w: 3.2, h: 2.3 });
-    // 影壁前的花石（框景）
-    P.rock(mb, 1.9, CD / 2 - 2.6, 0.7, rng, '花石');
-    P.stoneLantern(mb, -1.9, CD / 2 - 2.6, 0.85, '石灯');
 
     // 水池（居中偏左）
     const px = -1.1, pz = -0.1, pw = Math.min(CW * 0.4, 7.4), pd = Math.min(CD * 0.32, 4.6);
     P.pond(mb, px, pz, pw, pd, '池');
-    // 驳岸叠石（叠山）：只沿南岸、东岸贴水立石——北岸紧贴正厅台基、西岸让给敞轩
-    const rocks = [];
-    for (let i = 0; i < 5; i++) rocks.push([px - pw / 2 + 0.4 + i * (pw - 0.8) / 4, pz + pd / 2 + 0.32]);
-    for (let i = 0; i < 4; i++) rocks.push([px + pw / 2 + 0.32, pz + pd / 2 - 0.5 - i * (pd - 1.0) / 3]);
-    for (const [rx, rz] of rocks) {
-      // 让开两条曲桥的桥头，免得石头压住桥口
-      if (Math.hypot(rx + 0.1, rz - (pz + pd / 2 + 0.45)) < 1.15) continue;
-      if (Math.hypot(rx - (px + pw / 2 + 0.45), rz - 0.2) < 1.15) continue;
-      P.rock(mb, rx, rz, 0.28 + ((Math.abs(rx * 3 + rz * 5)) % 1) * 0.18, rng, '叠石');
-    }
-    // 主峰、次峰：水面之外（东南角、东北角），不压水面也不压桥
-    P.rock(mb, px + pw / 2 + 2.3, pz + pd / 2 + 1.25, 1.2, rng, '主峰');
-    P.rock(mb, px + pw / 2 + 2.3, pz - pd / 2 - 0.55, 0.8, rng, '次峰');
     // 湖心亭 + 曲桥（桥头一律留在石矶之外，不铺到亭子平台上）
     const iX = px + 1.3, iZ = pz + 0.2;
     // 石矶：台身略收分（下大上小），顶面压边一层，边缘不再是直角方块
@@ -589,7 +569,7 @@
         upturn: 0.3, ridgeStyle: 'plain', gableMat: 'wood', tag: '敞轩顶'
       });
     }
-    P.furniture(mb, 'table', xcx, xz, 1, 0, '敞轩石桌');
+    // 敞轩石桌：改由环境层接管，并入组件清单（可选中 / 删除 / 拖动）
 
     // 抄手游廊（右）
     if (!r.cut.roof) {
@@ -600,12 +580,6 @@
       mb.merge(cor);
     }
 
-    // 花木（添景：竹、芭蕉、枫、梅）
-    P.tree(mb, -CW / 2 + 1.2, CD / 2 - 4.6, 'bamboo', rng, 0.95, '竹');
-    P.tree(mb, CW / 2 - 1.4, CD / 2 - 5.0, 'bamboo', rng, 0.9, '竹');
-    P.tree(mb, 2.6, 3.6, 'banana', rng, 1.0, '芭蕉');
-    P.tree(mb, CW / 2 - 2.0, -CD / 2 + 2.4, 'maple', rng, 1.0, '枫');
-    P.tree(mb, -2.4, -CD / 2 + 3.0, 'plum', rng, 0.9, '梅');
     // 花池（石沿 + 花木，不用水面）
     const fx = CW / 2 - 2.2, fz = 4.6, fw = 2.2, fd = 1.6;
     mb.box(fx - fw / 2, fx + fw / 2, 0, 0.28, fz - fd / 2, fz + fd / 2, 'stone', '花池');
@@ -619,18 +593,11 @@
         mb.boxC(hx - 0.1, hz + 0.1, 0.12, 0.12, 0.48, 0.56, 'bamboo', '花池花');
       }
     }
-    P.penjing(mb, -CW / 2 + 2.0, -CD / 2 + 4.4, 0.85, '盆景');
-    P.penjing(mb, CW / 2 - 4.2, -1.2, 0.8, '盆景');
-    P.stoneLantern(mb, 1.2, 5.2, 0.8, '石灯');
-    // 石桌石凳：摆在池南的岸上（原来落在水面里）
-    P.furniture(mb, 'table', -3.4, 3.2, 0.95, 0, '石桌');
-    P.furniture(mb, 'stool', -3.4, 2.65, 0.9, 0, '石凳');
   }
 
   /* 寺院：山门、钟鼓楼、大殿、香炉、幡杆 */
   function courtyardTemple(mb, r, ctx) {
     const { CW, CD } = ctx;
-    const rng = new GF.RNG(r.seed + 9);
 
     // 山门（一门三洞，前后贯通；内外都有踏跺）
     const gW = Math.min(CW * 0.42, 7.0), gD = 3.2;
@@ -677,13 +644,6 @@
     fm.translate(0, floorY, zMain);
     mb.merge(fm);
 
-    // 甬道两侧陈设
-    P.censer(mb, 0, 2.2, 1.3, '香炉');
-    for (const sx of [-1, 1]) {
-      P.lion(mb, sx * (gW / 2 + 0.9), gz - 1.4, 1.0, '石狮');
-      P.banner(mb, sx * 2.6, 0, 2.6, 2.6, 0.6, '幡');
-      P.stoneLantern(mb, sx * 1.6, -1.0, 0.9, '石灯');
-    }
     // 廊（沿两厢）
     if (!r.cut.roof) {
       for (const sx of [-1, 1]) {
@@ -694,8 +654,4 @@
         mb.merge(cor);
       }
     }
-    // 松柏与碑（碑移出殿外，立于前院西侧）
-    P.tree(mb, -3.4, 4.2, 'pine', rng, 1.1, '松');
-    P.tree(mb, 3.4, 4.2, 'pine', rng, 1.1, '松');
-    P.stele(mb, -4.4, 5.8, 0.9, '功德碑');
   }

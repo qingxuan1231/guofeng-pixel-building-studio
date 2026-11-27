@@ -716,26 +716,34 @@
     const env = r.env;
     // 拖动结果：按 key 覆盖默认落位（key 稳定，列表变动时只影响同序号）
     const mv = env.move || {};
-    const at = (key, x, z) => (mv[key] ? { x: mv[key].x, z: mv[key].z } : { x, z });
+    const sc = env.scale || {};
+    const at = (key, x, z) => (mv[key] ? { x: mv[key].x, z: mv[key].z, rot: mv[key].rot } : { x, z });
     mb.moves = [];
     const reg = (key, label, p, rad) => mb.moves.push({ key, label, x: p.x, z: p.z, r: rad || 0.8 });
     const ITEM_LABEL = {
       pine: '松', plum: '梅', bamboo: '竹', willow: '柳', maple: '枫', gingko: '银杏',
       misc: '杂树', banana: '芭蕉', leaf: '阔叶', taihu: '太湖石', qianshi: '千层石',
       stonelamp: '石灯', well: '井', stele: '碑', bell: '钟', drum: '鼓',
-      penjing: '盆景', tiema: '拴马桩', table: '石桌', stool: '石凳', banner: '幡'
+      penjing: '盆景', tiema: '拴马桩', table: '石桌', stool: '石凳', banner: '幡',
+      censer: '香炉', lion: '石狮'
     };
     // 建一件（原点局部坐标）
     const buildItem = (sub, it, s) => {
-      const rr = new GF.RNG((r.seed || 1) + 977 + (it.k || '').length * 31);
+      const rr = new GF.RNG((r.seed || 1) + 977 + (it.k || '').length * 31 + (it.seed || 0) * 13);
       switch (it.k) {
         case 'pine': case 'plum': case 'bamboo': case 'willow': case 'maple':
         case 'gingko': case 'misc': case 'banana': case 'leaf':
           P.tree(sub, 0, 0, it.k, rr, s, '组件树');
           break;
-        case 'taihu': case 'qianshi':
-          P.rock(sub, 0, 0, s, rr, '组件石', it.k);
+        case 'taihu': case 'qianshi': case 'motif': {
+          // 原位构建：石型可按所在坐标分型（motif 依位置混排千层石 / 小石），
+          // 逐像素跟随原布局层，由 renderEntry 不再平移 / 旋转。
+          const wx = it.abs ? +(it.x || 0) : 0, wz = it.abs ? +(it.z || 0) : 0;
+          P.rock(sub, wx, wz, s, rr, '组件石', it.k);
           break;
+        }
+        case 'censer': P.censer(sub, 0, 0, s, '香炉'); break;
+        case 'lion': P.lion(sub, 0, 0, s, '石狮'); break;
         case 'stonelamp': P.stoneLantern(sub, 0, 0, 0.9 * s, '石灯'); break;
         case 'well': P.well(sub, 0, 0, 0.9 * s, '井'); break;
         case 'stele': P.stele(sub, 0, 0, 0.9 * s, '碑'); break;
@@ -745,7 +753,12 @@
         case 'tiema': P.tieMaZhuang(sub, 0, 0, 0.9 * s, '拴马桩'); break;
         case 'table': P.furniture(sub, 'table', 0, 0, s, 0, '石桌'); break;
         case 'stool': P.furniture(sub, 'stool', 0, 0, s, 0, '石凳'); break;
-        case 'banner': P.banner(sub, 0, 0, 0, 4.2 * s, 1.15 * s, '幡', 'cloth'); break;
+        case 'banner': {
+          const bh = it.h != null ? +it.h : 4.2 * s;
+          const bw = it.w != null ? +it.w : 1.15 * s;
+          P.banner(sub, 0, 0, 0, bh, bw, '幡', 'cloth');
+          break;
+        }
         default: break;
       }
     };
@@ -754,8 +767,10 @@
       const s = it.s == null ? 1 : it.s;
       const sub = new GF.Mesh();
       buildItem(sub, it, s);
-      sub.rotateY(it.rot || 0);
-      sub.translate(p.x, it.y || 0, p.z);
+      if (!it.abs) {
+        sub.rotateY(it.rot || 0);
+        sub.translate(p.x, it.y || 0, p.z);
+      }
       mb.merge(sub, key);
       reg(key, (ITEM_LABEL[it.k] || it.k) + ' ' + (i + 1), p, 1.0);
     };
@@ -765,28 +780,35 @@
     if (!Array.isArray(env.auto)) {
       const auto = [];
       const trees = env.trees || [];
+      const rks = env.rockTypes || [];
       trees.forEach((k, i) => {
         const ang = (i / (trees.length || 1)) * Math.PI * 2 + 0.6;
         const dist = 6.5 + (i % 2) * 1.5;
         const p = at('tree' + i, Math.cos(ang) * dist, Math.sin(ang) * dist);
-        auto.push({ k, x: +p.x.toFixed(2), z: +p.z.toFixed(2), y: 0, rot: Math.round(rng.range(-14, 14)), s: +(0.9 + (i % 3) * 0.15).toFixed(2) });
+        auto.push({ k, x: +p.x.toFixed(2), z: +p.z.toFixed(2), y: 0, rot: p.rot != null ? p.rot : Math.round(rng.range(-14, 14)), s: sc['tree' + i] != null ? sc['tree' + i] : +(0.9 + (i % 3) * 0.15).toFixed(2) });
       });
       for (let i = 0; i < (env.rocks || 0); i++) {
         const ang = 2.4 + i * 0.9;
         const p = at('rock' + i, Math.cos(ang) * 5.2, Math.sin(ang) * 5.2);
-        auto.push({ k: 'taihu', x: +p.x.toFixed(2), z: +p.z.toFixed(2), y: 0, rot: Math.round(rng.range(-16, 16)), s: 1 });
+        auto.push({ k: rks[i] || 'taihu', x: +p.x.toFixed(2), z: +p.z.toFixed(2), y: 0, rot: p.rot != null ? p.rot : Math.round(rng.range(-16, 16)), s: sc['rock' + i] != null ? sc['rock' + i] : 1 });
       }
       for (let i = 0; i < (env.banners || 0); i++) {
         const sgn = i % 2 ? 1 : -1, bi = Math.floor(i / 2);
         const p = at('banner' + i, sgn * (3.4 + bi * 3.2), 0);
-        auto.push({ k: 'banner', x: +p.x.toFixed(2), z: +p.z.toFixed(2), y: 0, rot: 0, s: 1 });
+        auto.push({ k: 'banner', x: +p.x.toFixed(2), z: +p.z.toFixed(2), y: 0, rot: 0, s: sc['banner' + i] != null ? sc['banner' + i] : 1 });
       }
       (env.props || []).forEach((pp, i) => {
         if (pp === 'qubridge') return;   // 曲桥不走单件，仍按整组做
         const ang = 2.1 + i * 0.68, d = 4.2 + (i % 3) * 1.2;
         const q = at('prop' + i, Math.cos(ang) * d, Math.sin(ang) * d);
-        auto.push({ k: pp, x: +q.x.toFixed(2), z: +q.z.toFixed(2), y: 0, rot: Math.round(rng.range(-20, 20)), s: 1 });
+        auto.push({ k: pp, x: +q.x.toFixed(2), z: +q.z.toFixed(2), y: 0, rot: q.rot != null ? q.rot : Math.round(rng.range(-20, 20)), s: sc['prop' + i] != null ? sc['prop' + i] : 1 });
       });
+      // 布局层硬渲染的固定件（树 / 石 / 陈设）由总装按原坐标并入本题展开清单，
+      // 与其它条目同走一套渲染与拾取：逐件可选中 / 删除 / 拖动，切走切回自动恢复。
+      if (Array.isArray(env.hard)) {
+        for (const e of env.hard) auto.push(Object.assign({ y: 0, rot: 0, s: 1 }, e));
+        delete env.hard;
+      }
       env.auto = auto;
     }
     (env.auto || []).forEach((it, i) => renderEntry(it, 'auto' + i, i));

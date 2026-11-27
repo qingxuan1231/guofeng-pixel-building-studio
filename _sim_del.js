@@ -192,3 +192,65 @@ console.log('================ 场景5：怡红院（siheyuan）院内树全部�
   const p2 = present(st);
   console.log('  切走切回自动恢复完整:', p2.get('bamboo') === 2 && p2.get('plum') === 2 && p2.get('gingko') === 1 ? '是' : '否');
 }
+
+console.log('================ 场景6：8种院落风格硬渲染件全部进清单 / 可删 / 可恢复 ================');
+// 期望清单：env.auto 展开件（预设 trees/rocks/props + 布局层硬渲染并入件）的逐键数量，
+// 数值来自实际构建探针，与用户看到的画面一一对应（松树棵数、双竹双梅等全部核验过）。
+const COURT_EXPECT = {
+  siheyuan: { bamboo: 2, plum: 2, gingko: 1, taihu: 2, table: 1, stool: 2 },
+  yuanlin: { bamboo: 3, plum: 2, taihu: 3, penjing: 3, stonelamp: 3, motif: 6, banana: 1, maple: 1, table: 2, stool: 1 },
+  siyuan: { pine: 3, gingko: 1, taihu: 1, stonelamp: 3, stele: 2, censer: 1, lion: 2, banner: 2 },
+  temple5: { pine: 4, taihu: 1, stonelamp: 1, stele: 1, censer: 1, lion: 2 },
+  daoguan: { pine: 3, bamboo: 1, taihu: 1, stonelamp: 1, censer: 1 },
+  wujin: { bamboo: 2, plum: 2, taihu: 1, motif: 1 },
+  langyuan: { pine: 2, bamboo: 2, taihu: 1, stele: 2, stonelamp: 1 },
+  jiafu: { willow: 2, plum: 2, maple: 2, taihu: 4, penjing: 1, stonelamp: 1 }
+};
+let s6Bug = 0, s6N = 0;
+for (const [key, expect] of Object.entries(COURT_EXPECT)) {
+  s6N++;
+  const st = makeState();
+  switchTo(st, key);
+  const total = Object.values(expect).reduce((a, b) => a + b, 0);
+  const p = present(st);
+  if (envItems(st).length !== total || !mapEq(p, new Map(Object.entries(expect)))) {
+    s6Bug++;
+    console.log('  [清单不符]', key, '实有', envItems(st).length, '件 →', [...p.entries()].map((x) => x.join(':')).join(','),
+      '| 期望', total, '件 →', Object.entries(expect).map((x) => x.join(':')).join(','));
+  }
+  // 硬渲染件（非 trees/rocks/props 声明件）必须逐件可删，且删了不牵连其它
+  const victimKeys = [...p.keys()];
+  for (const vk of victimKeys) {
+    const stv = makeState();
+    switchTo(stv, key);
+    const idx = envItems(stv).findIndex((it) => it.k === vk);
+    if (idx < 0) { s6Bug++; console.log('  [找不到可删件]', key, vk); continue; }
+    const p0 = present(stv);
+    stv.selItem = idx; del(stv);
+    const p1 = present(stv);
+    if ((p1.get(vk) || 0) !== (p0.get(vk) || 0) - 1) {
+      s6Bug++;
+      console.log('  [删除不精确]', key, vk, p0.get(vk), '→', p1.get(vk));
+    }
+    const others = [...p0.keys()].filter((k) => k !== vk);
+    for (const k of others) {
+      if ((p1.get(k) || 0) !== (p0.get(k) || 0)) {
+        s6Bug++;
+        console.log('  [牵连丢失]', key, '删', vk, '时', k, p0.get(k), '→', p1.get(k));
+      }
+    }
+  }
+  // 删空无残留
+  while (envItems(st).length) { st.selItem = 0; del(st); }
+  if (envItems(st).length !== 0) { s6Bug++; console.log('  [删不空]', key); }
+  // 切走切回自动恢复完整
+  const other = GF.presetList.find((x) => x.key !== key).key;
+  switchTo(st, other);
+  switchTo(st, key);
+  if (!mapEq(present(st), new Map(Object.entries(expect)))) {
+    s6Bug++;
+    console.log('  [恢复不完整]', key, [...present(st).entries()].map((x) => x.join(':')).join(','));
+  }
+}
+console.log('8种院落风格「进清单/逐键可删/删空/切回恢复」异常:', s6Bug, '/', s6N);
+summary.push(['场景6 院落硬渲染缺口', s6Bug]);
