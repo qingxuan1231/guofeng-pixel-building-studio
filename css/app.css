@@ -279,6 +279,9 @@ canvas#view.dragging { cursor: grabbing; }
 .comp-bar::-webkit-scrollbar { height: 6px; }
 .comp-group { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
 .comp-glabel { font-size: 10.5px; color: #8b7f6a; margin-right: 2px; }
+.comp-tabs { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; border-right: 1px solid #e2d7c1; padding-right: 10px; margin-right: 2px; }
+.comp-tab { cursor: pointer; }
+.comp-tab.on { border-color: #c9962e; background: #fff2d2; color: #7a4f12; font-weight: 600; }
 .comp-chip {
   height: 22px; padding: 0 8px; font-size: 11px; line-height: 20px;
   border: 1px solid var(--line); border-radius: 6px; background: #fffdf7;

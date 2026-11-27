@@ -20,6 +20,7 @@
     selItem: null,
     selPart: null,
     barMode: 'env',
+    compGroup: '树',
     grid: true
   };
 

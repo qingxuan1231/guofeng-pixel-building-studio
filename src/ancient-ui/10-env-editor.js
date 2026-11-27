@@ -67,36 +67,42 @@
     bar.style.display = '';
     bar.innerHTML = '';
     bar.appendChild(modeBtn('bld', '建筑本体'));
+    // 组件条「树 / 石 / 陈设」三类切换：同一时间只展示一类，点选中的类高亮
+    const tabs = document.createElement('div');
+    tabs.className = 'comp-tabs';
     COMP_GROUPS.forEach((g) => {
-      const gEl = document.createElement('div');
-      gEl.className = 'comp-group';
-      const lab = document.createElement('span');
-      lab.className = 'comp-glabel';
-      lab.textContent = g;
-      gEl.appendChild(lab);
-      COMPONENTS.filter((c) => c.g === g).forEach((c) => {
-        const chip = document.createElement('button');
-        chip.className = 'comp-chip';
-        chip.textContent = c.t;
-        chip.dataset.k = c.k;
-        chip.draggable = true;
-        chip.title = '按住拖进画面即可落一件' + c.t + '；不方便拖时点一下也会落在画面中心';
-        chip.addEventListener('dragstart', (e) => {
-          e.dataTransfer.setData('text/gf-comp', c.k);
-          e.dataTransfer.effectAllowed = 'copy';
-          bar.classList.add('dragging');
-        });
-        chip.addEventListener('dragend', () => bar.classList.remove('dragging'));
-        // 点一下＝落在画面中心（不依赖 HTML5 拖拽，触控板 / 触屏也能用）
-        chip.addEventListener('click', () => {
-          // 落点按画布实测矩形算（画布是居中偏移的，用外框会把落点带偏）；
-          // 取中轴偏下一点，落在建筑前方的场地上，不会直接插进屋顶里
-          const rr = canvas.getBoundingClientRect();
-          addItem(c.k, rr.left + rr.width * 0.5, rr.top + rr.height * 0.72);
-        });
-        gEl.appendChild(chip);
+      const tb = document.createElement('button');
+      tb.className = 'comp-chip comp-tab' + (state.compGroup === g ? ' on' : '');
+      tb.textContent = g;
+      tb.addEventListener('click', () => {
+        state.compGroup = g;
+        buildCompBar();
       });
-      bar.appendChild(gEl);
+      tabs.appendChild(tb);
+    });
+    bar.appendChild(tabs);
+    // 只渲染当前激活类别下的组件卡
+    COMPONENTS.filter((c) => c.g === state.compGroup).forEach((c) => {
+      const chip = document.createElement('button');
+      chip.className = 'comp-chip';
+      chip.textContent = c.t;
+      chip.dataset.k = c.k;
+      chip.draggable = true;
+      chip.title = '按住拖进画面即可落一件' + c.t + '；不方便拖时点一下也会落在画面中心';
+      chip.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/gf-comp', c.k);
+        e.dataTransfer.effectAllowed = 'copy';
+        bar.classList.add('dragging');
+      });
+      chip.addEventListener('dragend', () => bar.classList.remove('dragging'));
+      // 点一下＝落在画面中心（不依赖 HTML5 拖拽，触控板 / 触屏也能用）
+      chip.addEventListener('click', () => {
+        // 落点按画布实测矩形算（画布是居中偏移的，用外框会把落点带偏）；
+        // 取中轴偏下一点，落在建筑前方的场地上，不会直接插进屋顶里
+        const rr = canvas.getBoundingClientRect();
+        addItem(c.k, rr.left + rr.width * 0.5, rr.top + rr.height * 0.72);
+      });
+      bar.appendChild(chip);
     });
   }
 
@@ -280,4 +286,3 @@
       draw();
     });
   }
-
