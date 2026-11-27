@@ -290,11 +290,8 @@
       }
     }
 
-    // 院内竹木
-    const inTrees = r.env.trees || [];
-    for (let i = 0; i < Math.min(2, inTrees.length); i++) {
-      P.tree(mb, (i ? 1 : -1) * 2.2, zFront + 1.0 - i * 0.6, inTrees[i], new GF.RNG(r.seed + i * 13), 0.85, '院内树');
-    }
+    // 院内竹木：树的渲染统一归环境层（同款 env.trees 会以组件形式展开进清单，可选中 / 可删除），
+    // 布局层不再重复画一遍——否则画面出现两棵同名树、清单里却只有一棵。
 
     // 庭院陈设（首进院心）
     P.furniture(mb, 'table', 0, zFront - 1.0, 1, 0, '石桌');

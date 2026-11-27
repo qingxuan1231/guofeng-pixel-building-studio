@@ -17,6 +17,28 @@
       const needD = Math.max(r.courtD || 18, jinN * 9) + 4;
       const needW = (r.courtW || 20) + 4;
       r.env.groundSize = Math.max(r.env.groundSize || 8, needD, needW);
+      // 院内竹木组件化：宅院（四合院式）布局层不再硬画院内树，改由环境层把环境树清单
+      // 展开进「组件编辑」——前两棵落回原院内位置，外圈按原点位各补一棵复本，画面数量与
+      // 位置保持不变，清单里则棵棵都能选中 / 删除。仅在首次展开（env.auto 未成形）时生效。
+      const isHouse = !r.courtStyle || r.courtStyle === 'siheyuan';
+      if (isHouse && !Array.isArray(r.env.auto)) {
+        const trees = r.env.trees || [];
+        if (trees.length >= 2) {
+          const CD = Math.max(r.courtD || 18, jinN * 9);
+          const zFront = CD / 2 - (CD / jinN) / 2;
+          const mv = r.env.move || (r.env.move = {});
+          mv.tree0 = { x: -2.2, z: +(zFront + 1.0).toFixed(2) };
+          mv.tree1 = { x: 2.2, z: +(zFront + 0.4).toFixed(2) };
+          const n = trees.length;
+          trees.push(trees[0], trees[1]);
+          for (let k = 2; k < trees.length; k++) {
+            const oi = k % n;
+            const ang = (oi / n) * Math.PI * 2 + 0.6;
+            const dist = 6.5 + (oi % 2) * 1.5;
+            mv['tree' + k] = { x: +Math.cos(ang) * dist, z: +Math.sin(ang) * dist };
+          }
+        }
+      }
     }
     // 环境与建筑分两张网格：拖动整栋建筑时只挪建筑本体，地面 / 树 / 水池原地不动
     const em = new GF.Mesh();

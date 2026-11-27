@@ -168,3 +168,27 @@ summary.push(['普查A 渲染白名单缺口', missingRender]);
 summary.push(['场景1 重载漂移', s1Bug], ['场景2 删除不精确/牵连', s2Bug], ['场景3 随机重载漂移', s3Bug]);
 console.log('================ 汇总 ================');
 summary.forEach(([t, v]) => console.log(' ', t, '→', Array.isArray(v) ? (v.length ? v.join(',') : '无') : v));
+
+console.log('================ 场景5：怡红院（siheyuan）院内树全部可选中 / 可删除 ================');
+{
+  const st = makeState();
+  switchTo(st, 'siheyuan');
+  const p = present(st);
+  const treeOk = p.get('bamboo') === 2 && p.get('plum') === 2 && p.get('gingko') === 1;
+  const auto = st.recipe.env.auto;
+  const yardOk = (auto[0].k === 'bamboo' && Math.abs(auto[0].x - -2.2) < 0.01
+    && auto[1].k === 'plum' && Math.abs(auto[1].x - 2.2) < 0.01);
+  const mv = st.recipe.env.move || {};
+  const mvOk = !!(mv.tree0 && mv.tree1 && mv.tree2 && mv.tree3 && mv.tree4);
+  console.log('  展开树全部进清单:', auto.length >= 5 ? '是(' + auto.length + '件)' : '否(' + auto.length + ')',
+    '| 竹2梅2银杏1:', treeOk ? '是' : '否');
+  console.log('  前两棵落院里原位置(左竹右梅):', yardOk ? '是' : '否', '| 棵棵有 move 锚点:', mvOk ? '是' : '否');
+  let delBug = 0;
+  while (envItems(st).length) { st.selItem = 0; del(st); }
+  console.log('  全部组件删空无残留:', envItems(st).length === 0 ? '是' : '否');
+  const otherKey = GF.presetList.find((x) => x.key !== 'siheyuan').key;
+  switchTo(st, otherKey);
+  switchTo(st, 'siheyuan');
+  const p2 = present(st);
+  console.log('  切走切回自动恢复完整:', p2.get('bamboo') === 2 && p2.get('plum') === 2 && p2.get('gingko') === 1 ? '是' : '否');
+}
