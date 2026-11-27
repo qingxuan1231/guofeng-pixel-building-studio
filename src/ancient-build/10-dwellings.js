@@ -99,7 +99,8 @@
       winW: r.winW, winH: r.winH, winPattern: r.winPattern,
       doorW: r.doorW, doorH: r.doorH, doorStyle: r.doorStyle, doorLeaves: r.doorLeaves,
       eave: r.eave, tile: r.tile, tileB: r.tileB, upturn: r.upturn,
-      dougong: r.dougong, era: r.era, dgScale: r.dgScale, dgStyle: r.dgStyle, dgEye: r.dgEye, queti: r.queti
+      dougong: r.dougong, era: r.era, dgScale: r.dgScale, dgStyle: r.dgStyle, dgEye: r.dgEye, queti: r.queti,
+      hard: r.roofType === 'gableHard' || r.roofHard === true
     });
     interior(mb, r, { W, D, bayW });
 
@@ -213,6 +214,7 @@
       doorW: r.doorW, doorH: r.doorH, doorStyle: r.doorStyle, doorLeaves: r.doorLeaves,
       eave: r.eave, tile: r.tile, tileB: r.tileB, upturn: r.upturn,
       dougong: r.dougong, era: r.era, dgScale: r.dgScale, dgStyle: r.dgStyle, dgEye: r.dgEye, queti: r.queti,
+      hard: r.roofType === 'gableHard' || r.roofHard === true,
       sideWindows: true
     });
     interior(mb, r, { W, D });

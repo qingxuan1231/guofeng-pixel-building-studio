@@ -156,6 +156,12 @@
       // 二层墙底压进下层墙顶 3 cm：原来 f=1 的墙底与 f=0 的墙顶同标高，
       // 两层墙的顶/底面在 3.39 处严格齐平（厅堂 16 对 0.176 m² = 3.70 m²）
       const wy0 = f === 0 ? yb : yb - 0.03;
+      // 裙肩 / 下碱：明清民居白粉墙下段常见“青砖勒脚 + 上身抹灰”（清工部墙作：墙身下碱砖砌、
+      // 上身收进抹灰；裙肩即两段的交线）。仅精档、白粉墙、首层启用——把一堵墙拆成
+      // “青砖下碱 / 白灰上身”两段砌筑，其余材质与低档位完全保持原样（零回归、零增面）。
+      const eraSkirt = !o.era || o.era === 'yuan' || o.era === 'ming' || o.era === 'qing';
+      const skirtH = Math.min(1.05, Math.max(0.6, fhF * 0.34));
+      const skirtOK = GF.detail(3) && f === 0 && o.wallMat === 'plaster' && eraSkirt;
 
       // 柱
       for (let i = 0; i <= bays; i++) {
@@ -182,11 +188,15 @@
         }
         const u0 = side === 'front' ? x0 : -x1;
         const u1 = side === 'front' ? x1 : -x0;
-        P.wallWithHoles(mb, {
-          dir: side, at, u0, u1, y0: wy0, y1: yt,
-          holes: holes.map((h) => side === 'front' ? h : ({ u0: -h.u1, u1: -h.u0, v0: h.v0, v1: h.v1 })),
-          thickness: wallT, mat: o.wallMat, tag: '墙体·' + (side === 'front' ? '前' : '后')
-        });
+        const wHoles = holes.map((h) => side === 'front' ? h : ({ u0: -h.u1, u1: -h.u0, v0: h.v0, v1: h.v1 }));
+        const wFace = { dir: side, at, u0, u1, thickness: wallT };
+        const wallLab = '墙体·' + (side === 'front' ? '前' : '后');
+        if (skirtOK) {
+          P.wallWithHoles(mb, Object.assign({}, wFace, { y0: wy0, y1: wy0 + skirtH, holes: wHoles, mat: 'brick', tag: wallLab + '·下碱' }));
+          P.wallWithHoles(mb, Object.assign({}, wFace, { y0: wy0 + skirtH + 0.005, y1: yt, holes: wHoles, mat: o.wallMat, tag: wallLab + '·上身' }));
+        } else {
+          P.wallWithHoles(mb, Object.assign({}, wFace, { y0: wy0, y1: yt, holes: wHoles, mat: o.wallMat, tag: wallLab }));
+        }
         // 门窗构件
         for (let i = 0; i < bays; i++) {
           const bx = x0 + bayW * (i + 0.5);
@@ -210,16 +220,37 @@
         ];
         const u0 = side === 'right' ? z0 : -z1;
         const u1 = side === 'right' ? z1 : -z0;
-        P.wallWithHoles(mb, {
-          dir: side, at, u0, u1, y0: wy0, y1: yt,
-          holes: holes.map((h) => side === 'right' ? h : ({ u0: -h.u1, u1: -h.u0, v0: h.v0, v1: h.v1 })),
-          thickness: wallT, mat: o.wallMat, tag: '墙体·山面'
-        });
+        const wHoles = holes.map((h) => side === 'right' ? h : ({ u0: -h.u1, u1: -h.u0, v0: h.v0, v1: h.v1 }));
+        if (skirtOK) {
+          P.wallWithHoles(mb, { dir: side, at, u0, u1, y0: wy0, y1: wy0 + skirtH, holes: wHoles, thickness: wallT, mat: 'brick', tag: '墙体·山面·下碱' });
+          P.wallWithHoles(mb, { dir: side, at, u0, u1, y0: wy0 + skirtH + 0.005, y1: yt, holes: wHoles, thickness: wallT, mat: o.wallMat, tag: '墙体·山面·上身' });
+        } else {
+          P.wallWithHoles(mb, { dir: side, at, u0, u1, y0: wy0, y1: yt, holes: wHoles, thickness: wallT, mat: o.wallMat, tag: '墙体·山面' });
+        }
         if (holes.length) {
           P.windowAt(mb, {
             dir: side, at, uc: 0, vc: holes[0].v0 + o.winH * 0.4,
             w: holes[0].u1 - holes[0].u0, h: o.winH * 0.8, pattern: 'straight', wt: wallT / 2, tag: '窗·山面'
           });
+        }
+      }
+
+      // 硬山墀头（清工部·墙作：“硬山山墙里外分两段，近檐处盘头层层出挑”，前檐与山墙交角的
+      // 砖垛即墀头）：宽 0.36、出进 0.30、下段拔檐 0.9、顶叠三层盘头各出挑 3/5/7 cm 而下口逐层上收，
+      // 一似清官式“头层盘头、二层盘头”之制。仅精档 + 硬山 + 首层 + 正立面完整时生成，
+      // 且不贴 ne 门脸（noChitou），其余风格与低档位零增面、完全前版一致。
+      if (GF.detail(3) && o.hard && f === 0 && !cut.front && !o.noChitou) {
+        const ctW = 0.36, ctD = 0.30;
+        const zF = z1 + 0.04;
+        for (const sd of ['left', 'right']) {
+          if (cut[sd]) continue;
+          const cx = sd === 'left' ? x0 + 0.1 : x1 - 0.1;
+          const a = cx - ctW / 2, b = cx + ctW / 2;
+          mb.box(a, b, yb, yb + 0.9, zF - ctD, zF, o.wallMat, '墀头·' + sd);
+          for (let k = 0; k < 3; k++) {
+            const pj = 0.03 + k * 0.02;
+            mb.box(a - pj, b + pj, yb + 0.88 + k * 0.10, yb + 1.0 + k * 0.10, zF - ctD, zF + pj + 0.02, o.wallMat, '墀头·盘头');
+          }
         }
       }
 
@@ -450,4 +481,3 @@
       P.furniture(mb, it.kind, it.x, it.z, it.s || 1, 0, '陈设·' + it.kind);
     }
   }
-

@@ -648,17 +648,34 @@
               if (dX < 0.03 || dZ < 0.03) { c0 *= 0.80; c1 *= 0.80; c2 *= 0.82; }
               else if (dX < 0.06 || dZ < 0.06) { c0 *= 0.94; c1 *= 0.94; c2 *= 0.95; }
             } else if (patKind === 'mason') {
+              // 磨砖对缝（清代细作砖墙）：仅青砖在精档（≥240px/m）启用——
+              // 梁思成记砖墙分糙作/细作，细作砖料打磨成方、干摆丝缝、灰缝极细。
+              // 真砖取停泥砖 24×12×6cm，皮高约 0.066m、块宽约 0.25m、缝约 4~6mm，
+              // 320px/m 下一皮约 21px、一块砖约 80px，细砖缝在像素上读得出来。
+              // 中低档与原样完全一致（0.33m 皮高大分格），石料不计入，零回归。
+              const fineBrick = GF.detail(3) && (matName === 'brick' || matName === 'brickB');
+              const cH = fineBrick ? 0.066 : 0.33;
+              const bW = fineBrick ? 0.25 : 0.66;
               const hor = patZ ? wzp2 : wxp2;
-              const row = wy / 0.33;
+              const row = wy / cH;
               const rowI = Math.floor(row);
               const fy = row - rowI;
               // 错缝：奇数皮右移半块。省掉一个取模：直接把偏移算进 hor 再除以块宽
-              const fx2 = ((hor + ((rowI & 1) ? 0.33 : 0)) / 0.66) % 1;
+              const fx2 = ((hor + ((rowI & 1) ? bW * 0.5 : 0)) / bW) % 1;
               const fx = fx2 < 0 ? fx2 + 1 : fx2;
-              const dY = Math.min(fy, 1 - fy) * 0.33;
-              const dX = Math.min(fx, 1 - fx) * 0.66;
-              if (dY < 0.032 || dX < 0.032) { c0 *= 0.80; c1 *= 0.80; c2 *= 0.82; }
-              else if (dY < 0.0704) { c0 *= 0.94; c1 *= 0.94; c2 *= 0.95; }
+              const dY = Math.min(fy, 1 - fy) * cH;
+              const dX = Math.min(fx, 1 - fx) * bW;
+              const g0 = fineBrick ? 0.006 : 0.032;
+              const g1 = fineBrick ? 0.016 : 0.0704;
+              if (dY < g0 || dX < g0) { c0 *= 0.78; c1 *= 0.78; c2 *= 0.80; }
+              else if (dY < g1) { c0 *= 0.93; c1 *= 0.93; c2 *= 0.94; }
+              else if (fineBrick) {
+                // 磨砖个体微差：每皮每块独立取一个明度（青砖烧色本就不匀），
+                // 大墙面不再是一色平涂 + 细缝，而是一砖一色的小拼花。
+                const bi = ((rowI * 73856093) ^ (Math.floor(hor / bW) * 19349663)) | 0;
+                const k = 0.97 + 0.06 * ((Math.abs(bi) % 101) / 50 - 1);
+                c0 *= k; c1 *= k; c2 *= k;
+              }
             } else if (patKind === 'plaster') {
               // 白粉墙：抹灰面平滑，只留极淡的水平分抹痕与斑驳
               const fy2 = (wy / 0.9) % 1;
