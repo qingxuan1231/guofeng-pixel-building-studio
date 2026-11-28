@@ -128,6 +128,7 @@
         0.35, 1.15, zMn - hw - 0.5, zMx + hw + 0.5, 'wood', '跨河·栏杆');
     }
     // 中小跨河便桥：避开主街桥位，东西两侧随机架设石拱小桥，接通南北两岸沿河街
+    const bridges = []; // R6: 供水岸缝合避让便桥落点
     if (rng && o.ferryBridges !== 0) {
       const iWall = o.wallT + 6;
       const iSize = o.w - 2 * iWall;
@@ -149,8 +150,10 @@
             0.32, 0.95, zMn - hw - 0.5, zMx + hw + 0.5, 'wood', '跨河·桥栏杆');
         }
         used.push(xb);
+        bridges.push(xb);
       }
     }
+    river.bridges = bridges;
     // 东西墙水关：券洞南北两侧门墩 + 顶部楣 + 券顶，水从护城河经券洞入城
     const dg = hw + 1.1;
     for (const sx of [-1, 1]) {
@@ -167,6 +170,78 @@
       pbox(mb, xLo + 0.15, xHi - 0.15, o.wallH * 0.72, o.wallH + 0.18, river.gateLo, river.gateHi, 'brick', '水关·券顶');
       pbox(mb, xLo + 0.15, xHi - 0.15, o.wallH * 0.72, o.wallH * 0.76, river.gateLo - 0.25, river.gateHi + 0.25, 'stoneDark', '水关·券额');
     }
+  }
+
+  /* —— R6 水岸缝合：沿河沿道铺柳树/山石/系船桩/石灯，水边放乌篷舟与水埠，让内河有生活感 ——
+   * 只在河沿道（riverZ0/riverZ1）的水岸侧落位，避让主桥带、河上便桥与水关区；
+   * 用独立 rng + seed 派生，不影响主 rng 流，同 seed 输出依旧确定。 */
+  function riverLife(mb, river, o, rr) {
+    const hw = river.hw;
+    const Hw = o.w / 2, T2 = o.wallT;
+    const bridges = river.bridges || [];
+    const isClear = (x) => {
+      if (Math.abs(x) < o.roadW / 2 + 3.2) return false;                 // 主街跨河大桥带
+      if (Math.abs(x) > Hw - T2 - 6) return false;                       // 水关券洞区
+      for (const xb of bridges) if (Math.abs(x - xb) < 3.8) return false; // 河上便桥带
+      return true;
+    };
+    for (const side of [-1, 1]) {
+      const zWalk = side < 0 ? river.zc - hw - 1.1 : river.zc + hw + 1.1; // 河沿道中心
+      const wSide = side < 0 ? 1 : -1;                                    // 指向河道的水岸侧
+      // 沿河沿道扫描放柳/石/桩/灯（水岸侧）
+      const span = Hw - T2 - 8;
+      let x = -span;
+      while (x < span) {
+        x += 4.5 + rr.next() * 5.5;
+        x += rr.range(-0.8, 0.8);
+        if (!isClear(x)) continue;
+        const zItem = zWalk + wSide * rr.range(0.45, 0.95);
+        const roll = rr.next();
+        if (roll < 0.42) {
+          GF.parts.tree(mb, x, zWalk + wSide * 0.15, 'willow', rr, 0.8 + rr.next() * 0.45, '河·柳');
+        } else if (roll < 0.52) {
+          GF.parts.tieMaZhuang(mb, x, zWalk + wSide * 0.1, 0.85 + rr.next() * 0.25, '河·系船桩');
+        } else if (roll < 0.78) {
+          GF.parts.rock(mb, x, zItem, 0.55 + rr.next() * 0.5, rr, '河·山石');
+        } else if (roll < 0.88) {
+          GF.parts.stoneLantern(mb, x, zWalk, 0.62 + rr.next() * 0.2, '河·石灯');
+        } else {
+          // 抛荒地补一丛芦苇似的断竹，压住水岸转角
+          GF.parts.tree(mb, x, zWalk + wSide * 0.35, 'bamboo', rr, 0.5 + rr.next() * 0.2, '河·芦');
+        }
+      }
+      // 水埠：石台 + 两级踏步入水（水岸侧）
+      if (o.quay !== false) {
+        for (let k = 0; k < 2; k++) {
+          let qx = rr.range(-span, span), qTry = 0;
+          while (!isClear(qx) && qTry++ < 20) qx = rr.range(-span, span);
+          if (!isClear(qx)) continue;
+          const z0 = zWalk + wSide * 0.85;
+          pbox(mb, qx - 1.0, qx + 1.0, 0.03, 0.34, z0, z0 + 1.15, 'stone', '河·水埠');
+          pbox(mb, qx - 0.72, qx + 0.72, -0.02, 0.18, z0 + 0.95, z0 + 1.6, 'stone', '河·踏步1');
+          pbox(mb, qx - 0.45, qx + 0.45, -0.1, 0.08, z0 + 1.5, z0 + 2.1, 'stone', '河·踏步2');
+          // 水埠边系一条乌篷舟
+          if (rr.next() < 0.8) boat(mb, qx + rr.range(-0.5, 0.5), zWalk + wSide * (hw * 0.32 + 0.5), 0.9 + rr.next() * 0.25, '河·乌篷舟');
+        }
+      } else if (rr.next() < 0.5) {
+        // 无埠时水面也偶有小舟
+        let bx = rr.range(-span, span), qTry = 0;
+        while (!isClear(bx) && qTry++ < 20) bx = rr.range(-span, span);
+        if (isClear(bx) && rr.next() < 0.7) boat(mb, bx, zWalk + wSide * (hw * 0.35 + 0.6), 0.85 + rr.next() * 0.3, '河·乌篷舟');
+      }
+    }
+  }
+
+  // 乌篷小舟：盒体 + 翘艏艉 + 竹篷（水边小品，像素风够看）
+  function boat(mb, x, z, s, tag) {
+    s = s || 1;
+    tag = tag || '乌篷舟';
+    const L = 2.4 * s, W = 0.9 * s;
+    mb.boxC(x, z, L, W, 0.02, 0.14, 'wood', tag + '·艇');
+    GF.beamBetween(mb, [x - L / 2 + 0.12, 0.06, z], [x - L / 2 - 0.12, 0.2, z], 0.1, 0.14, 'wood', tag + '·艏');
+    GF.beamBetween(mb, [x + L / 2 - 0.12, 0.06, z], [x + L / 2 + 0.12, 0.2, z], 0.1, 0.14, 'wood', tag + '·艉');
+    mb.boxC(x, z, L * 0.52, W * 0.68, 0.14, 0.48, 'timber', tag + '·篷墙');
+    mb.boxC(x, z, L * 0.58, W * 0.6, 0.48, 0.6, 'bamboo', tag + '·篷顶');
   }
 
   // 一段城墙：墙体收分 + 压顶 + 垛口 + 内侧女墙 + 马面（台上可起敌楼）
@@ -696,6 +771,8 @@
     /* 河道开挖：水面/河床与护城河同标高，防共面闪烁；随后接入跨河主桥与东西水关 */
     if (river) {
       carveRiver(mb, river, r, rng);
+      /* R6 水岸缝合：沿河两岸铺柳/石/桩/灯、水埠与乌篷舟（独立rng，不影响主流程） */
+      riverLife(mb, river, r, new GF.RNG(r.seed + 90001));
     }
 
     /* 护城河：四条水面 + 外驳岸 + 四门桥 */
