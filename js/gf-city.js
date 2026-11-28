@@ -11,6 +11,7 @@
     wallH: 9.0, wallT: 4.6, gateW: 11, roadW: 9.5, moatW: 9,
     cols: 3, rows: 3, density: 0.9,
     moat: true, matta: true, tower: true, palace: true, gateTowerOn: true,
+    river: false, riverW: 5.0,
     bastionGap: 26, blockWallH: 2.2, blockGateW: 3.6, blockWallOn: false, blockJit: 1, axisHalls: 1,
     wallTaper: 0.16, wallProfile: 'custom', gateArch: 'arch', streetMode: 'market',
     merlon: true, merlonStep: 1.8, merlonW: 1.0, merlonH: 0.95,
@@ -61,6 +62,111 @@
   function pbox(mb, x0, x1, y0, y1, z0, z1, mat, tag) {
     mb.box(Math.min(x0, x1), Math.max(x0, x1), Math.min(y0, y1), Math.max(y0, y1),
       Math.min(z0, z1), Math.max(z0, z1), mat, tag);
+  }
+
+  /* ———— R3 水系 —— 河骨 ——
+   * planRiver 从确定性 rng 里挑一条东西向贯通的水渠：
+   * 河道中心 zc 避开横向主街带与东西城门洞，优先选面积更大的南/北城区；
+   * 河骨为 5 段折线（近岸平直、中部轻微蜿蜒），半宽 hw = riverW/2。
+   * 返回 { hw, zc, nodes:[{x,z}], x0, x1 }，null 表示城太小不设河。 */
+  function planRiver(o, rng) {
+    const defW = Number(o.riverW) || 5.0;
+    const hw = Math.max(1.6, Math.min(3.4, defW / 2));
+    const T2 = o.wallT;
+    const U0 = -o.d / 2 + T2, U1 = o.d / 2 - T2;      // 内城 z 可用带
+    if (U1 - U0 < hw * 4 + 10) return null;
+    const band = Math.max(o.roadW / 2, o.gateW / 2) + hw + 3.2;   // 禁带：横主街 + 门洞
+    const palLo = o.palace ? -o.d * 0.42 - hw - 2 : -Infinity;
+    const palHi = o.palace ? o.d * 0.24 + hw + 2 : Infinity;
+    const zones = [];
+    if (U0 + 1.8 + hw < -band - hw) zones.push([U0 + 1.8 + hw, -band - hw]);  // 南区
+    if (U1 - 1.8 - hw > band + hw) {                                          // 北区
+      const zLo = Math.max(band + hw, palHi), zHi = U1 - 1.8 - hw;
+      if (zLo < zHi) zones.push([zLo, zHi]);
+    }
+    if (!zones.length) return null;
+    let total = 0; const acc = zones.map((z) => { total += z[1] - z[0]; return total; });
+    let p = rng.next() * total, zi = 0;
+    while (acc[zi] < p) zi++;
+    const zc = (zones[zi][0] + zones[zi][1]) / 2 + rng.range(-0.5, 0.5);
+    const Wn = o.w, X0 = -Wn / 2 + o.wallT + 1, X1 = Wn / 2 - o.wallT - 1;
+    if (X1 - X0 < 24) return null;
+    const n = 5, nodes = [];
+    for (let k = 0; k <= n; k++) {
+      const x = X0 + (X1 - X0) * k / n;
+      const sway = (k === 0 || k === n) ? 0 : rng.range(-hw * 0.6, hw * 0.6);
+      nodes.push({ x, z: Math.max(U0 + 2.2, Math.min(U1 - 2.2, zc + sway)) });
+    }
+    const zMn = Math.min.apply(null, nodes.map((nn) => nn.z));
+    const zMx = Math.max.apply(null, nodes.map((nn) => nn.z));
+    const dg = hw + 1.1; // 水关券洞半带：门墩中心就在 zMn-dg / zMx+dg 上
+    return { hw, zc, nodes, x0: X0 - 1, x1: X1 + 1, gateLo: zMn - dg - 0.8, gateHi: zMx + dg + 0.8 };
+  }
+
+  /* —— carveRiver：河道开挖 + 水面 + 驳岸 + 跨河主桥 + 东西墙水关券洞 ——
+   * 统一标高：河床顶 -0.6 / 水面 -0.6..-0.02（与护城河同标高，防共面闪烁）；
+   * 驳岸 stone 立 0.03..0.5，压住河滩土与河槽上缘；
+   * 主街跨河段由桥面板（0.17..0.23）承接，高于主街路面（0.10）形成浅拱桥；
+   * R4: 沿河中小跨河便桥在岸线两侧各架一座，接通南北城区。 */
+  function carveRiver(mb, river, o, rng) {
+    const { hw, nodes } = river;
+    const zMn = Math.min.apply(null, nodes.map((nn) => nn.z));
+    const zMx = Math.max.apply(null, nodes.map((nn) => nn.z));
+    const d0 = zMn - hw - 0.85, d1 = zMx + hw + 0.85;
+    pbox(mb, river.x0, river.x1, -1.05, -0.6, zMn - hw, zMx + hw, 'soil', '河床');
+    for (let i = 0; i < nodes.length - 1; i++) {
+      const pa = nodes[i], pb = nodes[i + 1];
+      pbox(mb, pa.x, pb.x, -0.6, -0.02, (pa.z + pb.z) / 2 - hw, (pa.z + pb.z) / 2 + hw, 'water', '城内·河面');
+    }
+    pbox(mb, river.x0, river.x1, 0.03, 0.5, d0, d0 + 0.85, 'stone', '河·驳岸');
+    pbox(mb, river.x0, river.x1, 0.03, 0.5, d1 - 0.85, d1, 'stone', '河·驳岸');
+    // 跨河主桥：主街宽度跨河，桥面略高于路面，配两侧木护栏
+    const half = o.roadW / 2;
+    pbox(mb, -half - 0.7, half + 0.7, 0.17, 0.23, zMn - hw - 0.5, zMx + hw + 0.5, 'slabTop', '跨河·桥面');
+    for (const s of [-1, 1]) {
+      pbox(mb, s > 0 ? half + 0.15 : -half - 0.55, s > 0 ? half + 0.55 : -half - 0.15,
+        0.35, 1.15, zMn - hw - 0.5, zMx + hw + 0.5, 'wood', '跨河·栏杆');
+    }
+    // 中小跨河便桥：避开主街桥位，东西两侧随机架设石拱小桥，接通南北两岸沿河街
+    if (rng && o.ferryBridges !== 0) {
+      const iWall = o.wallT + 6;
+      const iSize = o.w - 2 * iWall;
+      const nB = (o.ferryBridges == null ? 2 : Math.max(0, Math.floor(Number(o.ferryBridges) || 0)));
+      const used = []; // 桥墩落点，保证互相留出间距
+      for (let b = 0; b < nB; b++) {
+        let xb = null;
+        for (let tryIt = 0; tryIt < 8; tryIt++) {
+          const cand = rng.range(-iSize / 2 + 4, iSize / 2 - 4);
+          const clearOfMain = Math.abs(cand) - half - 2.5; // 与主街桥的最小间距
+          const clearOfPrev = used.every((ux) => Math.abs(cand - ux) > 6);
+          if (clearOfMain > 5 && clearOfPrev) { xb = cand; break; }
+        }
+        if (xb == null) continue;
+        const bw = o.bridgeW || 3.6;
+        pbox(mb, xb - bw / 2, xb + bw / 2, 0.17, 0.21, zMn - hw - 0.5, zMx + hw + 0.5, 'slabTop', '跨河·便桥面');
+        for (const s of [-1, 1]) {
+          pbox(mb, s > 0 ? xb + bw / 2 - 0.06 : xb - bw / 2, s > 0 ? xb + bw / 2 : xb - bw / 2 + 0.06,
+            0.32, 0.95, zMn - hw - 0.5, zMx + hw + 0.5, 'wood', '跨河·桥栏杆');
+        }
+        used.push(xb);
+      }
+    }
+    // 东西墙水关：券洞南北两侧门墩 + 顶部楣 + 券顶，水从护城河经券洞入城
+    const dg = hw + 1.1;
+    for (const sx of [-1, 1]) {
+      const X = sx > 0 ? o.w / 2 : -o.w / 2;
+      const xA = sx > 0 ? X : X - 0.7, xB = sx > 0 ? X + 0.7 : X;
+      for (const s of [-1, 1]) {
+        const zc0 = s < 0 ? zMn - dg : zMx + dg;
+        pbox(mb, xA, xB, 0, o.wallH * 0.62, zc0 - 0.45, zc0 + 0.45, 'brick', '水关·门墩');
+      }
+      pbox(mb, xA, xB, o.wallH * 0.58, o.wallH * 0.72, zMn - dg - 0.3, zMx + dg + 0.3, 'stoneDark', '水关·楣');
+      // 券顶：按墙身厚度把券洞上方缺口补成拱形顶，与两侧墙段连成一体
+      const t2 = o.wallT / 2;
+      const xLo = Math.min(X - t2, X + t2), xHi = Math.max(X - t2, X + t2);
+      pbox(mb, xLo + 0.15, xHi - 0.15, o.wallH * 0.72, o.wallH + 0.18, river.gateLo, river.gateHi, 'brick', '水关·券顶');
+      pbox(mb, xLo + 0.15, xHi - 0.15, o.wallH * 0.72, o.wallH * 0.76, river.gateLo - 0.25, river.gateHi + 0.25, 'stoneDark', '水关·券额');
+    }
   }
 
   // 一段城墙：墙体收分 + 压顶 + 垛口 + 内侧女墙 + 马面（台上可起敌楼）
@@ -458,6 +564,76 @@
     return main;
   }
 
+  /* ————— R2：地块内错排扫描行落位 —————
+   * 主轴锚定：地块长边即摆放主轴，所有单体先转置对齐主轴、再叠加
+   * ±8° 朝向微扰，让微观群落方向随地块自然变化，而非全城同一个轴；
+   * Footprint 实测（meshBox）驱动行内连续铺放，短轴方向逐行扫描，
+   * 偶数行错缝半个单体宽 + 随机巷幅，形成“犬牙交错”的密集聚落。
+   * 主栋（preset 群组）优先占位，剩余面积用民居/院落填充。 */
+  function packLotBuildings(mb, cx, cz, areaW, areaD, city, rng, kinds, wardCount) {
+    const alongX = areaW >= areaD;                    // 主轴是否沿 x
+    const a = (alongX ? 0 : 90) + rng.range(-8, 8);   // 主轴角 + 微扰
+    const W = Math.max(areaW, areaD) - 1.0;           // 主轴跨
+    const D = Math.min(areaW, areaD) - 1.0;           // 短轴跨
+    if (W < 4.6 || D < 4.6) return false;
+    const sinA = Math.sin(a * Math.PI / 180), cosA = Math.cos(a * Math.PI / 180);
+    // 单体长边先转贴本地 x 轴，再整体旋转到主轴角——主轴无论沿 x 还是沿 z
+    // 都保证长边贴合主轴，避免竖向地块里建筑被转成垂直于主轴方向。
+    const orient = (m) => {
+      let b = meshBox(m);
+      if (b.w < b.d) m.rotateY(90, 0, 0);
+      m.rotateY(a, 0, 0);
+      return meshBox(m);
+    };
+
+    // 候选单体池：主栋（preset 群组）优先，剩余用民居填充
+    const items = [];
+    const N = Math.min(7, Math.max(2, Math.round(areaW * areaD / 46)));
+    const mainKey = (areaW >= 8.5 && areaD >= 6) ? chooseClusterKey(areaW, areaD, rng) : null;
+    let mainUsed = !mainKey;
+    for (let i = 0; i < N; i++) {
+      let m = null;
+      if (!mainUsed) {
+        m = buildPresetCluster(mainKey, city, city.seed + wardCount * 131 + i * 7, rng, areaW, areaD);
+        if (m && m.triCount) mainUsed = true;
+      }
+      if (!m || !m.triCount) {
+        m = building(kinds[rng.int(0, kinds.length - 1)]);
+        centerMesh(m);
+        m.rotateY(rng.int(0, 3) * 90, 0, 0);
+      }
+      if (!m || !m.triCount) continue;
+      const b = orient(m);
+      if (b.w > W - 0.4 || b.d > D - 0.4) continue;   // 超地块单体直接丢弃，防越界穿墙
+      items.push({ m, fw: b.w, fd: b.d });
+    }
+    if (!items.length) return false;
+
+    // 错排扫描行：行内沿主轴连续铺放，短轴逐行推进，隔行错缝
+    const gapU = rng.range(0.9, 1.8), gapV = rng.range(1.2, 2.2);
+    let u = -W / 2, v = -D / 2, row = 0, rowDeep = 0;
+    let placed = 0;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (u + it.fw > W / 2 && rowDeep > 0) {
+        v += rowDeep + gapV;
+        row++;
+        rowDeep = 0;
+        u = -W / 2 + (row % 2 ? (items[i - 1] ? items[i - 1].fw * 0.5 : it.fw * 0.5) : 0);
+        if (v + it.fd > D / 2) break;
+      }
+      const cu = u + it.fw / 2, cv = v + it.fd / 2;
+      const gx = cx + (cu * cosA - cv * sinA);
+      const gz = cz + (cu * sinA + cv * cosA);
+      it.m.translate(gx, 0, gz);
+      mb.merge(it.m);
+      placed++;
+      u += it.fw + gapU;
+      rowDeep = Math.max(rowDeep, it.fd);
+    }
+    return placed > 0;
+  }
+
   function placeExtraMesh(mb, ex, cx, cz, areaW, areaD, city, rng) {
     const src = ex.recipe || ex;
     const m = buildRecipeMesh(src, city.seed + (ex.seedOffset || 0), city);
@@ -499,12 +675,27 @@
     const mb = new GF.Mesh();
     const HW = r.w / 2, HD = r.d / 2, H = r.wallH, T = r.wallT, GW = r.gateW;
 
-    /* 城内地面：夯土 + 沿墙砖铺 */
-    pbox(mb, -HW + T, HW - T, -0.4, 0.02, -HD + T, HD - T, 'soil', '城内地面');
+    /* R3 城内水系：河骨规划（避开主街与宫城轴线）；有河则先挖河、后做地块，避免区块压水 */
+    const river = r.river ? planRiver(r, rng) : null;
+    const riverZ0 = river ? river.zc - river.hw - 1.1 : 0;
+    const riverZ1 = river ? river.zc + river.hw + 1.1 : 0;
+
+    /* 城内地面：夯土 + 沿墙砖铺；有河时地面沿河道带南北切分，露出河槽 */
+    if (river) {
+      pbox(mb, -HW + T, HW - T, -1.05, 0.02, -HD + T, riverZ0, 'soil', '城内地面');
+      pbox(mb, -HW + T, HW - T, -1.05, 0.02, riverZ1, HD - T, 'soil', '城内地面');
+    } else {
+      pbox(mb, -HW + T, HW - T, -0.4, 0.02, -HD + T, HD - T, 'soil', '城内地面');
+    }
     const bw = 3.0;
     for (const s of [-1, 1]) {
       pbox(mb, -HW + T, HW - T, 0, 0.03, s > 0 ? HD - T - bw : -HD + T, s > 0 ? HD - T : -HD + T + bw, 'brickB', '墙根');
       pbox(mb, s > 0 ? HW - T - bw : -HW + T, s > 0 ? HW - T : -HW + T + bw, 0, 0.03, -HD + T, HD - T, 'brickB', '墙根');
+    }
+
+    /* 河道开挖：水面/河床与护城河同标高，防共面闪烁；随后接入跨河主桥与东西水关 */
+    if (river) {
+      carveRiver(mb, river, r, rng);
     }
 
     /* 护城河：四条水面 + 外驳岸 + 四门桥 */
@@ -554,12 +745,26 @@
       }
     }
 
-    /* 城墙（四面，门处断开） */
+    /* 城墙（四面，门处断开）
+     * 东西墙有水关时，在 river.gateLo..gateHi 之间让出券洞缺口，
+     * 河经券洞流入城内；缺口上方由 carveRiver 的券顶与门墩封边。 */
     const seg = (a, b) => wallRun(mb, a, b, H, T, r);
     seg([-HW, HD], [-GW / 2, HD]); seg([GW / 2, HD], [HW, HD]);
     seg([-HW, -HD], [-GW / 2, -HD]); seg([GW / 2, -HD], [HW, -HD]);
-    seg([HW, -HD], [HW, -GW / 2]); seg([HW, GW / 2], [HW, HD]);
-    seg([-HW, -HD], [-HW, -GW / 2]); seg([-HW, GW / 2], [-HW, HD]);
+    if (river) {
+      // 东西墙沿 z 分三段：北段、券洞缺口、南段
+      const zSegs = (x, zA, zB) => {
+        const gLo = river.gateLo, gHi = river.gateHi;
+        if (zB <= gLo || zA >= gHi) { seg([x, zA], [x, zB]); return; } // 未与水关相交
+        if (zA < gLo) seg([x, zA], [x, gLo]);
+        if (zB > gHi) seg([x, gHi], [x, zB]);
+      };
+      zSegs(HW, -HD, -GW / 2); zSegs(HW, GW / 2, HD);
+      zSegs(-HW, -HD, -GW / 2); zSegs(-HW, GW / 2, HD);
+    } else {
+      seg([HW, -HD], [HW, -GW / 2]); seg([HW, GW / 2], [HW, HD]);
+      seg([-HW, -HD], [-HW, -GW / 2]); seg([-HW, GW / 2], [-HW, HD]);
+    }
 
     /* 四门城楼 + 四角角楼 */
     gateHouse(mb, 0, HD, r, 'x');
@@ -596,71 +801,83 @@
      * 主街 0.10 / 里坊街 0.11 / 御道 0.12，差值只有几厘米，像素上看不出台阶。 */
     const road = (x0, x1, z0, z1, mat, tag, top) => pbox(mb, x0, x1, 0.03, top == null ? 0.10 : top, z0, z1, mat || 'slabTop', tag || '街道');
     const rw = r.roadW;
+    // 竖向道路跨河时在河道带断开：让出水面与跨河桥（carveRiver 已铺桥面板承接南北两段）
+    const zSeg = (x0, x1, zlo, zhi, mat, tag, top) => {
+      if (!river || zhi <= riverZ0 || zlo >= riverZ1) { road(x0, x1, zlo, zhi, mat, tag, top); return; }
+      if (zlo < riverZ0) road(x0, x1, zlo, riverZ0, mat, tag, top);
+      if (zhi > riverZ1) road(x0, x1, riverZ1, zhi, mat, tag, top);
+    };
     road(-HW + T, HW - T, -rw / 2, rw / 2);
-    road(-rw / 2, rw / 2, -HD + T, HD - T);
+    zSeg(-rw / 2, rw / 2, -HD + T, HD - T);
     // 御道：主街中间一条颜色更深的石带，宽约占主街四成
     const yd = rw * 0.22;
     road(-HW + T, HW - T, -yd, yd, 'stoneBTop', '御道', 0.12);
-    road(-yd, yd, -HD + T, HD - T, 'stoneBTop', '御道', 0.12);
+    zSeg(-yd, yd, -HD + T, HD - T, 'stoneBTop', '御道', 0.12);
+    // 河沿道：沿河道南北岸各留一条步道，衔接两岸地块，避免水边悬空
+    if (river) {
+      road(-HW + T, HW - T, riverZ0 - 0.5, riverZ0 + 0.5, 'stoneBTop', '河沿道', 0.11);
+      road(-HW + T, HW - T, riverZ1 - 0.5, riverZ1 + 0.5, 'stoneBTop', '河沿道', 0.11);
+    }
 
     const usableX0 = -HW + T, usableX1 = HW - T;
     const usableZ0 = -HD + T, usableZ1 = HD - T;
-    const nCols = Math.max(2, Math.min(8, Math.round(r.cols || 3)));
-    const nRows = Math.max(2, Math.min(8, Math.round(r.rows || 3)));
-    // 中轴两侧各分一半列 / 行；列宽再随机，避免所有坊一个尺寸
-    const halfCols = Math.max(1, Math.ceil(nCols / 2));
-    const halfRows = Math.max(1, Math.ceil(nRows / 2));
-    // 把一段长度切成 n 块：每块宽度随机，街缝宽度也随机，偶尔两块并成一坊
-    function splitSpan(a, b, n, gapMin, gapMax, minLot) {
-      n = Math.max(1, Math.round(n));
-      if (n <= 1 || b - a < minLot) return { cells: [[a, b]], gaps: [] };
-      const gaps = [];
-      let gapSum = 0;
-      for (let i = 0; i < n - 1; i++) {
-        let g = rng.range(gapMin, gapMax);
-        if (rng.next() < 0.24) g = 0;
-        gaps.push(g); gapSum += g;
-      }
-      let avail = (b - a) - gapSum;
-      if (avail < minLot * n) {
-        const maxGap = Math.max(0, ((b - a) - minLot * n) / Math.max(1, n - 1));
-        gapSum = 0;
-        for (let i = 0; i < gaps.length; i++) { gaps[i] = Math.min(gaps[i], maxGap); gapSum += gaps[i]; }
-        avail = (b - a) - gapSum;
-      }
-      if (avail <= 1) return { cells: [[a, b]], gaps: [] };
-      const weights = [];
-      let wsum = 0;
-      for (let i = 0; i < n; i++) { const w = 0.72 + rng.next() * 0.62; weights.push(w); wsum += w; }
-      const cells = [], outGaps = [];
-      let cursor = a;
-      for (let i = 0; i < n; i++) {
-        const w = Math.max(2.8, avail * weights[i] / wsum);
-        const end = Math.min(b, cursor + w);
-        if (cells.length && gaps[i - 1] < 0.8) cells[cells.length - 1][1] = Math.min(b, end + gaps[i - 1]);
-        else cells.push([cursor, end]);
-        if (i < n - 1) {
-          const g = gaps[i];
-          if (g >= 0.8) outGaps.push({ p: end + g / 2, w: g });
-          cursor = end + g;
+    /* ———— R1: 面积约束递归二分 · 不规则地块 ————
+     * 主干道十字把内城分成四个开放区；每个开放区从完整矩形出发，
+     * 反复沿较长轴随机二分（每刀留一条随机宽街缝），直到单块面积
+     * 与边长收敛。递归树的局部分支切分天然产生犬牙交错边界，
+     * 地块大小错落、不再有全城对齐的等距网格——消除旧 grid 的“框感”。 */
+    const lotMinSide = Math.max(6.0, rw * 0.45);
+    const lots = [];
+    const lotSeams = [];
+    function cutRegion(x0, z0, x1, z1, dep) {
+      const w = x1 - x0, h = z1 - z0;
+      const gapMin = Math.max(2.0, rw * 0.30), gapMax = Math.max(gapMin, rw * 0.62);
+      const tooBig = w * h > 200 && w >= lotMinSide * 1.6 && h >= lotMinSide * 1.6;
+      if (!tooBig || dep >= 6) { lots.push({ x0, z0, x1, z1 }); return; }
+      const splitH = rng.next() < (w / (w + h));
+      const t = rng.range(0.30, 0.70);
+      const gw = rng.range(gapMin, gapMax);
+      if (splitH) {
+        const cut = z0 + h * t;
+        const zA = cut - gw / 2, zB = cut + gw / 2;
+        if (zA - z0 < lotMinSide * 0.55 || z1 - zB < lotMinSide * 0.55) {
+          lots.push({ x0, z0, x1, z1 }); return;
         }
+        lotSeams.push({ x0, x1, z0: zA, z1: zB });
+        cutRegion(x0, z0, x1, zA, dep + 1);
+        cutRegion(x0, zB, x1, z1, dep + 1);
+      } else {
+        const cut = x0 + w * t;
+        const xA = cut - gw / 2, xB = cut + gw / 2;
+        if (xA - x0 < lotMinSide * 0.55 || x1 - xB < lotMinSide * 0.55) {
+          lots.push({ x0, z0, x1, z1 }); return;
+        }
+        lotSeams.push({ x0: xA, x1: xB, z0, z1 });
+        cutRegion(x0, z0, xA, z1, dep + 1);
+        cutRegion(xB, z0, x1, z1, dep + 1);
       }
-      if (cells.length) cells[cells.length - 1][1] = b;
-      return { cells, gaps: outGaps };
     }
-
-    const gapMin = Math.max(2.0, rw * 0.30), gapMax = Math.max(gapMin, rw * 0.62);
-    const leftX = splitSpan(usableX0, -rw / 2, halfCols, gapMin, gapMax, 7.0);
-    const rightX = splitSpan(rw / 2, usableX1, halfCols, gapMin, gapMax, 7.0);
-    const northZ = splitSpan(usableZ0, -rw / 2, halfRows, gapMin, gapMax, 7.0);
-    const southZ = splitSpan(rw / 2, usableZ1, halfRows, gapMin, gapMax, 7.0);
-
-    // 里坊街：宽度随地块变化，不再是等距线；偶尔并坊处不铺街，留出大宅基
-    for (const g of leftX.gaps.concat(rightX.gaps)) {
-      road(g.p - g.w / 2, g.p + g.w / 2, usableZ0, usableZ1, 'stoneBTop', '里坊街', 0.11);
+    // 四个开放区各自沿河道带竖直拆开（分属上/下岸），河道横贯部分不再切地
+    const zones = [];
+    const zoneSpecs = [
+      [usableX0, usableZ0, -rw / 2, -rw / 2],
+      [rw / 2, usableZ0, usableX1, -rw / 2],
+      [usableX0, rw / 2, -rw / 2, usableZ1],
+      [rw / 2, rw / 2, usableX1, usableZ1]
+    ];
+    const pushZone = (z) => {
+      if (z[1] >= z[3] - 0.1 || z[0] >= z[2] - 0.1) return;
+      zones.push(z);
+    };
+    for (const z of zoneSpecs) {
+      if (!river || z[3] <= riverZ0 || z[1] >= riverZ1) { pushZone(z); continue; }
+      if (riverZ0 - z[1] > lotMinSide * 0.55) pushZone([z[0], z[1], z[2], riverZ0]);
+      if (z[3] - riverZ1 > lotMinSide * 0.55) pushZone([z[0], riverZ1, z[2], z[3]]);
     }
-    for (const g of northZ.gaps.concat(southZ.gaps)) {
-      road(usableX0, usableX1, g.p - g.w / 2, g.p + g.w / 2, 'stoneBTop', '里坊街', 0.11);
+    for (const z of zones) cutRegion(z[0], z[1], z[2], z[3], 0);
+    // 街缝即坊巷：宽度随递归随机，偶发并坊处不铺街，留出大宅基
+    for (const s of lotSeams) {
+      road(s.x0, s.x1, s.z0, s.z1, 'stoneBTop', '里坊街', 0.11);
     }
 
     /* 地块：不设固定坊墙；建筑群优先从古建 preset 里取，塞不下才回落普通民居 */
@@ -685,84 +902,81 @@
     let wardCount = 0;
     const emptyCells = [];
 
-    const quads = [
-      { xs: leftX.cells, zs: northZ.cells },
-      { xs: rightX.cells, zs: northZ.cells },
-      { xs: leftX.cells, zs: southZ.cells },
-      { xs: rightX.cells, zs: southZ.cells }
-    ];
+    /* R1 地块建筑落位：遍历不规则 lots（坐标即地块边界），保留原有
+     * 四方向旋转 + 居中放置 + 大坊拆小院的落位逻辑；地块边界不再对齐
+     * 全城网格，建筑群随地块形状自然错落，消除旧 grid 的“框感”。 */
+    for (const lot of lots) {
+      const jit = r.blockJit == null ? 1 : r.blockJit;
+      const pad = rng.range(0.8, 1.2 + 2.0 * jit);
+      const areaW = (lot.x1 - lot.x0) - pad * 2;
+      const areaD = (lot.z1 - lot.z0) - pad * 2;
+      if (areaW < 5.2 || areaD < 5.2) continue;
 
-    for (const q of quads) {
-      for (const xc of q.xs) {
-        for (const zc of q.zs) {
-          const jit = r.blockJit == null ? 1 : r.blockJit;
-          const pad = rng.range(0.8, 1.2 + 2.0 * jit);
-          const areaW = (xc[1] - xc[0]) - pad * 2;
-          const areaD = (zc[1] - zc[0]) - pad * 2;
-          if (areaW < 5.2 || areaD < 5.2) continue;
+      const cx = (lot.x0 + lot.x1) / 2, cz = (lot.z0 + lot.z1) / 2;
+      // 宫城只占中轴一段：按地块中心判断，别把整片北城都留空。
+      // 被宫城占用的地块不能直接 continue 留裸土，否则俯视时就是一大块土黄空地；
+      // 统一铺宫殿砖地，保证宫城范围内没有裸露地块。
+      if (r.palace && Math.abs(cx) < 17 && cz > -HD * 0.42 && cz < HD * 0.24) {
+        pbox(mb, lot.x0 + 0.2, lot.x1 - 0.2, 0.03, 0.065,
+          lot.z0 + 0.2, lot.z1 - 0.2, 'slabTop', '宫城·铺地');
+        continue;
+      }
+      wardCount++;
+      // 坊制模式：地块外圈加坊墙与南坊门；街市模式保持开放街巷，不砌坊墙。
+      if (r.streetMode === 'ward') {
+        const wg = wardWall(mb, r, cx - areaW / 2, cx + areaW / 2, cz - areaD / 2, cz + areaD / 2);
+        if (wg) wardGates.push(wg);
+      }
 
-          const cx = (xc[0] + xc[1]) / 2, cz = (zc[0] + zc[1]) / 2;
-          // 宫城只占中轴一段：按地块中心判断，别把整片北城都留空。
-          // 被宫城占用的地块不能直接 continue 留裸土，否则俯视时就是一大块土黄空地；
-          // 统一铺宫殿砖地，保证宫城范围内没有裸露地块。
-          if (r.palace && Math.abs(cx) < 17 && cz > -HD * 0.42 && cz < HD * 0.24) {
-            pbox(mb, xc[0] + 0.2, xc[1] - 0.2, 0.03, 0.065,
-              zc[0] + 0.2, zc[1] - 0.2, 'slabTop', '宫城·铺地');
-            continue;
-          }
-          wardCount++;
-          // 坊制模式：地块外圈加坊墙与南坊门；街市模式保持开放街巷，不砌坊墙。
-          if (r.streetMode === 'ward') {
-            const wg = wardWall(mb, r, cx - areaW / 2, cx + areaW / 2, cz - areaD / 2, cz + areaD / 2);
-            if (wg) wardGates.push(wg);
-          }
+      // 外部导入的古建配方优先落位：找得到地块就直接入城，替代本坊的随机建筑
+      if (extras.length) {
+        const ex = extras[0];
+        if (placeExtraMesh(mb, ex, cx, cz, areaW, areaD, r, rng)) {
+          extrasPlaced++;
+          extras.shift();
+          continue;
+        }
+      }
 
-          // 外部导入的古建配方优先落位：找得到地块就直接入城，替代本坊的随机建筑
-          if (extras.length) {
-            const ex = extras[0];
-            if (placeExtraMesh(mb, ex, cx, cz, areaW, areaD, r, rng)) {
-              extrasPlaced++;
-              extras.shift();
-              continue;
-            }
-          }
+      if (rng.next() > r.density) {
+        emptyCells.push({ cx, cz, areaW, areaD });
+        continue;
+      }
 
-          if (rng.next() > r.density) {
-            emptyCells.push({ cx, cz, areaW, areaD });
-            continue;
-          }
-
-          // 一个大坊不再只放中心一簇主建筑：按 14m 左右拆成 2×2 个小院，
-          // 每个小院各自落一栋完整院落/民居，地块四边都有实体，不留大片院坪。
-          const nx = areaW > 14 ? 2 : 1, nz = areaD > 14 ? 2 : 1;
-          const lotW = areaW / nx, lotD = areaD / nz;
-          for (let ix = 0; ix < nx; ix++) {
-            for (let iz = 0; iz < nz; iz++) {
-              const lx = cx - areaW / 2 + lotW * (ix + 0.5);
-              const lz = cz - areaD / 2 + lotD * (iz + 0.5);
-              // 每个小院砌一圈院墙，土黄院坪是被墙围起来的院子，不是缺模型；
-              // 不再用整片灰板盖地。
-              const rw = lotW / 2 - 0.25, rd = lotD / 2 - 0.25, wth = 0.28, why = 1.5;
-              pbox(mb, lx - rw, lx + rw, 0.03, why, lz - rd, lz - rd + wth, 'brick', '院墙');
-              pbox(mb, lx - rw, lx + rw, 0.03, why, lz + rd - wth, lz + rd, 'brick', '院墙');
-              pbox(mb, lx - rw, lx - rw + wth, 0.03, why, lz - rd, lz + rd, 'brick', '院墙');
-              pbox(mb, lx + rw - wth, lx + rw, 0.03, why, lz - rd, lz + rd, 'brick', '院墙');
-              const key = chooseClusterKey(lotW, lotD, rng);
-              let cluster = null;
-              if (key) cluster = buildPresetCluster(key, r,
-                r.seed + wardCount * 37 + rng.int(0, 29), rng, lotW, lotD);
-              if (cluster) {
-                cluster.translate(nf(lx), 0, nf(lz));
-                mb.merge(cluster);
-              } else {
-                const cnt = lotW > 10 && lotD > 10 ? 2 : 1;
-                for (let k = 0; k < cnt; k++) {
-                  const sub = building(kinds[rng.int(0, kinds.length - 1)]);
-                  sub.rotateY(rng.int(0, 3) * 90, 0, 0);
-                  sub.translate(nf(lx + rng.range(-lotW * 0.18, lotW * 0.18)), 0,
-                    nf(lz + rng.range(-lotD * 0.18, lotD * 0.18)));
-                  mb.merge(sub);
-                }
+      // R2：地块内不再拆 2×2 小院、也不再砌固定院墙，交给 packLotBuildings——
+      // 沿地块主轴错排扫描行铺放，单体长边转贴主轴并叠加 ±8° 朝向微扰，
+      // Footprint 实测驱动行内连续铺放、短轴逐行推进，隔行错缝，
+      // 主栋（preset 群组）优先占位、民居填充，形成犬牙交错的微观聚落。
+      if (r.lotPack !== false) {
+        packLotBuildings(mb, cx, cz, areaW, areaD, r, rng, kinds, wardCount);
+      } else {
+        /* 旧路径保留仅作开关切换时的快速回退（默认已切换 R2） */
+        const nx = areaW > 14 ? 2 : 1, nz = areaD > 14 ? 2 : 1;
+        const lotW = areaW / nx, lotD = areaD / nz;
+        for (let ix = 0; ix < nx; ix++) {
+          for (let iz = 0; iz < nz; iz++) {
+            const lx = cx - areaW / 2 + lotW * (ix + 0.5);
+            const lz = cz - areaD / 2 + lotD * (iz + 0.5);
+            const rw = lotW / 2 - 0.25, rd = lotD / 2 - 0.25, wth = 0.28, why = 1.5;
+            pbox(mb, lx - rw, lx + rw, 0.03, why, lz - rd, lz - rd + wth, 'brick', '院墙');
+            pbox(mb, lx - rw, lx + rw, 0.03, why, lz + rd - wth, lz + rd, 'brick', '院墙');
+            pbox(mb, lx - rw, lx - rw + wth, 0.03, why, lz - rd, lz + rd, 'brick', '院墙');
+            pbox(mb, lx + rw - wth, lx + rw, 0.03, why, lz - rd, lz + rd, 'brick', '院墙');
+            const key = chooseClusterKey(lotW, lotD, rng);
+            let cluster = null;
+            if (key) cluster = buildPresetCluster(key, r,
+              r.seed + wardCount * 37 + rng.int(0, 29), rng, lotW, lotD);
+            if (cluster) {
+              cluster.translate(nf(lx), 0, nf(lz));
+              mb.merge(cluster);
+            } else {
+              const cnt = lotW > 10 && lotD > 10 ? 2 : 1;
+              for (let k = 0; k < cnt; k++) {
+                const sub = building(kinds[rng.int(0, kinds.length - 1)]);
+                sub.rotateY(rng.int(0, 3) * 90, 0, 0);
+                sub.translate(nf(lx + rng.range(-lotW * 0.18, lotW * 0.18)), 0,
+                  nf(lz + rng.range(-lotD * 0.18, lotD * 0.18)));
+                mb.merge(sub);
               }
             }
           }
@@ -895,6 +1109,7 @@
         for (let z = -HD + T + 7; z < HD - T - 7; z += step) {
           if (Math.abs(z) < (r.gateW || 11) * 1.5 || Math.abs(z) < 9) continue;
           if (z > -HD * 0.45 && z < HD * 0.16) continue; // 中轴宫殿段
+          if (river && z > riverZ0 - 2 && z < riverZ1 + 2) continue; // 河道带跨河处不摆摊
           put(side * edge, z + rng.range(-1.5, 1.5), 'z');
         }
       }
@@ -952,7 +1167,7 @@
     {
       key: 'water', name: '水城·护城河',
       recipe: { seed: 330517, w: 96, d: 84, wallH: 8, wallT: 4.0, gateW: 11, roadW: 8.5,
-        moatW: 16, cols: 3, rows: 3, density: 0.85, matta: false, tower: true,
+        moatW: 16, river: true, riverW: 5.5, cols: 3, rows: 3, density: 0.85, matta: false, tower: true,
         palace: false, bastionGap: 34, roofColor: 'celadon',
         wallProfile: 'county', gateArch: 'arch', streetMode: 'market' }
     },
