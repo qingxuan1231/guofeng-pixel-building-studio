@@ -108,6 +108,8 @@
       { path: 'parapetH', label: '内侧女墙高', type: 'range', min: 0.2, max: 1.4, step: 0.05, unit: 'm' },
       { path: 'moat', label: '护城河', type: 'toggle' },
       { path: 'moatW', label: '护城河宽', type: 'range', min: 4, max: 20, step: 0.5, unit: 'm' },
+      { path: 'river', label: '内河（贯穿水系）', type: 'toggle' },
+      { path: 'riverW', label: '内河宽', type: 'range', min: 3, max: 12, step: 0.5, unit: 'm', dep: { path: 'river', truthy: true } },
       { path: 'matta', label: '马面（墩台）', type: 'toggle' },
       { path: 'bastionGap', label: '马面间距', type: 'range', min: 12, max: 60, step: 2, unit: 'm' },
       { path: 'mattaW', label: '马面面宽', type: 'range', min: 4, max: 14, step: 0.5, unit: 'm' },
